@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.zeroone.star.storemanagement.mapper.SerialMapper">
+
+    <select id="selectSerialPage" resultType="java.util.HashMap">
+        SELECT
+            s.id AS id,
+            s.number AS serialNumber,
+            s.state AS state,
+            s.warehouse AS warehouseId,
+            s.goods AS goodsId,
+            s.batch AS batchId,
+            s.room AS roomId,
+            g.name AS goodsName,
+            g.number AS goodsNumber,
+            g.spec AS goodsSpec,
+            w.name AS warehouseName
+        FROM serial s
+        LEFT JOIN goods g ON g.id = s.goods
+        LEFT JOIN warehouse w ON w.id = s.warehouse
+        <where>
+            <if test="serialNumber != null and serialNumber != ''">
+                AND s.number LIKE CONCAT('%', #{serialNumber}, '%')
+            </if>
+            <if test="goodsName != null and goodsName != ''">
+                AND g.name LIKE CONCAT('%', #{goodsName}, '%')
+            </if>
+            <if test="goodsNumber != null and goodsNumber != ''">
+                AND g.number LIKE CONCAT('%', #{goodsNumber}, '%')
+            </if>
+            <if test="warehouseId != null and warehouseId != ''">
+                AND s.warehouse = #{warehouseId}
+            </if>
+            <if test="state != null">
+                AND s.state = #{state}
+            </if>
+        </where>
+        ORDER BY s.id DESC
+    </select>
+</mapper>

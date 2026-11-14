@@ -1,0 +1,32 @@
+cpp:
+  sample:
+    url: http://127.0.0.1:8090
+    name: feign-cpp-sample
+sentinel:
+  dashboard: 127.0.0.1:8718
+  auth:
+    username: ${THIRD_SERVICES_SENTINEL_AUTH_USERNAME}
+    password: ${THIRD_SERVICES_SENTINEL_AUTH_PASSWORD}
+rocket-mq:
+  name-server: 127.0.0.1:9876
+seata:
+  default: http://127.0.0.1:7091
+  port: 8092
+logstash:
+  host: 127.0.0.1
+fastdfs:
+  charset: UTF-8
+  connect-timeout: 5
+  network-timeout: 30
+  http-secret-key: ${THIRD_SERVICES_FASTDFS_HTTP_SECRET_KEY}
+  http-anti-steal-token: true
+  connection-pool-max-idle: 20
+  connection-pool-max-total: 20
+  connection-pool-min-idle: 2
+  nginx-servers: 127.0.0.1:8888
+  tracker-servers: 127.0.0.1:22122
+easy-es:
+  address: 127.0.0.1:9200
+nginx:
+  server:
+    listen: 80

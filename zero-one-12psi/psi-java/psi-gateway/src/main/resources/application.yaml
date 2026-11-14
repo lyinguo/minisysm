@@ -1,0 +1,201 @@
+server:
+  port: ${sp.gateway}
+spring:
+  application:
+    name: ${sn.gateway}
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          # 不要开启：会按服务名剥前缀，把 /login/auth-login 变成 /auth-login
+          enabled: false
+      routes:
+        # 登录 / 验证码（路径与后端一致，不要剥前缀）
+        - id: login-route
+          uri: http://127.0.0.1:10200
+          predicates:
+            - Path=/login/**
+        - id: captcha-route
+          uri: http://127.0.0.1:10200
+          predicates:
+            - Path=/captcha/**
+        - id: oauth-route
+          uri: http://127.0.0.1:10400
+          predicates:
+            - Path=/auth/**,/open/**
+
+        # 首页
+        - id: homepage-route
+          uri: http://127.0.0.1:10700
+          predicates:
+            - Path=/homepage/**
+
+        # 系统配置：前端多了 /j1-sysc，后端是 /menu-manager 等
+        - id: sysconfig-prefix-route
+          uri: http://127.0.0.1:10800
+          predicates:
+            - Path=/j1-sysc/**
+          filters:
+            - StripPrefix=1
+        - id: sysconfig-route
+          uri: http://127.0.0.1:10800
+          predicates:
+            - Path=/sysconfig/**,/menu-manager/**,/dictionary-manager/**,/import-template/**
+
+        # ========== Windows 本地 C++ 直连（不走 Nacos，因 Windows 默认不注册）==========
+        # c1 系统参数：/c1-systemparameters/user/... -> C++ /user/...
+        - id: cpp-c1-route
+          uri: http://127.0.0.1:8091
+          predicates:
+            - Path=/c1-systemparameters/**
+          filters:
+            - StripPrefix=1
+        # c2 基础资料：供应商/客户/仓库/资金账户
+        - id: cpp-c2-route
+          uri: http://127.0.0.1:8090
+          predicates:
+            - Path=/c2-sysbase/**
+          filters:
+            - StripPrefix=1
+        # c3 辅助资料
+        - id: cpp-c3-route
+          uri: http://127.0.0.1:8092
+          predicates:
+            - Path=/c3-auxdata/**
+          filters:
+            - StripPrefix=1
+        # c4 采购相关
+        - id: cpp-c4-dingdan-route
+          uri: http://127.0.0.1:8093
+          predicates:
+            - Path=/psi-c4-purchasedingdan/**
+          filters:
+            - StripPrefix=1
+        - id: cpp-c4-order-route
+          uri: http://127.0.0.1:8094
+          predicates:
+            - Path=/psi-c4-purchaseorder/**
+          filters:
+            - StripPrefix=1
+        - id: cpp-c4-return-route
+          uri: http://127.0.0.1:8095
+          predicates:
+            - Path=/psi-c4-purchasereturnorder/**
+          filters:
+            - StripPrefix=1
+        # c5 销售
+        - id: cpp-c5-route
+          uri: http://127.0.0.1:8096
+          predicates:
+            - Path=/c5-sellmgr/**
+          filters:
+            - StripPrefix=1
+        # c6 报表
+        - id: cpp-c6-route
+          uri: http://127.0.0.1:8097
+          predicates:
+            - Path=/c6-reportmanager/**
+          filters:
+            - StripPrefix=1
+
+        # Java 基础资料（备用路径）
+        - id: basic-route
+          uri: http://127.0.0.1:11000
+          predicates:
+            - Path=/basic_information/**,/goods/**,/account/**
+
+        # 辅助资料：前端多了 /j7-sysargs
+        - id: supportinfo-route
+          uri: http://127.0.0.1:18501
+          predicates:
+            - Path=/j7-sysargs/**
+          filters:
+            - StripPrefix=1
+
+        # 采购：前端多了 /j3-purchase
+        - id: purchase-prefix-route
+          uri: http://127.0.0.1:16000
+          predicates:
+            - Path=/j3-purchase/**
+          filters:
+            - StripPrefix=1
+        - id: purchase-route
+          uri: http://127.0.0.1:16000
+          predicates:
+            - Path=/purchase-note/**,/purchase-order/**,/purchase-return-form/**
+
+        # 库存：前端多了 /j2-store
+        - id: store-prefix-route
+          uri: http://127.0.0.1:17000
+          predicates:
+            - Path=/j2-store/**
+          filters:
+            - StripPrefix=1
+        - id: store-route
+          uri: http://127.0.0.1:17000
+          predicates:
+            - Path=/inventory/**,/batch/**,/serial/**,/verify/**,/transfer/**,/otherin/**,/otherout/**
+
+        # 销售（路径一致）
+        - id: sale-route
+          uri: http://127.0.0.1:11600
+          predicates:
+            - Path=/sale/**
+
+        # 资金
+        - id: fund-route
+          uri: http://127.0.0.1:10600
+          predicates:
+            - Path=/fund/**
+        - id: payment-route
+          uri: http://127.0.0.1:11100
+          predicates:
+            - Path=/payment-order/**
+        - id: capital-route
+          uri: http://127.0.0.1:15000
+          predicates:
+            - Path=/verification-sheet/**
+        - id: moneytransfer-route
+          uri: http://127.0.0.1:18500
+          predicates:
+            - Path=/allot/**,/allot-info/**
+        - id: finance-route
+          uri: http://127.0.0.1:9888
+          predicates:
+            - Path=/finance/**
+
+        # 报表
+        - id: report-j5-route
+          uri: http://127.0.0.1:10900
+          predicates:
+            - Path=/j5-reportmanagement/**
+        - id: report-j8-route
+          uri: http://127.0.0.1:9889
+          predicates:
+            - Path=/report/summary/**,/report/detail/**,/report/balance/**
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 公钥文件配置
+          public-key-location: classpath:public.pem
+zo:
+  cloud:
+    starter:
+      gateway:
+        # 配置是否开启鉴权
+        open-authorization: false
+        # 配置白名单路径
+        white-paths:
+          - "/actuator/**"
+          - "/captcha/**"
+          - "/auth/oauth/token"
+          - "/login/auth-login"
+          - "/login/refresh-token"
+        # 配置内部路径(需要用到凭证但不需要权限验证的请求)
+        inner-paths:
+          - "/login/current-user"
+          - "/login/get-menus"
+          - "/login/logout"
+          - "/homepage/**"

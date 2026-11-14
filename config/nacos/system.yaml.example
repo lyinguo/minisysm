@@ -1,0 +1,90 @@
+spring:
+  cloud:
+    inetutils:
+      preferred-networks:
+      - 192.168
+      - 127.0
+      - 10.0
+      ignored-interfaces:
+      - docker0
+      - veth.*
+      - VM.*
+      - br-.*
+      - vEthernet.*
+      - Hyper-V.*
+      - eth.*
+      - Loopback Pseudo-Interface.*
+zo:
+  cloud:
+    starter:
+      gateway:
+        open-authorization: false
+        white-paths:
+        - /actuator/**
+        - /captcha/**
+        - /auth/oauth/token
+        - /login/auth-login
+        - /login/refresh-token
+        inner-paths:
+        - /login/current-user
+        - /login/get-menus
+        - /login/logout
+        - /homepage/**
+  captcha:
+    enabled: false
+sp:
+  gateway: 10001
+  login: 10200
+  auth: 10400
+  doc: 9999
+  sample: 10500
+  cpp: 10610
+  ws: 10620
+  publish: 10630
+  seata: 10640
+  homepage: 10700
+  sysconfig: 10800
+  reportmanagement: 10900
+  basicinformation: 11000
+  paymentorder: 11100
+  capital: 15000
+  purchase: 16000
+  store: 17000
+  moneytransfer: 18500
+  supportinfo: 18501
+  fund: 10600
+  sale: 11600
+  finance: 9888
+  report: 9889
+sn:
+  gateway: GATEWAY
+  login: LOGIN
+  auth: OAUTH2
+  doc: DOC
+  sample: ASMPLE
+  cpp: CPP
+  ws: WEBSOCKET
+  publish: RMQ
+  seata: SEATA
+  homepage: HOMEPAGE
+  sysconfig: SYSCONFIG
+  reportmanagement: REPORTMANAGEMENT
+  basicinformation: BASICINFORMATION
+  paymentorder: PAYMENTORDER
+  capital: CAPITAL
+  purchase: PURCHASE
+  store: STORE
+  moneytransfer: MONEYTRANSFER
+  supportinfo: SUPPORTINFO
+  fund: FUND
+  sale: SALE
+  systemparameters: psi-c1-systemparameters
+  finance: FINANCE
+  report: REPORT
+  basemarital: psi-c2-basemarital
+  c5-sell: psi-c5-sale_manager
+  c6-rm: REPORT
+  psi-c3-auxdata: SUPPORTINFO
+  psi-c4-purchasedingdan: PURCHASE
+  psi-c4-purchaseorder: PURCHASE
+  psi-c4-purchasereturnorder: PURCHASE

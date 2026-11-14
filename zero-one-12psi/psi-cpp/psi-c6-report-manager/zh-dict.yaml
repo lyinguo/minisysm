@@ -1,0 +1,710 @@
+sales_detail_repory:
+  get:
+    summary: 获取报表（条件+分页）
+  tags:
+    t1: 采购明细表
+  exportxlsx:
+    summary: 导出数据
+  field:
+    id: 编号
+    bill_type: 单据类型
+    frame: 所属组织
+    customer: 客户
+    time: 单据时间
+    number: 单据编号
+    goods: 商品名称
+    attr: 辅助属性
+    warehouse: 仓库
+    unit: 单位(个)
+    price: 单价
+    nums: 数量
+    dsc: 折扣额
+    total: 金额
+    tat: 税额
+    tpt: 价额统计
+    data: 备注信息
+    start_date: 开始日期
+    end_date: 结束日期
+
+Cus_State_AllDTO:
+  goods: 名称
+  attr: 属性
+  unit: 单位
+  nums: 数量
+  dsc: 折扣额
+  total: 金额
+  tat: 税额
+  tpt: 价税合计
+
+Cus_State_OneDTO:
+  mold: 单据类型 
+  frame: 所属组织  
+  time: 单据时间
+  number: 单据编号  
+  cost: 优惠金额
+  actual: 应收金额
+  money: 实收金额
+  data: 备注
+
+ 
+Cus_StateQuery:
+  name: 客户名称
+  is_detail: 是否明细
+  starttime: 起始时间
+  endtime: 结束时间
+
+Cus_StateController:
+  tags: 
+    t1: 客户对账单查询接口
+  goods: 名称
+  attr: 属性
+  unit: 单位
+  nums: 数量
+  dsc: 折扣额
+  total: 金额
+  tat: 税额
+  tpt: 价税合计
+  mold: 单据类型 
+  frame: 所属组织  
+  time: 单据时间
+  number: 单据编号  
+  cost: 优惠金额
+  actual: 应收金额
+  money: 实收金额
+  data: 备注
+
+
+Cus_State:
+  get:    
+    summary: 客户对账单查询
+  field:
+    starttime: 起始时间
+    endtime: 截至时间
+    is_detail: 是否明细
+    sample: 安卓
+    name: 客户姓名
+  export:
+    summary: 客户对账单导出
+
+Sale_Detail_Query:
+  name: 客户名称
+  object: 商品名称
+  number: 单据编号
+  warehouse: 仓库
+  starttime: 起始时间
+  endtime: 结束时间
+  type: 单据类型
+  data: 备注信息
+
+
+Sale_DetailDTO:
+  mold: 单据类型
+  frame: 所属组织
+  customer: 客户
+  time: 单据时间
+  number: 单据编号
+  goods: 商品名称
+  attr: 辅助类型
+  warehouse: 仓库
+  price: 单价
+  unit: 单位
+  nums: 数量
+  dsc: 折扣额
+  total: 金额
+  tat: 税额
+  tpt: 价税合计
+  data: 备注
+
+
+
+Sale_DetailController:
+  tags: 销售明细单
+
+
+Sale_Detail:
+  get:
+    summary: 销售明细表查询
+  field:
+    name: 客户名称
+    object: 商品名称
+    Number: 单据编号
+    warehouse: 仓库
+    starttime: 起始时间
+    endtime: 结束时间
+    type: 单据类型
+    data: 备注信息
+  export:
+    summary: 销售明细表导出  
+
+sales_order_tracking_report:
+  tags:
+    t1: 销售订单跟踪表查询接口
+  get:
+    summary: 分页查询销售订单跟踪报表数据
+  export:
+    summary: 导出销售订单跟踪报表数据
+  sor:
+    frame: 所属组织
+    customer: 客户
+    time: 单据时间
+    orderStartTime: 单据开始时间
+    orderEndTime: 单据结束时间
+    number: 单据编号
+    state: 出库状态
+    state0: 未出库
+    state1: 部分出库
+    state2: 已出库
+    state3: 关闭
+    arrival: 到货日期
+    arrivalStart: 到货开始日期
+    arrivalEnd: 到货结束日期
+    data: 订单整体备注
+    sortType: 排序方式
+  sorinfo:
+    goods: 商品名称
+    attr: 辅助属性
+    warehouse: 仓库
+    unit: 单位
+    price: 单价
+    nums: 数量
+    total: 金额
+    unshippedQuantity: 未出库数量
+    unshippedAmount: 未出库金额
+    data: 商品明细备注
+
+goods_summary_report:
+  tag:
+    t1: 商品收发汇总表查询接口
+  summary: 分页查询商品收发汇总表
+  field:
+    name: 商品名称
+    warehouse: 仓库
+    number: 商品编号
+    unit: 单位
+    spec: 商品规格型号
+    state: 期初
+    buy: 采购单
+    bre: 采购退货单
+    sell: 销售统单
+    sre: 销售退货统单
+    swapOut: 调拨出库统单
+    swapEnter: 调拨入库统单
+    entry: 其它入库
+    extry: 其它出库
+    sum: 汇总
+    balance:
+      uct: 单位成本
+      uns: 数量
+      bct: 成本总额
+    startTime: 起始时间
+    endTime: 截至时间
+  export:
+    summary: 导出分页查询商品收发汇总表
+
+sales_ranking_report:
+  field:
+    goodsData: 商品数据
+    attr: 辅助属性
+    unit: 单位
+    nums: 数量
+    dsc: 折扣额
+    tat: 税额
+    tpt: 价税总和
+    bct: 总成本
+    uct: 成本
+    gpt: 毛利润
+    gpr: 毛利率
+    spec: 商品规格
+
+
+    startTime: 起始时间
+    endTime: 截至时间
+    name: 商品名称
+    number: 商品编号
+  tag:
+    t1: 销售排行表查询接口
+  summary: 分页查询销售排行表
+  export:
+    summary: 导出分页查询销售排行表
+procurement_ranking:
+  tag1: 采购排行表查询接口
+  tag2: 采购排行表导出接口
+  query:
+   summary: 采购排行表获取报表(条件+分页)
+   name: 商品名称
+   number: 商品编号
+   startTime: 单据开始日期
+   endTime: 单据结束日期
+  export:
+   summary: 采购排行表导出数据
+  field:
+   name: 商品名称
+   number: 商品编号
+   spec: 规格型号
+   attr: 辅助属性
+   unit: 单位
+   nums: 数量
+   dsc: 折扣额
+   tat: 税额
+   tpt: 价税合计
+   bct: 总成本
+   uct: 成本
+
+procurement_tracking:
+  tag1: 采购订单跟踪查询接口
+  tag2: 采购订单跟踪导出接口
+  query:
+    summary: 采购订单跟踪获取报表(条件+分页)
+    supplier: 供应商
+    goods: 商品名称
+    number: 订单编号
+    state: 入库状态
+    startTime: 单据开始日期
+    endTime: 单据结束日期
+    startArrival: 到货开始日期
+    endArrival: 到货结束日期
+    warehouse: 仓库信息
+    type: 排序方式
+  export:
+    summary: 采购订单跟踪导出数据
+  field:
+    frame: 所属组织
+    supplier: 供应商
+    time: 单据时间
+    number: 单据编号
+    arrival: 到货日期
+    data: 备注信息
+    state: 入库状态
+  goods:
+    name: 商品名称
+  node:
+    attr: 辅助属性
+    unit: 单位
+    price: 单价
+    nums: 数量
+    total: 金额
+    nns: 未入库数量
+    nmy: 未入库金额
+  warehouse:
+    name: 仓库
+  status:
+    completed: 已入库
+    partial: 部分入库
+    pending: 未入库
+sales_summary_report:
+  tags:
+    t1: 销售订单汇总表查询接口
+  get:
+    summary: 分页查询示例数据
+  post:
+    summary: 新增一条示例数据
+  put:
+    summary: 修改一条示例数据
+  delete:
+    summary: 删除数据支持批量
+  query-by-id:
+    summary: 通过ID获取单条数据
+  export:
+    summary: 导出示例数据
+  query-one:
+    summary: 使用声明式服务查询一条数据
+  query-all:
+    summary: 使用声明式服务查询多条数据
+  field:
+    id: 编号
+    goods: 商品名称
+    attr: 辅助属性
+    warehouse: 仓库
+    unit: 单位
+    sale:
+      sale_price: 销售单单价
+      sale_amount: 销售单数量
+      sale_sum: 销售单金额
+    return:
+      return_price: 销售退货单单价 
+      return_amount: 销售退货单数量
+      return_sum: 销售退货单金额
+    summary:
+      summary_amount: 汇总数量
+      summary_sum: 汇总金额
+    customer: 客户
+    user: 用户
+    start_date: 开始日期
+    end_date: 结束日期
+    people: 关联人员
+    according: 按什么关键字查询（商品、客户、用户、人员）
+  sor:
+    frame: 所属组织
+    customer: 客户
+    time: 单据时间
+    number: 单据编号
+    state: 出库状态
+    arrival: 到货日期
+    arrivalStart: 到货开始日期
+    arrivalEnd: 到货结束日期
+    data: 订单整体备注
+    sortType: 排序方式
+  sorinfo:
+    goods: 商品名称
+    attr: 辅助属性
+    warehouse: 仓库
+    unit: 单位
+    price: 单价
+    nums: 数量
+    total: 金额
+    unshippedQuantity: 未出库数量
+    unshippedAmount: 未出库金额
+    data: 商品明细备注
+other_income_expense_details_report:
+  tags:
+    t1: 其他收入支出明细表查询接口
+  get:
+    summary: 分页查询其他收入支出明细报表数据
+  export:
+    summary: 导出其他收入支出明细报表数据
+  ioce:
+    type: 单据类型
+    type0: 其它收入单
+    type1: 其它支出单
+    frame: 所属组织
+    contactUnit: 往来单位
+    time: 单据时间
+    startTime: 开始单据时间
+    endTime: 结束单据时间
+    number: 单据编号
+    iceTotal: 收入
+    oceTotal: 支出
+    account: 结算账户
+    data: 备注信息
+  ioceinfo:
+    iet: 收支类别
+    data: 备注信息
+
+account_payable_aging_report:
+  field:
+    customer_name: "客户"
+    frame: "所属组织"
+    category: "单据类型"
+    time: "单据时间"
+    number: "单据编号"
+    cw: "增加应收款"
+    pia: "增加预付款"
+    balance: "应收款余额"
+    data: "备注"
+    supplier: "供应商"
+    type: "供应商类型"
+    start_date: "起始日期"
+    end_date: "结束日期"
+  tags:
+    t1: "应付账款明细报表"
+  get:
+    summary: "应付账款明细报表数据"
+  export:
+    xlsx:
+      summary: "导出应付账款明细报表为Excel文件"
+
+inventory_balance_report:
+  field:
+    good_name: "商品名称"
+    good_number: "商品编号"
+    good_spec: "规格型号"
+    good_unit: "单位"
+    warehouse_name: "所属仓库"
+    cost: "成本价"
+    qty: "数量"
+    total_cost: "总成本"
+    summary_cost: "汇总成本"
+    summary_nums: "汇总数量"
+    summary_total_cost: "汇总总成本"
+    goods: "商品信息"
+    warehouse: "仓库"
+    time: "时间"
+  tags:
+    t1: "库存余额报表"
+  get:
+    summary: "获取库存余额报表数据"
+  export:
+    xlsx:
+      summary: "导出库存余额报表为Excel文件"
+product_inventory_transactions_report:
+  get:
+    summary: 获取采购付款表（条件加分页）
+  export:
+    summary: 导出采购付款表为.xlsx文件
+  tags:
+    t1: 采购付款表
+  field:
+    id: 编号
+    bill_type: 单据类型
+    frame: 所属组织
+    seller: 供应商
+    time: 单据时间
+    number: 单据编号
+    verification_status: 核销状态
+    rate_payment: 付款率
+    amount_payable: 应付款余额
+    bill_document: 单据付款
+    actual_amount: 实际金额
+    amount_documents: 单据金额
+    data: 备注信息
+    start_date: 开始日期
+    end_date: 结束日期
+
+purchase_payments_report:
+  get:
+    summary: 获取商品收发明细表（条件加分页）
+  export:
+    summary: 导出商品收发明细表为.xlsx文件
+  tags:
+    t1: 商品收发明细表
+  field:
+    test: 付款单
+    id: 编号
+    goods: 商品名称
+    ​​warehouse_information​: 仓库信息
+    start_date: 开始日期
+    end_date: 结束日期
+    bill_type: 单据类型
+    frame: 所属组织
+    associated_companies: 往来单位
+    time: 单据时间
+    number: 单据编号
+    attr: 辅助属性
+    ​​warehouse: 仓库
+    unit: 单位
+    cost: 成本
+    quantity: 数量
+    tatal_cost: 总成本
+    stock_receipt: 入库
+    stock_issue: 出库
+    summary: 汇总
+    point:
+      uct: 成本
+      uns: 数量
+      bct: 总成本
+        
+cashBank:
+  tag: 现金银行报表
+  field:
+    accountName: 账户名称
+    type: 单据类型
+    frame: 所属组织
+    businessEntity: 往来单位
+    time: 单据时间
+    number: 单据编号
+    income: 收入
+    outcome: 支出
+    balance: 账户余额
+    user: 制单人
+    data: 备注
+    accountTotalIncome: 账户总收入
+    accountTotalOutcome: 账户总支出
+    initial: 期初余额
+  page:
+    items: 数据列表
+    page: 当前页
+    size: 每页条数
+    total: 总条数
+  query:
+    summary: 现金银行报表获取报表（条件+分页）
+    customer: 客户
+    supplier: 供应商
+    startTime: 开始时间
+    endDate: 结束时间
+    documentMaker: 制单人
+    accountName: 资金账户 
+  export:
+    summary: 现金银行报表导出数据   
+procurementSummary:
+  tag: 采购汇总表
+  field:
+    supplier: 供应商
+    user: 用户
+    people: 人员
+    goods: 商品名称
+    attr: 辅助属性
+    warehouse: 仓库
+    unit: 单位
+    buyPrice: 采购单-单价
+    buyNums: 采购单-数量
+    buyAmount: 采购单-金额
+    brePrice: 采购退货单-单价
+    breNums: 采购退货单-数量
+    breAmount: 采购退货单-金额
+    totalNums: 汇总-数量
+    totalAmount: 汇总-金额
+    buyTotalAmount: 采购总金额
+    breTotalAmount: 采购退货总金额
+    summaryAmount: 汇总金额
+  page:
+    items: 数据列表
+    page: 当前页
+    size: 每页条数
+    total: 总条数
+  query:
+    summary: 采购汇总表获取报表（条件+分页）
+    goods: 商品名称
+    warehouse: 仓库信息
+    supplier: 供应商
+    user: 用户
+    startTime: 开始时间
+    endTime: 结束时间
+    people: 关联人员
+    orderMethod: 分组方式（按商品、供应商、用户、人员）
+    orderMDefault: 按商品
+    orderMS: 按供应商
+    orderMU: 按用户
+    orderMP: 按人员
+  export:
+    get:
+      summary: 采购汇总表导出数据 
+    
+    stock_receipt: 入库
+    stock_issue: 出库
+
+    balance:
+      cost: 成本
+      quantity: 数量
+      tatal_cost: 总成本
+
+    
+sales_receipts_table:
+ tag: 销售收款表
+ get:
+  summary: 销售收款表-获取报表（条件+分页）
+ export:
+  summary: 销售收款表-导出数据
+ field:
+  startTime: 单据开始日期
+  endTime: 单据结束日期
+  type: 单据类型
+  frame: 所属组织
+  customer: 客户
+  time: 单据时间
+  number: 单据编号
+  total: 单据金额
+  actual: 实际金额
+  money: 单据收款
+  balance: 应收款余额
+  rate: 收款率
+  nucleus: 核销状态
+  data: 备注信息
+ 
+supplier_statement:
+ tag: 供应商对账单
+ get:
+  summary: 供应商对账单-获取报表（条件+分页）
+ export:
+  summary: 供应商对账单-导出数据
+ request:
+  supplier: 供应商
+  type: 明细状态[0:隐藏|1:显示]
+  startTime: 单据开始日期
+  endTime: 单据结束日期
+ statement:
+  bill: 单据类型
+  frame: 所属组织
+  time: 单据时间
+  number: 单据编号
+  total: 单据金额
+  discount: 优惠金额
+  actual: 应付金额
+  money: 实付金额
+  balance: 应付款余额
+  data: 备注
+ detail:
+  summary: 明细
+  name: 名称
+  attr: 属性
+  unit: 单位
+  price: 单价
+  nums: 数量
+  dsc: 折扣额
+  total: 金额
+  tat: 税额
+  tpt: 价税合计
+
+
+accounts_receivable_detail_report:
+  tag: 应收账款明细表
+  get:
+    summary: 分页查询应收账款明细报表数据
+  export:
+    summary: 导出应收账款明细报表数据
+  imy:
+    customer: 客户
+    custType: 客户类型
+    type: 单据类型
+    type0: 销售单
+    type1: 销售退货单
+    type2: 收款单
+    type3: 其它收入单
+    frame: 所属组织
+    time: 单据时间
+    startTime: 单据开始时间
+    endTime: 单据结束时间
+    number: 单据编号
+    addReceivable: 增加应收款
+    addAdvance: 增加预收款
+    arBalance: 应收款余额
+    data: 备注
+
+contact_unit_arrears_report:
+  tag: 往来单位欠款表
+  get:
+    summary: 分页查询往来单位欠款报表数据
+  export:
+    summary: 导出往来单位欠款报表数据
+  cs:
+    contactType: 单位类型
+    contactType0: 客户
+    contactType1: 供应商
+    name: 单位名称
+    number: 单位编号
+    receivableBal: 应收款余额
+    payableBal: 应付款余额
+    data: 备注信息
+    
+income_statement:
+ get:
+  summary: 利润表
+ tags:
+  t1: 查询导出
+  t2: xlsx导出
+ field:
+  id: 编号
+  serial_number: 
+  item: 项目
+  amount: 金额
+  start_date: 起始日期
+  end_date: 结束日期
+sales_income_statement:
+ get:
+  summary: 销售利润表
+ tags:
+  t1: 查询导出
+  t2: xlsx导出
+ field:
+  id: 编号
+  bill_type: 单据类型
+  belonging_organization: 所属组织
+  customer: 客户
+  bill_time: 单据时间
+  bill_number: 单据编号
+  bill_amount: 单据金额
+  discount_amount: 优惠金额
+  actual_amount: 实际金额
+  cost: 成本
+  gross_profit: 毛利润
+  gross_profit_margin: 毛利率
+  bill_fee: 单据费用
+  net_profit: 净利润
+  net_profit_margin: 净利率
+  write_off_amount: 核销金额
+  write_off_status: 核销状态
+  bill_preparer: 制单人
+  relevant_personnel: 关联人员
+  remark_information: 备注信息
+  start_date: 起始日期
+  end_date: 结束日期
+  show_or_hide_details: 显示或隐藏明细

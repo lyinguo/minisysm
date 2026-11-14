@@ -1,0 +1,13 @@
+aliyun:
+  sms:
+    ak: ${KEY_CONFIG_ALIYUN_SMS_AK}
+    sk: ${KEY_CONFIG_ALIYUN_SMS_SK}
+spring:
+  mail:
+    host: smtp.163.com
+    port: 25
+    username: ${KEY_CONFIG_SPRING_MAIL_USERNAME}
+    password: ${KEY_CONFIG_SPRING_MAIL_PASSWORD}
+    properties:
+      from: ${KEY_CONFIG_SPRING_MAIL_PROPERTIES_FROM}
+      name: Application

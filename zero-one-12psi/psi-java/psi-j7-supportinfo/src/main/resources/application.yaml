@@ -1,0 +1,8 @@
+server:
+  port: ${sp.supportinfo}
+spring:
+  application:
+    name: ${sn.supportinfo}
+fastdfs:
+  tracker-servers: 127.0.0.1:22122
+  nginx-servers: 127.0.0.1:8888

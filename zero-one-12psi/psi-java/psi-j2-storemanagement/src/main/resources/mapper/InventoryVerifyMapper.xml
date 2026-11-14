@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.zeroone.star.storemanagement.mapper.InventoryVerifyMapper">
+
+    <select id="selectInventoryVerifyListDTO"
+            resultType="com.zeroone.star.project.dto.j2.store.InventoryVerifyListDTO">
+        SELECT
+            g.id,
+            g.name,
+            a.name AS attrName,
+            g.number,
+            g.spec,
+            c.name AS categoryName,
+            g.brand,
+            g.unit,
+            g.code,
+            g.`data` AS data,
+            COALESCE(SUM(r.nums), 0) AS totalStock
+        FROM goods g
+        LEFT JOIN category c ON g.category = c.id
+        LEFT JOIN attr a ON g.id = a.pid
+        LEFT JOIN room r ON r.goods = g.id
+            AND (a.id IS NULL OR r.attr = a.name OR r.attr = a.id OR r.attr IS NULL OR r.attr = '')
+        GROUP BY g.id, g.name, g.number, g.spec, g.brand, g.unit, g.code, g.data, c.name, a.name
+        ORDER BY g.name, a.name
+    </select>
+</mapper>

@@ -1,0 +1,35 @@
+server:
+  port: ${sp.login}
+spring:
+  application:
+    name: ${sn.login}
+  cloud:
+    sentinel:
+      transport:
+        # 鎺у埗鍙板湴鍧€
+        dashboard: ${sentinel.dashboard}
+        port: 8720
+      eager: true
+    openfeign:
+      client:
+        config:
+          OAUTH2:
+            url: http://127.0.0.1:10400
+
+# 鏈湴寮€鍙戯細鍓嶇 dev 涓嶅脊楠岃瘉鐮侊紝杩欓噷鍏虫帀鍚庣鏍￠獙
+zo:
+  captcha:
+    enabled: false
+
+# 寮€鍚痵entinel澹版槑寮忔湇鍔＄啍鏂?
+feign:
+  sentinel:
+    enabled: true
+
+# 璐熻浇鍧囪　閰嶇疆
+ribbon:
+  MaxAutoRetries: 0 #锛堥粯璁?娆?涓嶅寘鎷涓€娆★級鏈€澶ч噸璇曟鏁帮紝褰撴敞鍐屼腑蹇冧腑鍙互鎵惧埌鏈嶅姟锛屼絾鏄湇鍔¤繛涓嶄笂鏃跺皢浼氶噸璇曪紝濡傛灉娉ㄥ唽涓績涓壘涓嶅埌鏈嶅姟鍒欑洿鎺ヨ蛋鏂矾鍣?
+  MaxAutoRetriesNextServer: 1 #锛堥粯璁?娆?涓嶅寘鎷涓€娆★級鍒囨崲瀹炰緥鐨勯噸璇曟鏁?
+  OkToRetryOnAllOperations: false  #瀵规墍鏈夋搷浣滆姹傞兘杩涜閲嶈瘯锛屽鏋滄槸get鍒欏彲浠ワ紝濡傛灉鏄痯ost锛宲ut绛夋搷浣滄病鏈夊疄鐜板箓绛夌殑鎯呭喌涓嬫槸寰堝嵄闄╃殑,鎵€浠ヨ缃负false
+  ConnectTimeout: 5000  #锛堥粯璁?s锛屽嵆1000锛夎姹傝繛鎺ョ殑瓒呮椂鏃堕棿
+  ReadTimeout: 5000 #锛堥粯璁?s锛屽嵆1000锛夎姹傚鐞嗙殑瓒呮椂鏃堕棿
