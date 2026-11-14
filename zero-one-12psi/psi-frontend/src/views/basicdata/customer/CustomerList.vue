@@ -892,7 +892,7 @@ async function handleView(row: Customer) {
     
     const detailCode = safeGet(safeResponse, 'code', -1) as number;
     const detailData = safeGet(safeResponse, 'data', null);
-    if (detailCode === 0 && detailData) {
+    if (detailCode === 10000 && detailData) {
       dialogType.value = 'edit'
       currentCustomerId.value = safeGet(row, 'id', '')
       const customer = detailData as any
@@ -970,7 +970,7 @@ async function handleDelete(row: Customer) {
     const response = await CustomerAPI.deleteCustomer(customerId)
     
     // 安全检查响应
-    if ((safeGet(response, 'code', -1) as number) === 0) {
+    if ((safeGet(response, 'code', -1) as number) === 10000) {
       ElMessage.success('删除成功')
       loadCustomerList() // 重新加载列表
     } else {
@@ -1135,6 +1135,7 @@ async function handleSave() {
       bank_name: safeGet(customerForm, 'bank', ''),
       bank_account: safeGet(customerForm, 'bankAccount', ''),
       tax_number: safeGet(customerForm, 'taxNumber', ''),
+      remark: safeGet(customerForm, 'remark', ''),
       // 安全处理联系人数据，过滤无效联系人
       contacts: Array.isArray(contactList.value) 
         ? contactList.value.filter((contact: any) => contact.name || contact.phone)
