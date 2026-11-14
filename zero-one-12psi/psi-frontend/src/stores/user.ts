@@ -848,7 +848,7 @@ export const useUserStore = defineStore('user', {
       return {
         // 暂时未实现的功能，映射到404页面或最接近的现有路由
         数据备份: '/system-settings', // 映射到系统设置
-        数据核准: '/operation-log', // 映射到操作日志
+        数据核准: '/system/summary',
         表单字段: '/sysmanage/menu', // 映射到菜单管理
         序列查询: '/serial-query',
         test2: '/dashboard', // 映射到首页

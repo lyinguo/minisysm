@@ -4,6 +4,12 @@ import type { RouteRecordRaw } from 'vue-router'
  * @Description: 系统参数的路由
  */
 const routes: RouteRecordRaw[] = [
+  {
+    path: 'system/summary',
+    name: 'SystemSummary',
+    meta: { label: '数据核准', icon: 'mdi:check-decagram' },
+    component: () => import('@/views/advancedSettings/summary/DataVerification.vue')
+  },
   // 高级设置
   {
     path: 'system-settings',
