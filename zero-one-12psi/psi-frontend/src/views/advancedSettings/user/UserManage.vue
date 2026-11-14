@@ -102,7 +102,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="用户账号" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户账号" />
+          <el-input v-model="form.username" placeholder="请输入用户账号" :disabled="Boolean(form.id)" />
         </el-form-item>
         <el-form-item label="手机号码" prop="tel">
           <el-input v-model="form.tel" placeholder="请输入手机号码" />

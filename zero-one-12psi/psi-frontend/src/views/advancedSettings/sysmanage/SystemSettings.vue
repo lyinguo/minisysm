@@ -52,6 +52,12 @@
 
           <!-- 功能参数 -->
           <div v-else-if="currentTab === 'function'" class="function-params-section">
+            <el-alert
+              title="功能参数暂只读：自动审核、负库存、计价和精度尚未统一接入所有业务。"
+              description="当前仓库报表审核禁止负库存，审核需手动执行。保存其他设置不会修改本组参数；显示的历史参数不代表业务已生效。"
+              type="warning" :closable="false" show-icon
+            />
+            <el-form disabled>
             <el-table :data="functionTableDataArr" border stripe>
               <el-table-column prop="name" label="功能名称" width="200" />
               <el-table-column label="功能配置" width="300">
@@ -142,6 +148,7 @@
               </el-table-column>
               <el-table-column prop="description" label="功能说明" />
             </el-table>
+            </el-form>
           </div>
 
           <!-- 物流配置 -->
@@ -657,7 +664,7 @@ const handleSave = () => {
     type: 'warning'
   }).then(() => {
     // 使用数据转换器将前端格式转换为后端格式
-    const apiData = SystemConfigTransformer.transformToApiFormat(formData)
+    const apiData = SystemConfigTransformer.transformToApiFormat(formData).filter(config => config.name !== 'fun')
     return saveSystemSettings(apiData)
   }).then(res => {
     if (res.code === 10000) {

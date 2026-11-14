@@ -1,5 +1,6 @@
 <template>
   <div class="menu area">
+    <el-alert title="字典类型是一组可选项，字典项包含显示名称和系统值。只有接入该字典的页面才会使用它；修改值可能影响历史数据。类型下存在字典项时禁止删除。" type="info" :closable="false" show-icon />
     <el-tabs tab-position="left" class="demo-tabs" @tab-change="handleTabChange">
       <!-- 字典管理子组件：传递字典类型列表 -->
       <el-tab-pane label="字典管理">

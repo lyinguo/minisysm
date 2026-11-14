@@ -4,7 +4,6 @@
  */
 
 import { useHttp } from '@/plugins/http'
-import { useUserStore } from '@/stores/user'
 import type { SystemJsonVO, SaveSystemRequest, SystemRespJsonVO, SystemDTO } from './type'
 
 const currBaseUrl = '/c1-systemparameters/sys'
@@ -15,38 +14,8 @@ const currBaseUrl = '/c1-systemparameters/sys'
  * @returns Promise<T>
  */
 async function safeRequest<T>(requestFn: Function, ...args: any[]): Promise<T> {
-  const store = useUserStore()
-  const http = useHttp()
-
-  try {
-    // 第一次请求
-    return await requestFn(...args)
-  } catch (err: any) {
-    // 判断是否是 token 失效
-    const msg = err?.message || err?.response?.data?.message || ''
-    const code = err?.response?.data?.code
-
-    if (
-      code === 401 ||
-      msg.includes('Token: check fail') ||
-      msg.includes('Jwt expired') ||
-      msg.includes('token')
-    ) {
-      console.warn('检测到 Token 失效，尝试刷新...')
-      try {
-        await store.reloadToken()
-        console.log('Token 刷新成功，重新发起请求')
-        return await requestFn(...args) // 🔁 重试请求
-      } catch (refreshErr) {
-        console.error('刷新 token 失败，请重新登录')
-        store.resetSaveData()
-        throw new Error('登录已过期，请重新登录')
-      }
-    }
-
-    // 其他错误直接抛出
-    throw err
-  }
+  // The shared HTTP interceptor owns refresh/retry, including concurrent requests.
+  return requestFn(...args)
 }
 
 /**
@@ -71,8 +40,7 @@ export async function saveSystemSettings(configs: SaveSystemRequest): Promise<Sy
   return safeRequest<SystemRespJsonVO>(() =>
     http.put<SystemRespJsonVO>(currBaseUrl + '/put-msg', configs, {
       headers: {
-        'Content-Type': 'application/json', 
-        'Authorization': `Bearer ${useUserStore().getToken}`
+        'Content-Type': 'application/json'
       }
     })
   )

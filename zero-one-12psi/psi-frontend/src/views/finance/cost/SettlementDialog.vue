@@ -217,7 +217,7 @@
                 v-for="item in accountList"
                 :key="item.账户编号"
                 :label="`${item.账户名称}（${item.所属组织 || '未分组'}）`"
-                :value="item.账户编号"
+                :value="item.id"
               >
                 <div class="option-row">
                   <span>{{ item.账户名称 }}</span>
@@ -241,7 +241,7 @@
                 v-for="item in peopleList"
                 :key="item.人员编号"
                 :label="`${item.人员名称}（${item.所属组织 || '未分组'}）`"
-                :value="item.人员编号"
+                :value="item.id"
               >
                 <div class="option-row">
                   <span>{{ item.人员名称 }}</span>
@@ -414,13 +414,13 @@ const formatMoney = (value: number) => {
 }
 
 const handleAccountSelect = (accountId: string) => {
-  const account = accountList.value.find((item) => item.账户编号 === accountId)
+  const account = accountList.value.find((item) => String(item.id) === String(accountId))
   documentFormData.settlementAccountId = accountId || ''
   documentFormData.settlementAccount = account?.账户名称 || ''
 }
 
 const handlePeopleSelect = (peopleId: string) => {
-  const person = peopleList.value.find((item) => item.人员编号 === peopleId)
+  const person = peopleList.value.find((item) => String(item.id) === String(peopleId))
   documentFormData.relatedPersonId = peopleId || ''
   documentFormData.relatedPerson = person?.人员名称 || ''
 }

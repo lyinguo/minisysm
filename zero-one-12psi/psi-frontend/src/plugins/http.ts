@@ -5,6 +5,7 @@ import HttpClient, { closeLoading, DataUpType, showLoading } from '@/apis/http'
 import type { Router } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
+import { integrityMessage } from '@/utils/integrityMessage'
 
 /** 插件标识符 */
 const PLUGIN_SYMBOL = Symbol('http')
@@ -140,6 +141,11 @@ export default {
           // 二进制导出失败时，后端仍可能返回 JSON 鉴权/业务错误。
           if (response.data instanceof Blob && response.data.type.includes('json')) {
             response.data = JSON.parse(await response.data.text())
+          }
+          const integrityError = integrityMessage(response.data)
+          if (integrityError) {
+            ElMessage.warning(integrityError)
+            return Promise.reject(new Error(integrityError))
           }
           // 根据状态码处理数据
           // 确保 response.data 是对象类型，避免使用 'in' 操作符时出错
@@ -284,6 +290,11 @@ export default {
           // HTTP状态码错误处理
           const status = (error as AxiosError).response?.status
           const responseData = (error as AxiosError).response?.data
+          const integrityError = integrityMessage(responseData)
+          if (integrityError) {
+            ElMessage.warning(integrityError)
+            return Promise.reject(new Error(integrityError))
+          }
           
           // 尝试从响应数据中提取详细错误信息
           let errorMessage = ''

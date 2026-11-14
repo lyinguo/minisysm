@@ -607,10 +607,10 @@
   }
   
   const confirmPeople = () => {
-    if (currentPeople.value.length > 0) {
+    if (currentPeople.value.length === 1) {
       const names = currentPeople.value.map(item => item.人员名称).join(', ')
       form.peopleName = names
-      form.people = currentPeople.value.map(item => item.人员编号).join(',')
+      form.people = String(currentPeople.value[0].id)
       peopleDialogVisible.value = false
     } else {
       ElMessage.warning('请选择人员')
@@ -629,10 +629,10 @@
       
       if (selectedAccountType.value === 'out') {
         newData[selectedAccountIndex.value].outAccount = `${account.账户名称} (${account.账户编号})`
-        newData[selectedAccountIndex.value].outAccountId = account.账户编号
+        newData[selectedAccountIndex.value].outAccountId = String(account.id)
       } else {
         newData[selectedAccountIndex.value].inAccount = `${account.账户名称} (${account.账户编号})`
-        newData[selectedAccountIndex.value].inAccountId = account.账户编号
+        newData[selectedAccountIndex.value].inAccountId = String(account.id)
       }
       
       tableData.value = newData

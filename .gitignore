@@ -43,4 +43,5 @@ reference-project/
 .publication/
 *.sql
 !database/schema.sql
+!database/migrations/20261114_master_integrity.sql
 !**/src/test/resources/warehouse-schema.sql

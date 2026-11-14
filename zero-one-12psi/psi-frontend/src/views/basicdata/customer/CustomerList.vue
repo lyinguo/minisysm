@@ -346,7 +346,8 @@
             <li>该功能适用于批量导入数据。</li>
             <li>您需要下载数据模板后使用Excel录入数据。</li>
             <li>录入数据时，请勿修改首行数据标题以及排序。</li>
-            <li>请查询使用文档获取字段格式内容以及相关导入须知。</li>
+            <li>客户编号和名称必填；编号、电话、银行账号请使用文本格式。每次最多 500 条。</li>
+            <li>导入遇到无效行或已有编号时整批取消，不会覆盖已有客户。</li>
             <li>点击下方上传模板，选择您编辑好的模板文件即可。</li>
           </ol>
           <div class="import-actions">
@@ -383,6 +384,7 @@ import {
   type MyTableOperationsBtn
 } from '@/components/normaltable/type'
 import { CustomerAPI, type CustomerQuery } from '@/apis/basicdata/customer'
+import { downloadCustomerTemplate, parseCustomerWorkbook, exportCustomers } from '@/utils/customerWorkbook'
 
 // 接口定义 - 本地使用的Customer类型（与API返回的Customer不同）
 interface Customer {
@@ -980,7 +982,7 @@ async function handleDelete(row: Customer) {
     // 处理用户取消操作和其他错误
     if (error !== 'cancel') {
       console.error('删除客户失败:', error)
-      ElMessage.error('删除失败，请检查网络连接或稍后重试')
+      ElMessage.error(error instanceof Error ? error.message : '删除失败，请稍后重试')
     }
   }
 }
@@ -1198,22 +1200,27 @@ function handleBatchDialogClose() {
 }
 
 function handleDownloadTemplate() {
-  ElMessage.success('模板下载中...')
+  downloadCustomerTemplate()
 }
 
 function handleUploadTemplate() {
   const fileInput = document.createElement('input')
   fileInput.type = 'file'
   fileInput.accept = '.xlsx,.xls'
-  fileInput.onchange = (event) => {
+  fileInput.onchange = async (event) => {
     const files = (event.target as HTMLInputElement).files
     if (files && files.length > 0) {
       const selectedFile = files[0]
-      ElMessage.success(`已选择文件: ${selectedFile.name}`)
-      // 模拟上传过程
-      setTimeout(() => {
-        ElMessage.success('文件上传成功')
-      }, 1000)
+      try {
+        if (selectedFile.size > 5 * 1024 * 1024) throw new Error('文件不能超过 5 MiB')
+        const rows = parseCustomerWorkbook(await selectedFile.arrayBuffer())
+        const result = await CustomerAPI.importCustomers(rows)
+        ElMessage.success(`成功导入 ${result.data} 条客户`)
+        batchDialogVisible.value = false
+        await loadCustomerList()
+      } catch (error) {
+        ElMessage.error(error instanceof Error ? error.message : '导入失败')
+      }
     }
   }
   fileInput.click()
@@ -1224,10 +1231,7 @@ function handleExportData() {
     ElMessage.warning('请先选择要导出的客户')
     return
   }
-  ElMessage.success(`正在导出${selectedCustomers.value.length}条数据...`)
-  setTimeout(() => {
-    ElMessage.success('数据导出成功')
-  }, 1000)
+  exportCustomers(selectedCustomers.value)
 }
 </script>
 

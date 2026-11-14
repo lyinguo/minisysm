@@ -236,6 +236,7 @@ import {
   type MyTableOperationsBtn
 } from '@/components/normaltable/type'
 import { WarehouseAPI, type Warehouse, type WarehouseQuery } from '@/apis/basicdata/warehouse'
+import { downloadTemplate, warehouseHeaders, parseWarehouseWorkbook, exportRecords } from '@/utils/masterWorkbook'
 
 // 组织树形数据
 const organizationOptions = ref([
@@ -778,21 +779,27 @@ function handleBatchDialogClose() {
 }
 
 function handleDownloadTemplate() {
-  ElMessage.success('模板下载中...')
+  downloadTemplate(warehouseHeaders, '仓库导入模板.xlsx')
 }
 
 function handleUploadTemplate() {
   const fileInput = document.createElement('input')
   fileInput.type = 'file'
   fileInput.accept = '.xlsx,.xls'
-  fileInput.onchange = (event) => {
+  fileInput.onchange = async (event) => {
     const files = (event.target as HTMLInputElement).files
     if (files && files.length > 0) {
       const selectedFile = files[0]
-      ElMessage.success(`已选择文件: ${selectedFile.name}`)
-      setTimeout(() => {
-        ElMessage.success('文件上传成功')
-      }, 1000)
+      try {
+        if (selectedFile.size > 5 * 1024 * 1024) throw new Error('文件不能超过 5 MiB')
+        const rows = parseWarehouseWorkbook(await selectedFile.arrayBuffer())
+        const result = await WarehouseAPI.importWarehouses(rows)
+        ElMessage.success(`成功导入 ${result.data} 条仓库`)
+        batchDialogVisible.value = false
+        await loadWarehouseList()
+      } catch (error) {
+        ElMessage.error(error instanceof Error ? error.message : '导入失败')
+      }
     }
   }
   fileInput.click()
@@ -803,10 +810,10 @@ function handleExportData() {
     ElMessage.warning('请先选择要导出的仓库')
     return
   }
-  ElMessage.success(`正在导出${selectedWarehouses.value.length}条数据...`)
-  setTimeout(() => {
-    ElMessage.success('数据导出成功')
-  }, 1000)
+  exportRecords(selectedWarehouses.value.map(row => ({
+    仓库编号: row.number ?? '', 仓库名称: row.name ?? '', 联系人: row.contacts ?? '',
+    联系电话: row.tel ?? '', 仓库地址: row.add ?? '', 备注: row.data ?? ''
+  })), '仓库数据.xlsx')
 }
 </script>
 

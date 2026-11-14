@@ -10,11 +10,12 @@ export function extractErrorMessage(err: unknown): string {
   const anyErr = err as any
   const body = anyErr?.response?.data ?? anyErr?.data ?? anyErr
   if (body && typeof body === 'object') {
-    if (typeof body.message === 'string' && body.message) {
-      return body.message
-    }
     if (typeof body.data === 'string' && body.data) {
       return body.data
+    }
+    if (typeof body.data?.message === 'string' && body.data.message) return body.data.message
+    if (typeof body.message === 'string' && body.message) {
+      return body.message
     }
   }
   return '请求失败'

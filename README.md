@@ -8,6 +8,8 @@
 - `zero-one-12psi/psi-java`：Spring Boot、Spring Cloud Alibaba 后端及测试。
 - `zero-one-12psi/psi-cpp`：C++ 业务服务及自有公共组件。
 - `database/schema.sql`：仅数据库结构，不含账户、密码或业务记录。
+- `database/migrations`：跨服务关联约束迁移，首次启动前必须安装。
+- [系统检查与修复清单](SYSTEM-AUDIT.md)：已修复问题、删除策略和尚未实现的能力。
 - `config/nacos/*.example`：脱敏的配置模板。
 - `scripts`：前端检查、仓库事务测试及只读接口检查。
 
@@ -36,6 +38,8 @@ C++ 服务所需的第三方 SDK、头文件和预编译库不随源码上传，
 ```powershell
 ./scripts/check-frontend.ps1 -Build
 ./scripts/check-warehouse.ps1
+./scripts/check-basic.ps1
+python scripts/lib/master-integrity.py test
 ```
 
 检查脚本中的 JDK、Maven 路径可按本机安装位置调整。仓库后端测试使用独立 H2 测试库，不操作现有业务数据。
@@ -47,7 +51,21 @@ C++ 服务所需的第三方 SDK、头文件和预编译库不随源码上传，
 - 修复报表页面渲染异常、路由切换、登录凭证失效处理及 Excel 导出。
 - 补齐供应商模板下载、采购订单删除、客户选择和操作日志用户查询。
 - 仓库报表读取真实单据，支持现有明细保存、审核和反审核；加入版本校验、库存不足保护、事务回滚、重复审核保护，以及批次和序列号校验。
-- 已验证 97 项前端测试、13 项后端隔离测试和生产构建。接口检查需在自行配置并启动本地服务后执行。
+- 增加主资料删除、余额、层级、制单用户引用及管理员保护；菜单改为拒绝隐式级联删除。
+- 客户、供应商、仓库支持真实批量导入；商品上传接入真实接口，修复账户编辑重置余额和资金选择器误用编号的问题。
+- 未统一接入业务的功能参数暂只读，详见系统检查清单。验证范围包括前端路由、隔离事务、MySQL 关联及并发、实际只读接口。
+
+## 安装关联保护
+
+准备 Python 3 和 Docker，在业务服务停止时执行：
+
+```powershell
+python scripts/lib/master-integrity.py install --database zo_psi
+```
+
+默认使用 `mysql8` 容器，在容器内部读取已有数据库凭据。可用 `--container`、`--database` 指定本机环境。不要把密码或真实数据提交到仓库。
+
+迁移增加 121 个触发器及组织、菜单父级外键，保留历史记录；有业务引用或余额的资料不能直接删除。历史重复编号、孤立关联不会自动合并或删除，可运行 `python scripts/lib/master-integrity.py audit` 查看异常数量。部署时不能遗漏迁移。
 
 ## 发布范围
 

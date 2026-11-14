@@ -51,13 +51,17 @@ function formatWarehousePayload(data: Partial<Warehouse>): Warehouse {
 }
 
 export class WarehouseAPI {
+  static async importWarehouses(rows: Partial<Warehouse>[]): Promise<ApiResponse<number>> {
+    if (!rows.length || rows.length > 500) throw new Error('每次导入需要 1 至 500 条仓库数据')
+    return this.ok<number>(await this.http.post(`${BASE_URL}/import`, rows))
+  }
   private static http = useHttp()
 
   private static ok<T>(body: any): ApiResponse<T> {
     if (body?.code === SUCCESS_CODE) {
       return { code: SUCCESS_CODE, message: body.message || 'success', data: body.data as T }
     }
-    throw new Error(body?.message || '请求失败')
+    throw new Error(extractErrorMessage(body))
   }
 
   static async getWarehouseList(query: WarehouseQuery): Promise<ApiResponse<PageResult<Warehouse>>> {

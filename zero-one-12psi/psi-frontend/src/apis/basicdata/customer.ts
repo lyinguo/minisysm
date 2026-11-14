@@ -121,7 +121,7 @@ export class CustomerAPI {
     if (body?.code === SUCCESS_CODE) {
       return { code: SUCCESS_CODE, message: body.message || 'success', data: body.data as T }
     }
-    throw new Error(body?.message || '请求失败')
+    throw new Error(extractErrorMessage(body))
   }
 
   static async getCustomerList(query: CustomerQuery): Promise<ApiResponse<PageResult<Customer>>> {
@@ -174,6 +174,12 @@ export class CustomerAPI {
     } catch (error) {
       throw new Error(extractErrorMessage(error))
     }
+  }
+
+  static async importCustomers(rows: any[]): Promise<ApiResponse<number>> {
+    if (!rows.length || rows.length > 500) throw new Error('每次导入需要 1 至 500 条客户数据')
+    const body = await this.http.post(`${BASE_URL}/import`, rows.map(buildAddPayload))
+    return this.ok<number>(body)
   }
 
   static async updateCustomer(id: string, data: any): Promise<ApiResponse<string>> {

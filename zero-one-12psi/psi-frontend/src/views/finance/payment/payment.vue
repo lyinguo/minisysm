@@ -118,7 +118,7 @@
                       v-for="item in accountList"
                       :key="item.账户编号"
                       :label="`${item.账户名称}（${item.所属组织}）`"
-                      :value="item.账户编号"
+                      :value="item.id"
                     />
                   </el-select>
                 </template>
@@ -217,7 +217,7 @@
                 v-for="item in peopleList"
                 :key="item.人员编号"
                 :label="`${item.人员名称}（${item.所属组织}）`"
-                :value="item.人员编号"
+                :value="item.id"
               />
             </el-select>
           </el-form-item>
@@ -632,13 +632,13 @@
   }
   
   const handlePeopleSelect = (peopleId: string) => {
-    const person = peopleList.value.find((item) => item.人员编号 === peopleId)
+    const person = peopleList.value.find((item) => String(item.id) === String(peopleId))
     form.people = peopleId || null
     form.peopleName = person?.人员名称 || ''
   }
 
   const handleAccountSelect = (row: any, accountId: string) => {
-    const account = accountList.value.find((item) => item.账户编号 === accountId)
+    const account = accountList.value.find((item) => String(item.id) === String(accountId))
     row.accountId = accountId || null
     row.account = account?.账户名称 || ''
   }
@@ -658,10 +658,10 @@
   }
   
   const confirmSupplier = () => {
-    if (currentSupplier.value.length > 0) {
+    if (currentSupplier.value.length === 1) {
       const names = currentSupplier.value.map(item => item.供应商名称).join(', ')
       form.supplierName = names
-      form.supplier = currentSupplier.value.map(item => item.供应商编号).join(',')
+      form.supplier = String(currentSupplier.value[0].id)
       supplierDialogVisible.value = false
     } else {
       ElMessage.warning('请选择供应商')
@@ -683,10 +683,10 @@
   }
   
   const confirmPeople = () => {
-    if (currentPeople.value.length > 0) {
+    if (currentPeople.value.length === 1) {
       const names = currentPeople.value.map(item => item.人员名称).join(', ')
       form.peopleName = names
-      form.people = currentPeople.value.map(item => item.人员编号).join(',')
+      form.people = String(currentPeople.value[0].id)
       peopleDialogVisible.value = false
     } else {
       ElMessage.warning('请选择人员')
@@ -703,7 +703,7 @@
       const account = selectedAccounts.value[0]
       const newData = [...tableData.value]
       newData[selectedAccountIndex.value].account = `${account.账户名称} (${account.账户编号})`
-      newData[selectedAccountIndex.value].accountId = account.账户编号
+      newData[selectedAccountIndex.value].accountId = String(account.id)
       tableData.value = newData
       accountSelectionVisible.value = false
       selectedAccountIndex.value = -1

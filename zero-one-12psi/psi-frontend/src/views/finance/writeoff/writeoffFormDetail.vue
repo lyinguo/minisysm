@@ -635,6 +635,9 @@
   import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
   import { ElMessage, ElMessageBox, type ElTable } from 'element-plus'
   import { WriteoffAPI } from '@/apis/finance'
+import { loadWriteoffDocuments, loadWriteoffUsers } from '@/apis/finance/masterData'
+import { loadCustomerOptions, loadPeopleOptions } from '@/apis/finance/masterData'
+
   import { toDateTime, toFileField } from '@/apis/finance/payload'
   import {
     billCodeToLabel,
@@ -812,62 +815,13 @@
   // ==================== 演示数据 ====================
   
   // 客户列表数据
-  const customerList = ref([
-    { 客户名称: 'OPE', 客户编号: 'OPE1', 客户类别: '常规类别', 客户等级: '常规级别', 所属组织: '默认组织', 备注信息: '这是一个测试客户' },
-    { 客户名称: '测试客户5', 客户编号: 'BH0005', 客户类别: '常规类别', 客户等级: '常规级别', 所属组织: '默认组织', 备注信息: 'VIP客户' }
-  ])
+  const customerList = ref<any[]>([])
   
   // 人员列表数据
-  const peopleList = ref([
-    { 人员名称: 'NTJK_test_DD00', 人员编号: 'DD001', 所属组织: '总', 人员性别: '男', 联系电话: '', 联系地址: '', 身份证号: '', 备注信息: '' },
-    { 人员名称: '崔瀚帅', 人员编号: '0023', 所属组织: '默认组织', 人员性别: '男', 联系电话: '', 联系地址: '', 身份证号: '', 备注信息: '' }
-  ])
+  const peopleList = ref<any[]>([])
   
   // 单据数据
-  const allDocuments = ref([
-    { 
-      所属组织: '默认组织', 
-      单据时间: '2025-08-04', 
-      单据编号: 'SKD2508041750258', 
-      核销状态: '未核销', 
-      单据金额: 100,
-      已核销金额: 0,
-      未核销金额: 100,
-      关联人员: '',
-      制单人: '管理员',
-      备注信息: '',
-      单据类型: '收款单',
-      选项卡: 'preReceipt'
-    },
-    { 
-      所属组织: '默认组织', 
-      单据时间: '2025-08-05', 
-      单据编号: 'XSD2508051750258', 
-      核销状态: '未核销', 
-      单据金额: 200,
-      已核销金额: 50,
-      未核销金额: 150,
-      关联人员: '张三',
-      制单人: '管理员',
-      备注信息: '销售订单',
-      单据类型: '销售单',
-      选项卡: 'receivable'
-    },
-    { 
-      所属组织: '默认组织', 
-      单据时间: '2025-08-06', 
-      单据编号: 'XSTHD2508061750258', 
-      核销状态: '未核销', 
-      单据金额: 150,
-      已核销金额: 0,
-      未核销金额: 150,
-      关联人员: '',
-      制单人: '李四',
-      备注信息: '退货商品',
-      单据类型: '销售退货单',
-      选项卡: 'receivable'
-    }
-  ])
+  const allDocuments = ref<any[]>([])
   
   // ==================== 计算属性 ====================
   
@@ -1143,25 +1097,17 @@
   }
 
   // 加载用户列表
-  const loadUserList = async () => {
-    try {
-      // 调用公共接口获取用户列表
-      // const result = await useHttp().post('service/user/list', {
-      //   page: userCurrentPage.value,
-      //   size: userPageSize.value
-      // })
-      
-      // 模拟数据
-      userList.value = [
-        { userName: '张三', userCode: 'ZS001', organization: '默认组织', position: '销售经理' },
-        { userName: '李四', userCode: 'LS002', organization: '默认组织', position: '财务专员' },
-        { userName: '王五', userCode: 'WW003', organization: '默认组织', position: '客服主管' }
-      ]
-      totalUsers.value = 3
-    } catch (error) {
-      ElMessage.error('获取用户列表失败')
-    }
+const loadUserList = async () => {
+  try {
+    const result = await loadWriteoffUsers(userCurrentPage.value, userPageSize.value)
+    userList.value = result.rows
+    totalUsers.value = result.total
+  } catch (error) {
+    userList.value = []
+    totalUsers.value = 0
+    ElMessage.error(error instanceof Error ? error.message : '用户加载失败')
   }
+}
 
   // 处理用户选择
   const handleUserSelection = (selection: any[]) => {
@@ -1187,41 +1133,16 @@
   }
 
   // 加载单据数据（模拟）
-  const loadDocuments = () => {
-    // 在实际应用中，这里应该调用接口，根据筛选条件获取数据
-    // 这里使用模拟数据
-    allDocuments.value = [
-      { 
-        所属组织: '默认组织', 
-        单据时间: '2025-10-14', 
-        单据编号: 'SKD2510142122160', 
-        核销状态: '未核销', 
-        单据金额: 123,
-        已核销金额: 0,
-        未核销金额: 123,
-        关联人员: '',
-        制单人: '张三',
-        备注信息: '',
-        单据类型: '收款单',
-        选项卡: 'preReceipt'
-      },
-      { 
-        所属组织: '默认组织', 
-        单据时间: '2025-07-11', 
-        单据编号: 'SKD2507111537078', 
-        核销状态: '未核销', 
-        单据金额: 105,
-        已核销金额: 0,
-        未核销金额: 105,
-        关联人员: '',
-        制单人: '李四',
-        备注信息: '',
-        单据类型: '收款单',
-        选项卡: 'preReceipt'
-      }
-    ]
+const loadDocuments = async () => {
+  try {
+    allDocuments.value = await loadWriteoffDocuments({ number: filterForm.documentNumber, user: filterForm.creatorId, data: filterForm.remark, startTime: filterForm.startDate, endTime: filterForm.endDate })
     totalDocuments.value = allDocuments.value.length
+  } catch (error) {
+    allDocuments.value = []
+    totalDocuments.value = 0
+    ElMessage.error(error instanceof Error ? error.message : '单据加载失败')
   }
+}
   
   // ==================== 客户选择相关方法 ====================
   
@@ -1249,10 +1170,10 @@
    * 确认客户选择
    */
   const confirmCustomer = () => {
-    if (currentCustomer.value.length > 0) {
+    if (currentCustomer.value.length === 1) {
       const names = currentCustomer.value.map(item => item.客户名称).join(', ')
       form.customerName = names
-      form.customer = currentCustomer.value.map(item => item.客户编号).join(',')
+      form.customer = String(currentCustomer.value[0].id)
       customerDialogVisible.value = false
     } else {
       ElMessage.warning('请选择客户')
@@ -1285,10 +1206,10 @@
    * 确认人员选择
    */
   const confirmPeople = () => {
-    if (currentPeople.value.length > 0) {
+    if (currentPeople.value.length === 1) {
       const names = currentPeople.value.map(item => item.人员名称).join(', ')
       form.peopleName = names
-      form.people = currentPeople.value.map(item => item.人员编号).join(',')
+      form.people = String(currentPeople.value[0].id)
       peopleDialogVisible.value = false
     } else {
       ElMessage.warning('请选择人员')
@@ -1545,7 +1466,12 @@
   }
   
   // 组件挂载时初始化
-  onMounted(() => {
+  onMounted(async () => {
+    try {
+      const [customers, people] = await Promise.all([loadCustomerOptions(), loadPeopleOptions()])
+      customerList.value = customers
+      peopleList.value = people
+    } catch { ElMessage.warning('基础资料加载失败，请刷新重试') }
     init()
   })
   </script>

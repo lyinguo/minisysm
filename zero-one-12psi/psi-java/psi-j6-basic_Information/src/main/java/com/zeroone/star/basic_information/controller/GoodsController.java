@@ -39,6 +39,9 @@ import java.util.List;
 @Api(tags = "商品管理")
 @Validated
 public class GoodsController implements GoodsApis {
+    @Resource
+    private com.zeroone.star.basic_information.service.MasterNumberGuard numberGuard;
+
 
     @Resource
     IGoodsService goodsService;
@@ -84,11 +87,12 @@ public class GoodsController implements GoodsApis {
 
     @PostMapping("/add")
     @ApiOperation(value = "新增商品")
-    @Transactional(rollbackFor = Exception.class)
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> addGoods(@Validated @RequestBody GoodsAddDTO goods) {
+        numberGuard.assertAvailable("goods", goods.getNumber(), null);
         Goods entity = msGoodsMapper.addDtoToGoods(goods);
-        entity.setId("goods_" + System.currentTimeMillis() + "_" + (int)(Math.random() * 1000));
+        entity.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
 
         boolean saved = goodsService.save(entity);
         return saved ? JsonVO.success(entity.getId()) : JsonVO.fail("商品保存失败");
@@ -97,7 +101,9 @@ public class GoodsController implements GoodsApis {
     @PutMapping("/update")
     @ApiOperation(value = "修改商品信息")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> updateGoods(@Validated @RequestBody GoodsDTO goods) {
+        numberGuard.assertAvailable("goods", goods.getNumber(), goods.getId());
         // 先检查商品是否存在
         Goods existGoods = goodsService.getById(goods.getId());
         if (existGoods == null) {

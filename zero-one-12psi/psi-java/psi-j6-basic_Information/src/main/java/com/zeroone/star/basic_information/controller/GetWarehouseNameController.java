@@ -19,6 +19,16 @@ import java.util.List;
 @RequestMapping("/basic_information/warehouse")
 public class GetWarehouseNameController implements GetWarehouseNameApis {
     @Resource
+    private com.zeroone.star.basic_information.service.MasterNumberGuard numberGuard;
+
+    @Resource
+    private com.zeroone.star.basic_information.service.WarehouseImportService warehouseImportService;
+
+    @PostMapping("/import")
+    public JsonVO<Integer> importWarehouses(@RequestBody List<Warehouse> rows) {
+        return JsonVO.success(warehouseImportService.importRows(rows));
+    }
+    @Resource
     private IWarehouseService warehouseService;
 
     @Override
@@ -67,14 +77,16 @@ public class GetWarehouseNameController implements GetWarehouseNameApis {
 
     @PostMapping("/add")
     @ApiOperation("新增仓库")
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> addWarehouse(@RequestBody Warehouse warehouse) {
         if (warehouse == null || StringUtils.isBlank(warehouse.getName()) || StringUtils.isBlank(warehouse.getNumber())) {
             return JsonVO.fail("仓库名称和编号不能为空");
         }
+        numberGuard.assertAvailable("warehouse", warehouse.getNumber(), null);
         if (StringUtils.isBlank(warehouse.getFrame())) {
             warehouse.setFrame("0");
         }
-        warehouse.setId("wh_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 1000));
+        warehouse.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
         if (warehouseService.save(warehouse)) {
             return JsonVO.success(warehouse.getId());
         }
@@ -83,10 +95,12 @@ public class GetWarehouseNameController implements GetWarehouseNameApis {
 
     @PutMapping("/update")
     @ApiOperation("更新仓库")
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> updateWarehouse(@RequestBody Warehouse warehouse) {
         if (warehouse == null || StringUtils.isBlank(warehouse.getId())) {
             return JsonVO.fail("仓库ID不能为空");
         }
+        numberGuard.assertAvailable("warehouse", warehouse.getNumber(), warehouse.getId());
         if (warehouseService.getById(warehouse.getId()) == null) {
             return JsonVO.fail("仓库不存在");
         }

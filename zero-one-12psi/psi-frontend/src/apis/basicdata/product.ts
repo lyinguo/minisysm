@@ -184,7 +184,7 @@ export class ProductAPI {
     if (body?.code === SUCCESS_CODE) {
       return { code: SUCCESS_CODE, message: body.message || 'success', data: body.data as T }
     }
-    throw new Error(body?.message || '请求失败')
+    throw new Error(extractErrorMessage(body))
   }
 
   static async getProductList(query: ProductQuery): Promise<ApiResponse<PageResult<Product>>> {
@@ -275,20 +275,20 @@ export class ProductAPI {
     }
   }
 
-  static async uploadProductFile(fileData: UploadFileRequest): Promise<ApiResponse<string>> {
+  static async uploadProductFile(fileData: UploadFileRequest): Promise<ApiResponse<{ successCount: number; message?: string }>> {
     const formData = new FormData()
     formData.append('file', fileData.file)
     try {
       const body = await this.http.post('/goods/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      return this.ok<string>(body)
+      return this.ok<{ successCount: number; message?: string }>(body)
     } catch (error) {
       throw new Error(extractErrorMessage(error))
     }
   }
 
-  static async uploadProductFileAlt(fileData: UploadFileRequest): Promise<ApiResponse<string>> {
+  static async uploadProductFileAlt(fileData: UploadFileRequest): Promise<ApiResponse<{ successCount: number; message?: string }>> {
     return this.uploadProductFile(fileData)
   }
 

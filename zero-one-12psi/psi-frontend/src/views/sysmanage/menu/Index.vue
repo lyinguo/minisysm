@@ -1,5 +1,6 @@
 <template>
   <div class="menu area">
+    <el-alert title="菜单配置管理导航入口，不会自动创建业务页面，也不能代替后端权限校验。请先解除子菜单及权限引用后再删除。" type="info" :closable="false" show-icon />
     <div class="layout">
       <el-button-group>
         <el-button @click="handleAdd">新增</el-button>

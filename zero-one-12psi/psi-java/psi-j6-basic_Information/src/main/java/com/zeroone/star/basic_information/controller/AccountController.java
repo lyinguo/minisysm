@@ -28,6 +28,9 @@ import javax.annotation.Resource;
 @RequestMapping("/account")
 @Api(tags = "资金账户")
 public class AccountController implements AccountApis {
+    @Resource
+    private com.zeroone.star.basic_information.service.MasterNumberGuard numberGuard;
+
 
     @Resource
     IAccountService accountService;  
@@ -54,8 +57,10 @@ public class AccountController implements AccountApis {
     @ApiOperation("添加账户")
     @PostMapping("/add")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> addAccount(@RequestBody SaveAccountDTO saveAccountDTO)
     {
+        numberGuard.assertAvailable("account", saveAccountDTO.getNumber(), null);
 
         int rows=accountService.addAccount(saveAccountDTO);
         if(rows==0) return JsonVO.fail("添加失败");
@@ -75,8 +80,10 @@ public class AccountController implements AccountApis {
     @ApiOperation("修改账户")
     @PutMapping("/update")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> updateAccount(@RequestBody AccountDTO accountDTO)
     {
+        numberGuard.assertAvailable("account", accountDTO.getNumber(), accountDTO.getId());
         int rows = accountService.updateAccount(accountDTO);
         if(rows==0) return JsonVO.fail("修改失败");
         return JsonVO.success("修改成功");

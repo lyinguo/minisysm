@@ -32,6 +32,9 @@ import java.util.List;
 @Validated
 public class CustomerController implements CustomerAPis {
     @Resource
+    private com.zeroone.star.basic_information.service.MasterNumberGuard numberGuard;
+
+    @Resource
     ISCustomerService customerService;
 
     @Resource
@@ -57,12 +60,14 @@ public class CustomerController implements CustomerAPis {
     @PostMapping("/add-customer")
     @ApiOperation("添加客户")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> addCustomer(@Validated @RequestBody CustomerAddDTO customerAddDTO) {
+        numberGuard.assertAvailable("customer", customerAddDTO.getNumber(), null);
         try {
             Customer customer = msCustomerMapper.addDtoToCustomer(customerAddDTO);
             if (customer.getId() == null || customer.getId().isEmpty()) {
                 // id 列 varchar(32)，使用时间戳避免超长
-                customer.setId(String.valueOf(System.currentTimeMillis()));
+                customer.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
             }
             if (customer.getPy() == null || customer.getPy().isEmpty()) {
                 customer.setPy(customer.getNumber() != null ? customer.getNumber() : customer.getName());
@@ -101,7 +106,9 @@ public class CustomerController implements CustomerAPis {
     @PutMapping("/update-customer")
     @ApiOperation("修改客户信息")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> updateCustomer(@Validated @RequestBody CustomerDTO customerDTO) {
+        numberGuard.assertAvailable("customer", customerDTO.getNumber(), customerDTO.getId());
         if(customerService.updateById(msCustomerMapper.customerDtoToCustomer(customerDTO))){
             return JsonVO.success(customerDTO.getId());
         }

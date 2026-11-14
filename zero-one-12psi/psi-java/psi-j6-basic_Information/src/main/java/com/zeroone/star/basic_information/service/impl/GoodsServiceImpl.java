@@ -41,6 +41,8 @@ import static com.zeroone.star.project.vo.ResultStatus.FAIL;
  */
 @Service
 public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements IGoodsService {
+    @javax.annotation.Resource
+    private com.zeroone.star.basic_information.service.MasterNumberGuard numberGuard;
 
     @Resource
     MsGoodsMapper msGoodsMapper;
@@ -151,7 +153,7 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<GoodsImportResultDTO> importGoods(MultipartFile file) {
         SimpleImportListener<GoodsExcelDTO> listener = new SimpleImportListener<>();
 
@@ -171,11 +173,14 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
                 List<Goods> goodsList = new ArrayList<>();
 
                 // 遍历Excel中的每一行数据
+                java.util.Set<String> importedCodes = new java.util.HashSet<>();
                 for (GoodsExcelDTO excelData : successList) {
+                    if (!importedCodes.add(excelData.getNumber())) throw new IllegalArgumentException("文件内商品编号重复");
+                    numberGuard.assertAvailable("goods", excelData.getNumber(), null);
                     // 把Excel数据转换成数据库实体
                     Goods dbEntity = msGoodsMapper.toEntity(excelData);
                     // 生成ID（使用时间戳+随机数）
-                    dbEntity.setId("goods_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 1000));
+                    dbEntity.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
                     // 设置拼音（简单处理，可以用拼音库优化）
                     if (dbEntity.getName() != null) {
                         dbEntity.setPy(dbEntity.getName().toLowerCase().replaceAll("[^a-z0-9]", ""));
@@ -186,6 +191,7 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
 
                 // 一次性保存所有商品到数据库
                 boolean saved = this.saveBatch(goodsList);
+                if (!saved) throw new IllegalStateException("商品批量保存失败");
                 System.out.println("批量保存结果: " + saved + ", 保存数量: " + goodsList.size());
             }
 
@@ -195,11 +201,12 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
             return JsonVO.success(successResult);
 
         } catch (RuntimeException e) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             // 检查是否是我们的校验异常
             if (e.getMessage() != null && e.getMessage().contains("VALIDATION_ERROR:")) {
                 // 这是我们的校验异常
                 GoodsImportResultDTO errorResult = new GoodsImportResultDTO();
-                errorResult.setSuccessCount(listener.getSuccessList().size());
+                errorResult.setSuccessCount(0);
                 errorResult.setFailCount(1);
                 errorResult.setMessage(listener.getErrorMessage());
                 return JsonVO.create(errorResult, FAIL);

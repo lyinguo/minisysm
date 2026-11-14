@@ -34,6 +34,19 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(value = Exception.class)
     public JsonVO<String> exceptionHandler(Exception e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && message.contains("PSI_INTEGRITY:")) {
+                String reason = "数据已经被单据或库存引用，不能删除；请保留历史资料";
+                if (message.contains("PSI_INTEGRITY:balance:")) reason = "存在未结清余额，不能删除";
+                if (message.contains("PSI_INTEGRITY:missing:")) reason = "选择的客户、供应商、商品、仓库或账户已不存在，请刷新后重新选择";
+                if (message.contains("PSI_INTEGRITY:immutable:")) reason = "基础资料的内部 ID 不允许修改";
+                if (message.contains("PSI_INTEGRITY:cycle:")) reason = "不能将自身或下级设置为上级";
+                if (message.contains("PSI_INTEGRITY:initial:")) reason = "资金账户已有业务流水，不能修改期初余额";
+                return JsonVO.create(reason, 9999, reason);
+            }
+        }
+        if (e instanceof IllegalArgumentException) return JsonVO.create(e.getMessage(), 9999, e.getMessage());
         if (e instanceof HttpMediaTypeException) {
             return JsonVO.create(e.getMessage(), ResultStatus.CONTENT_TYPE_ERR);
         }

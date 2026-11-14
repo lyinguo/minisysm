@@ -364,6 +364,7 @@
 </template>
 
 <script setup lang="ts">
+import { downloadTemplate, supplierHeaders, exportRecords } from '@/utils/masterWorkbook'
 import '../styles/common-styles.css'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -697,21 +698,7 @@ function handleBatchDialogClose() {
 
 // 下载模板处理
 async function handleDownloadTemplate() {
-  try {
-    const response = await SupplierAPI.downloadImportTemplate()
-    if (response.code !== 10000 || typeof response.data !== 'string' || !response.data) {
-      throw new Error(response.message || '模板地址为空')
-    }
-    const url = new URL(response.data, window.location.origin)
-    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('模板下载地址无效')
-    const link = document.createElement('a')
-    link.href = url.href
-    link.download = '供应商导入模板.xlsx'
-    link.rel = 'noopener'
-    link.click()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '下载模板失败')
-  }
+  downloadTemplate(supplierHeaders, '供应商导入模板.xlsx')
 }
 
 // loadSupplierList功能已移至下方定义的函数
@@ -1255,7 +1242,7 @@ function handleDelete(row: Supplier) {
         await loadSupplierList()
       } catch (error) {
         console.error('Failed to delete supplier:', error)
-        ElMessage.error('删除失败，请稍后重试')
+        ElMessage.error(error instanceof Error ? error.message : '删除失败，请稍后重试')
       } finally {
         deleteLoading.value = false
       }
@@ -1396,13 +1383,13 @@ function handleUploadTemplate() {
         const formData = new FormData()
         formData.append('file', selectedFile)
         
-        await SupplierAPI.importSupplier(formData)
-        ElMessage.success('文件导入成功')
+        const result = await SupplierAPI.importSupplier(formData)
+        ElMessage.success(`成功导入 ${result.data?.successCount ?? 0} 条供应商`)
         await loadSupplierList()
         batchDialogVisible.value = false
       } catch (error) {
         console.error('Failed to import suppliers:', error)
-        ElMessage.error('文件导入失败，请检查文件格式是否正确')
+        ElMessage.error(error instanceof Error ? error.message : '文件导入失败，请检查文件格式是否正确')
       } finally {
         importLoading.value = false
       }
@@ -1412,51 +1399,11 @@ function handleUploadTemplate() {
 }
 
 async function handleExportData() {
-  if (selectedSuppliers.value.length === 0) {
-    ElMessage.warning('请先选择要导出的供应商')
-    return
-  }
-  
-  exportLoading.value = true
-  try {
-    ElMessage.info(`正在导出${selectedSuppliers.value.length}条数据...`)
-    
-    // 调用导出接口 - 使用搜索表单的值构建导出查询参数
-    const exportParams: SupplierExportQuery = {
-      code: searchForm.code || undefined,
-      name: searchForm.name || undefined,
-      category: searchForm.category || undefined
-    }
-    const response = await SupplierAPI.exportSupplier(exportParams)
-    
-    // 验证响应
-    if (!response) {
-      throw new Error('导出响应为空')
-    }
-    
-    // 处理文件下载
-    const blob = new Blob([response], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `供应商数据_${new Date().toLocaleDateString()}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    
-    // 清理资源
-    setTimeout(() => {
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    }, 100)
-    
-    ElMessage.success('数据导出成功')
-    batchDialogVisible.value = false
-  } catch (error) {
-    console.error('Failed to export suppliers:', error)
-    ElMessage.error('数据导出失败，请稍后重试')
-  } finally {
-    exportLoading.value = false
-  }
+  if (!selectedSuppliers.value.length) { ElMessage.warning('请先选择要导出的供应商'); return }
+  exportRecords(selectedSuppliers.value.map((row: any) => ({
+    供应商编号: row.code ?? row.number ?? '', 供应商名称: row.name ?? '', 供应商类别: row.category ?? '',
+    联系人: row.contactPerson ?? '', 联系电话: row.contactPhone ?? '', 备注: row.remark ?? ''
+  })), '供应商数据.xlsx')
 }
 
 </script>

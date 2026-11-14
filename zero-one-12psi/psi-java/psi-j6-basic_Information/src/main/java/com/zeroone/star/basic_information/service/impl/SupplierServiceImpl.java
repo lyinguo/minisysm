@@ -29,6 +29,8 @@ import java.util.*;
  */
 @Service
 public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> implements ISupplierService {
+    @Resource
+    private com.zeroone.star.basic_information.service.SupplierWorkbookService workbookService;
 
     @Resource
     MsSupplierMapper ms;
@@ -74,33 +76,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
 
     @Override
     public ImportResultVO importSuppliers(MultipartFile file,String url) {
-
-        ImportResultVO result = new ImportResultVO();
-        List<ImportFailureVO> failures = new ArrayList<>();
-        int successCount = 0;
-
-        try {
-            // 1. 读取Excel数据
-            List<SupplierImportAddDTO> importData = EasyExcel.read(file.getInputStream())
-                    .head(SupplierImportAddDTO.class)
-                    .sheet()
-                    .doReadSync();
-
-            result.setTotalCount(importData.size());
-
-
-            // 2. 设置结果
-            result.setSuccessCount(successCount);
-            result.setFailureCount(failures.size());
-            result.setFailureDetails(failures);
-
-        } catch (Exception e) {
-            log.error("导入失败", e);
-            throw new RuntimeException("导入处理异常");
-        }
-
-        return result;
-
+        return workbookService.importFile(file);
     }
 
     @Override

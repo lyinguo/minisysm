@@ -636,6 +636,7 @@ import {
   type MyTableOperationsBtn
 } from '@/components/normaltable/type'
 import { ProductAPI } from '@/apis/basicdata/product'
+import { downloadTemplate, productHeaders, exportRecords } from '@/utils/masterWorkbook'
 import type { ProductQuery, AddProductRequest } from '@/apis/basicdata/product'
 import type { Product as ApiProduct } from '@/apis/basicdata/product'
 
@@ -1051,7 +1052,7 @@ const handleBatch = () => {
 
 // 下载模板
 const handleDownloadTemplate = () => {
-  ElMessage.success('模板下载中...')
+  downloadTemplate(productHeaders, '商品导入模板.xlsx')
 }
 
 // 上传模板
@@ -1060,15 +1061,21 @@ const handleUploadTemplate = () => {
   fileInput.type = 'file'
   fileInput.accept = '.xlsx,.xls'
 
-  fileInput.onchange = (event) => {
+  fileInput.onchange = async (event) => {
     const files = (event.target as HTMLInputElement).files
     if (files && files.length > 0) {
-      ElMessage.success(`已选择文件: ${files[0].name}`)
       uploadDisabled.value = true
-      setTimeout(() => {
-        ElMessage.success('文件上传成功')
+      try {
+        if (files[0].size > 5 * 1024 * 1024) throw new Error('文件不能超过 5 MiB')
+        const result = await ProductAPI.uploadProductFile({ file: files[0], fileType: 'xlsx', saveType: 'local' })
+        ElMessage.success(`成功导入 ${result.data?.successCount ?? 0} 条商品`)
+        batchDialogVisible.value = false
+        await updateTableData()
+      } catch (error) {
+        ElMessage.error(error instanceof Error ? error.message : '导入失败')
+      } finally {
         uploadDisabled.value = false
-      }, 1000)
+      }
     }
   }
 
@@ -1082,24 +1089,10 @@ const handleExportData = () => {
     return
   }
 
-  ElMessage.success(`正在导出${selectedProducts.value.length}条数据...`)
-  setTimeout(() => {
-    ElMessage.success('数据导出成功')
-    const csvContent =
-      '商品ID,商品名称,商品编号,商品型号,商品类别,商品品牌\n' +
-      selectedProducts.value
-        .map((p) => `${p.id},${p.name},${p.code},${p.model},${p.category},${p.brand}`)
-        .join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `商品数据_${new Date().getTime()}.csv`)
-    link.style.display = 'none'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }, 1000)
+  exportRecords(selectedProducts.value.map(p => ({
+    商品名称: p.name ?? '', 商品编号: p.code ?? p.number ?? '', 商品型号: p.model ?? p.spec ?? '',
+    商品类别: p.category ?? '', 商品品牌: p.brand ?? ''
+  })), '商品数据.xlsx')
 }
 
 // 关闭批量操作对话框

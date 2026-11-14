@@ -48,6 +48,9 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, MenuDO> implements 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate db;
+
     /**
      * 内部适配器类：将 MenuNameTreeVO 适配为 TreeNode
      * @author ye
@@ -59,7 +62,7 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, MenuDO> implements 
             this.originalVO = vo;
             // 设置 TreeNode 需要的字段
             this.setTnId(String.valueOf(vo.getId()));
-            this.setTnPid(vo.getPid() == null || vo.getPid() == "0" ?
+            this.setTnPid(vo.getPid() == null || "0".equals(vo.getPid()) ?
                     null : String.valueOf(vo.getPid()));
         }
 
@@ -146,7 +149,7 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, MenuDO> implements 
         vo.setPid(menuDO.getPid());
         vo.setSort(menuDO.getSort());
         vo.setTnId(String.valueOf(menuDO.getId()));
-        vo.setTnPid(menuDO.getPid() == null || menuDO.getPid() == "0" ?
+        vo.setTnPid(menuDO.getPid() == null || "0".equals(menuDO.getPid()) ?
                 null : String.valueOf(menuDO.getPid()));
         return vo;
     }
@@ -295,7 +298,7 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, MenuDO> implements 
         for (MenuListVO menu : allMenus) {
             String pid = menu.getPid();
 
-            if (pid == null || pid == "0") {
+            if (pid == null || "0".equals(pid)) {
                 // 根节点
                 rootMenus.add(menu);
             } else {
@@ -354,34 +357,28 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, MenuDO> implements 
         if (updated <= 0) {
             return "修改失败";
         }
-
+        redisTemplate.delete("menu:" + menuUpdateDTO.getId());
         return menuUpdateDTO.getId().toString();
     }
 
     /**
-     * 删除指定菜单(递归去删)
+     * 删除无子菜单、功能权限和角色引用的叶子菜单。
      * @param id
      * @return
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public String deleteMenu(String id) {
-        // 1. 获取要删除的本节点ID（目标节点）
-
-        // 2. 递归查询所有子节点ID（以targetId为父id的所有子节点）
-        List<String> allChildIds = menuMapper.selectAllChildIds(id);
-
-        // 3. 关键：将本节点ID加入待删除集合（一起删除）
-        List<String> idsToDelete = new ArrayList<>();
-        idsToDelete.add(id); // 加入本节点
-        if (allChildIds != null && !allChildIds.isEmpty()) {
-            idsToDelete.addAll(allChildIds); // 加入所有子节点
-        }
-        menuMapper.setRecursionDepth();
-        // 4. 批量删除本节点 + 所有子节点
-        int deleted = menuMapper.deleteBatchIds(idsToDelete);
-
-        // 5. 返回结果
+        if (menuMapper.selectById(id) == null) return "菜单不存在，请刷新";
+        if (db.queryForObject("SELECT COUNT(*) FROM menu WHERE pid=?", Long.class, id) > 0)
+            return "存在子菜单，请先处理子菜单；不会自动级联删除";
+        if (db.queryForObject("SELECT COUNT(*) FROM func_perm WHERE mid=?", Long.class, id) > 0)
+            return "菜单存在功能权限引用，不能删除";
+        if (db.queryForObject("SELECT COUNT(*) FROM role WHERE JSON_CONTAINS_PATH(IF(JSON_VALID(root),root,'{}'),'one',CONCAT('$.',JSON_QUOTE(?)))", Long.class, id) > 0)
+            return "菜单已被角色授权引用，请先解除授权";
+        int deleted = menuMapper.deleteById(id);
         if (deleted > 0) {
+            redisTemplate.delete("menu:" + id);
             return String.valueOf(deleted);
         } else {
             return "0";

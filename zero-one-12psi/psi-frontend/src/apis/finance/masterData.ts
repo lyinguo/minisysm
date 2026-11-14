@@ -2,6 +2,35 @@ import { CustomerAPI } from '@/apis/basicdata/customer'
 import { SupplierAPI } from '@/apis/basicdata/supplier'
 import { AccountAPI } from '@/apis/basicdata/account'
 import { getPersonnelList } from '@/apis/advancedSettings/people'
+import { getUserList } from '@/apis/advancedSettings/user'
+import { WriteoffAPI } from '@/apis/finance'
+import { moldLabelToCode, MOLD_TO_PENDING_TYPE2 } from '@/utils/billMold'
+
+export async function loadWriteoffUsers(pageIndex: number, pageSize: number) {
+  const res = await getUserList({ pageIndex, pageSize })
+  if (res?.code !== 10000) throw new Error('用户列表加载失败')
+  return {
+    rows: (res.data?.rows ?? []).map((row: any) => ({ userName: row.name ?? row.user ?? '', userCode: String(row.id), organization: row.frame ?? '' })),
+    total: Number(res.data?.total ?? 0)
+  }
+}
+
+export async function loadWriteoffDocuments(filters: Record<string, unknown> = {}) {
+  const types = [['收款单', 'preReceipt'], ['销售单', 'receivable'], ['销售退货单', 'receivable'], ['其它收入单', 'receivable']]
+  const groups = await Promise.all(types.map(async ([label, tab]) => {
+    const moldCode = moldLabelToCode(label)
+    const res = await WriteoffAPI.pendingBills({ pageIndex: 1, pageSize: 200, ...filters, type2: MOLD_TO_PENDING_TYPE2[moldCode] ?? 0 })
+    if (res?.code !== 10000) throw new Error('待核销单据加载失败')
+    return (res.data?.rows ?? []).map((item: Record<string, unknown>) => ({
+      所属组织: String(item.frame ?? ''), 单据时间: String(item.time ?? '').slice(0, 10), 单据编号: String(item.number ?? ''),
+      核销状态: String(item.nucleus ?? ''), 单据金额: Number(item.total) || 0,
+      已核销金额: Number(item.amount ?? item.money) || 0, 未核销金额: Number(item.anwo ?? item.diffMoney ?? item.money) || 0,
+      关联人员: String(item.people ?? ''), 制单人: String(item.user ?? ''), 备注信息: String(item.data ?? ''),
+      单据类型: label, moldCode, billCode: tab === 'preReceipt' ? 'cia' : 're', 选项卡: tab, source: String(item.id ?? item.source ?? '')
+    }))
+  }))
+  return groups.flat()
+}
 
 export type CustomerOption = {
   客户名称: string

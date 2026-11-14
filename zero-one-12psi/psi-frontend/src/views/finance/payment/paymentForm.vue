@@ -342,6 +342,8 @@
   import ReportTable from '@/components/report/reportButtonTable.vue'
   import PaymentFormDetail from '@/views/finance/payment/paymentFormDetail.vue'
   import { PaymentAPI } from '@/apis/finance'
+import { loadSupplierOptions, loadPeopleOptions, loadAccountOptions } from '@/apis/finance/masterData'
+import { getUserList } from '@/apis/advancedSettings/user'
   
   // 详情弹窗控制
   const showDetailDialog = ref(false);
@@ -454,42 +456,13 @@
   ]
   
   // 演示数据 - 供应商数据基于您提供的图片
-  const supplierList = ref([
-    { 供应商名称: '州东方之花医药股份有限公司', 供应商编号: '01', 供应商类别: '常规类别', 应付款余额: 11, 所属组织: '默认组织' },
-    { 供应商名称: '小皓', 供应商编号: '00001', 供应商类别: '常规类别', 应付款余额: 27293, 所属组织: '默认组织' },
-    { 供应商名称: 'aly供应商1', 供应商编号: '100', 供应商类别: '常规类别', 应付款余额: 24050, 所属组织: '默认组织' },
-    { 供应商名称: 'hjhj', 供应商编号: '454', 供应商类别: '常规类别', 应付款余额: 28.6, 所属组织: '默认组织' },
-    { 供应商名称: '中创集团', 供应商编号: '111', 供应商类别: '常规类别', 应付款余额: -97281, 所属组织: '默认组织' },
-    { 供应商名称: '123', 供应商编号: '001', 供应商类别: '常规类别', 应付款余额: 94700, 所属组织: '默认组织' },
-    { 供应商名称: '依诺', 供应商编号: 'P001', 供应商类别: '常规类别', 应付款余额: 26, 所属组织: '默认组织' },
-    { 供应商名称: '塑料供应商', 供应商编号: '222', 供应商类别: '常规类别', 应付款余额: 2210, 所属组织: '默认组织' }
-  ]);
-  
-  const peopleList = ref([
-    { 人员名称: 'NTJK_test_DD001', 人员编号: 'DD001', 所属组织: '总', 人员性别: '男', 联系电话: '', 联系地址: '', 身份证号: '' },
-    { 人员名称: '1', 人员编号: '', 所属组织: '', 人员性别: '', 联系电话: '', 联系地址: '', 身份证号: '' },
-    { 人员名称: '崔瀚帅', 人员编号: '0023', 所属组织: '默认组织', 人员性别: '男', 联系电话: '', 联系地址: '', 身份证号: '' },
-    { 人员名称: 'ruihi', 人员编号: '0098', 所属组织: '默认组织', 人员性别: '女', 联系电话: '', 联系地址: '', 身份证号: '' },
-    { 人员名称: '123', 人员编号: '123', 所属组织: '部门1', 人员性别: '女', 联系电话: '', 联系地址: '', 身份证号: '' }
-  ]);
-  
-  const userList = ref([
-    { id: 1, name: 'csa', structure: '部门1', role: 'NTJK', account: '1414', phone: '17815712444' },
-    { id: 2, name: 'test001', structure: '四川', role: 'NTJK', account: '18341755566', phone: '18341755566' },
-    { id: 3, name: 'NTJK_test', structure: 'NTJK', role: 'NTJK', account: 'NTJK_test', phone: '11122233355' },
-    { id: 4, name: 'test001a', structure: '默认组织', role: '', account: 'test001a', phone: '18800000001' },
-    { id: 5, name: '001', structure: '公司1', role: 'role_01', account: '001', phone: '13388222223' },
-    { id: 6, name: 'sd', structure: '默认组织', role: '', account: 'ok', phone: '13388222222' },
-    { id: 7, name: '瀚', structure: '超级管理员', role: '四川', account: 'annin', phone: '13225412256' }
-  ]);
-  
-  const accountList = ref([
-    { 账户名称: '四川账户', 账户编号: '423423', 所属组织: '四川', 账户余额: -1391489.02 },
-    { 账户名称: '让5mt', 账户编号: 'tyutu', 所属组织: '默认组织', 账户余额: 893601585 },
-    { 账户名称: 'dfg', 账户编号: 'dfg', 所属组织: '法师贰', 账户余额: 61375589 },
-    { 账户名称: '中创资金', 账户编号: '111', 所属组织: '默认组织', 账户余额: -4135634.64 },
-    { 账户名称: '1', 账户编号: '1', 所属组织: '默认组织', 账户余额: 11349309 }
-  ]);
+  const supplierList = ref<any[]>([]);
+
+  const peopleList = ref<any[]>([]);
+
+  const userList = ref<any[]>([]);
+
+  const accountList = ref<any[]>([]);
   
   // 模拟表格数据 - 改为付款单数据
   const demoRows: TableRow[] = [
@@ -592,7 +565,7 @@
     if (supplierSelection.value.length > 0) {
       const row = supplierSelection.value[0];
       searchForm.supplierName = row.供应商名称;
-      searchForm.supplierId = row.供应商编号;
+      searchForm.supplierId = row.id;
       showSupplierDialog.value = false;
     } else {
       ElMessage.warning('请选择一个供应商');
@@ -621,7 +594,7 @@
     if (peopleSelection.value.length > 0) {
       const row = peopleSelection.value[0];
       searchForm.peopleName = row.人员名称;
-      searchForm.peopleId = row.人员编号;
+      searchForm.peopleId = row.id;
       showPeopleDialog.value = false;
     } else {
       ElMessage.warning('请选择一个关联人员');
@@ -679,7 +652,7 @@
     if (accountSelection.value.length > 0) {
       const row = accountSelection.value[0];
       searchForm.accountName = row.账户名称;
-      searchForm.accountId = row.账户编号;
+      searchForm.accountId = row.id;
       showAccountDialog.value = false;
     } else {
       ElMessage.warning('请选择一个结算账户');
@@ -873,7 +846,19 @@
     });
   };
   
+  const loadFilterOptions = async () => {
+    try {
+      const [suppliers, people, accounts, users] = await Promise.all([
+        loadSupplierOptions(), loadPeopleOptions(), loadAccountOptions(), getUserList({ pageIndex: 1, pageSize: 200 })
+      ])
+      supplierList.value = suppliers
+      peopleList.value = people
+      accountList.value = accounts
+      userList.value = (users.data?.rows ?? []).map((row: any) => ({ id: row.id, name: row.name, account: row.user, phone: row.tel, structure: row.frame, role: row.role }))
+    } catch { ElMessage.warning('筛选资料加载失败，请刷新重试') }
+  }
   onMounted(() => {
+    void loadFilterOptions()
     // 默认最近7天
     const now = new Date();
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());

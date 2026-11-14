@@ -487,7 +487,7 @@ function resolveCustomerDisplay(idOrName: string | null | undefined) {
   const found = customerList.value.find(
     (c) => c.客户编号 === key || c.id === key || c.客户名称 === key
   )
-  return { id: found ? (found.客户编号 || found.id) : key, name: found?.客户名称 || key }
+  return { id: found ? (found.id || found.客户编号) : key, name: found?.客户名称 || key }
 }
 
 function resolvePeopleDisplay(idOrName: string | null | undefined) {
@@ -496,7 +496,7 @@ function resolvePeopleDisplay(idOrName: string | null | undefined) {
   const found = peopleList.value.find(
     (p) => p.人员编号 === key || p.id === key || p.人员名称 === key
   )
-  return { id: found ? (found.人员编号 || found.id) : key, name: found?.人员名称 || key }
+  return { id: found ? (found.id || found.人员编号) : key, name: found?.人员名称 || key }
 }
 
 function resolveAccountDisplay(idOrName: string | null | undefined) {
@@ -505,7 +505,7 @@ function resolveAccountDisplay(idOrName: string | null | undefined) {
   const found = accountList.value.find(
     (a) => a.账户编号 === key || a.id === key || a.账户名称 === key
   )
-  return { id: found ? (found.账户编号 || found.id) : key, name: found?.账户名称 || key }
+  return { id: found ? (found.id || found.账户编号) : key, name: found?.账户名称 || key }
 }
 
 function applyHeaderToForm(header: Record<string, any>) {
@@ -723,10 +723,10 @@ const handleCustomerSelection = (selection: any[]) => {
 }
   
 const confirmCustomer = () => {
-  if (currentCustomer.value.length > 0) {
+  if (currentCustomer.value.length === 1) {
     const names = currentCustomer.value.map(item => item.客户名称).join(', ')
     form.customerName = names
-    form.customer = currentCustomer.value.map(item => item.客户编号).join(',')
+    form.customer = String(currentCustomer.value[0].id)
     customerDialogVisible.value = false
   } else {
     ElMessage.warning('请选择客户')
@@ -749,10 +749,10 @@ const handlePeopleSelection = (selection: any[]) => {
 }
   
 const confirmPeople = () => {
-  if (currentPeople.value.length > 0) {
+  if (currentPeople.value.length === 1) {
     const names = currentPeople.value.map(item => item.人员名称).join(', ')
     form.peopleName = names
-    form.people = currentPeople.value.map(item => item.人员编号).join(',')
+    form.people = String(currentPeople.value[0].id)
     peopleDialogVisible.value = false
   } else {
     ElMessage.warning('请选择人员')
@@ -769,7 +769,7 @@ const confirmAccount = () => {
     const account = selectedAccounts.value[0]
     const newData = [...tableData.value]
     newData[selectedAccountIndex.value].account = `${account.账户名称} (${account.账户编号})`
-    newData[selectedAccountIndex.value].accountId = account.账户编号
+    newData[selectedAccountIndex.value].accountId = String(account.id)
     tableData.value = newData
     accountSelectionVisible.value = false
     selectedAccountIndex.value = -1

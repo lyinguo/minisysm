@@ -74,7 +74,17 @@ public class IAccountServiceImpl extends ServiceImpl<AccountMapper,Account> impl
 
     @Override
     public int updateAccount(AccountDTO accountDTO) {
+        Account original = accountMapper.selectById(accountDTO.getId());
+        if (original == null) throw new IllegalArgumentException("账户不存在，请刷新");
         Account account = AccountConverter.toEntity(accountDTO);
+        java.math.BigDecimal previousInitial = original.getInitial() == null ? java.math.BigDecimal.ZERO : original.getInitial();
+        java.math.BigDecimal balance = original.getBalance() == null ? java.math.BigDecimal.ZERO : original.getBalance();
+        if (accountDTO.getInitial() != null && accountDTO.getInitial().compareTo(previousInitial) != 0) {
+            if (balance.compareTo(previousInitial) != 0) throw new IllegalArgumentException("账户余额已发生变化，不能修改期初余额");
+            account.setBalance(accountDTO.getInitial());
+        } else {
+            account.setBalance(balance);
+        }
         return accountMapper.updateById(account);
     }
 

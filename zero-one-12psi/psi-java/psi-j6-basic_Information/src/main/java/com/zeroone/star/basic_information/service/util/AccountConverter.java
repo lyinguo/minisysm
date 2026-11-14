@@ -62,7 +62,6 @@ public class AccountConverter {
                 .frame(accountDTO.getFrame())
                 .time(accountDTO.getTime())
                 .initial(accountDTO.getInitial())
-                .balance(accountDTO.getInitial())// 初始余额即为当前余额
                 .data(accountDTO.getData())
                 .build();
     }

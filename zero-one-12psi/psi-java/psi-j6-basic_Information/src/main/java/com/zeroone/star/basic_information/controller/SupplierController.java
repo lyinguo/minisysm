@@ -42,6 +42,9 @@ import java.util.List;
 @RequestMapping("/basic_information/supplier")
 @Api(tags = "供应商管理")
 public class SupplierController implements SupplierApis {
+    @Resource
+    private com.zeroone.star.basic_information.service.MasterNumberGuard numberGuard;
+
 
     @Resource
     ISupplierService supplierService;
@@ -85,11 +88,13 @@ public class SupplierController implements SupplierApis {
     @PostMapping("/add")
     @ApiOperation("添加供应商")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> addSupplier(@Validated @RequestBody SupplierAddDTO supplierAddDTO) {
+        numberGuard.assertAvailable("supplier", supplierAddDTO.getNumber(), null);
         try {
             Supplier supplier = ms.addDtoToSupplier(supplierAddDTO);
             // id 列 varchar(32)，避免超长
-            supplier.setId(String.valueOf(System.currentTimeMillis()));
+            supplier.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
             if (supplier.getPy() == null || supplier.getPy().isEmpty()) {
                 supplier.setPy(supplier.getNumber() != null ? supplier.getNumber() : supplier.getName());
             }
@@ -121,7 +126,9 @@ public class SupplierController implements SupplierApis {
     @PutMapping("/update")
     @ApiOperation("修改供应商信息")
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class, isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public JsonVO<String> updateSupplier(@Validated @RequestBody SupplierDTO supplierDTO) {
+        numberGuard.assertAvailable("supplier", supplierDTO.getNumber(), supplierDTO.getId());
         if (supplierService.updateById(ms.supplierDtoToSupplier(supplierDTO))) {
             return JsonVO.success(supplierDTO.getId().toString());
         }
@@ -155,7 +162,7 @@ public class SupplierController implements SupplierApis {
             return JsonVO.success(importResult);
         }catch (Exception e){
             log.error("导入供应商数据失败", e);
-            return JsonVO.fail(importResult);
+            throw new IllegalArgumentException(e instanceof IllegalArgumentException ? e.getMessage() : "供应商导入失败，请检查字段长度和关联资料");
         }
 
     }
@@ -178,13 +185,17 @@ public class SupplierController implements SupplierApis {
     @GetMapping("/template")
     @ApiOperation("下载导入模板")
     public JsonVO<String> downloadTemplate() {
-        try {
-            String templateUrl = supplierService.downloadTemplate();
-            return JsonVO.success(templateUrl);
-        } catch (Exception e) {
-            log.error("下载模板失败", e);
-            return JsonVO.fail("下载模板失败: " + e.getMessage());
-        }
+        return JsonVO.success("/api/basic_information/supplier/template-file");
+    }
+
+    @GetMapping("/template-file")
+    public org.springframework.http.ResponseEntity<byte[]> templateFile() {
+        java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+        java.util.List<java.util.List<String>> headers = new java.util.ArrayList<>();
+        for (String title : java.util.Arrays.asList("供应商编号","供应商名称","供应商类别","增值税税率","联系人","联系电话","联系地址","开户银行","银行账号","纳税号码","备注")) headers.add(java.util.Collections.singletonList(title));
+        com.alibaba.excel.EasyExcel.write(output).head(headers).sheet("供应商").doWrite(java.util.Collections.emptyList());
+        return org.springframework.http.ResponseEntity.ok().header("Content-Disposition","attachment; filename=supplier-template.xlsx")
+            .contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(output.toByteArray());
     }
 
 

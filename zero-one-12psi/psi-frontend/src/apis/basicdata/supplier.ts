@@ -125,7 +125,7 @@ export class SupplierAPI {
     if (body?.code === SUCCESS_CODE) {
       return { code: SUCCESS_CODE, message: body.message || 'success', data: body.data as T }
     }
-    throw new Error(body?.message || '请求失败')
+    throw new Error(extractErrorMessage(body))
   }
 
   static async getSupplierList(query: SupplierQuery): Promise<ApiResponse<PageResult<Supplier>>> {
