@@ -253,23 +253,23 @@ RoleDetailJsonVO::Wrapper RoleController::executeQueryDetail(const String& id)
 RoleNameListJsonVO::Wrapper RoleController::execGetRoleList(const RoleListQuery::Wrapper& query)
 {
 	auto jvo = RoleNameListJsonVO::createShared();
-	
+
 	// 参数验证
 	if (!query) {
 		jvo->init(nullptr, RS_PARAMS_INVALID);
 		return jvo;
 	}
-	
+
 	RoleService service;
 	auto result = service.getRoleListByKeyword(query->keyword);
-	
+
 	if (result) {
 		jvo->success(result);
 	}
 	else {
 		jvo->fail(nullptr);
 	}
-	
+
 	return jvo;
 }
 

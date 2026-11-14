@@ -85,13 +85,14 @@
         <el-tab-pane label="基础资料" name="basic">
           <el-form :model="formData" label-width="100px">
             <el-form-item label="角色名称" required>
-              <el-input v-model="formData.name" placeholder="请输入角色名称" />
+              <el-input v-model="formData.name" placeholder="请输入角色名称" maxlength="32" />
             </el-form-item>
             <el-form-item label="备注信息">
               <el-input
                 v-model="formData.remark"
                 type="textarea"
                 :rows="4"
+                maxlength="256"
                 placeholder="请输入备注信息"
               />
             </el-form-item>
@@ -109,6 +110,7 @@
               node-key="id"
               :default-checked-keys="checkedKeys"
               @check-change="handleCheckChange"
+              @check="functionPermissionsEdited = true"
             />
           </div>
         </el-tab-pane>
@@ -149,7 +151,7 @@
 
             <!-- 客户 -->
             <el-form-item label="客户">
-              <el-select v-model="formData.dataPermissions.customer" placeholder="请选择" style="width: 100%">
+              <el-select v-model="formData.dataPermissions.customer" @change="dataPermissionsEdited = true" placeholder="请选择" style="width: 100%">
                 <el-option label="全部数据" value="all" />
                 <el-option label="用户数据" value="custom" />
                 <el-option label="组织数据" value="org" />
@@ -158,7 +160,7 @@
 
             <!-- 供应商 -->
             <el-form-item label="供应商">
-              <el-select v-model="formData.dataPermissions.supplier" placeholder="请选择" style="width: 100%">
+              <el-select v-model="formData.dataPermissions.supplier" @change="dataPermissionsEdited = true" placeholder="请选择" style="width: 100%">
                 <el-option label="全部数据" value="all" />
                 <el-option label="用户数据" value="custom" />
                 <el-option label="组织数据" value="org" />
@@ -167,7 +169,7 @@
 
             <!-- 仓库 -->
             <el-form-item label="仓库">
-              <el-select v-model="formData.dataPermissions.warehouse" placeholder="请选择" style="width: 100%">
+              <el-select v-model="formData.dataPermissions.warehouse" @change="dataPermissionsEdited = true" placeholder="请选择" style="width: 100%">
                 <el-option label="全部数据" value="all" />
                 <el-option label="用户数据" value="custom" />
                 <el-option label="组织数据" value="org" />
@@ -176,7 +178,7 @@
 
             <!-- 资金账户 -->
             <el-form-item label="资金账户">
-              <el-select v-model="formData.dataPermissions.account" placeholder="请选择" style="width: 100%">
+              <el-select v-model="formData.dataPermissions.account" @change="dataPermissionsEdited = true" placeholder="请选择" style="width: 100%">
                 <el-option label="全部数据" value="all" />
                 <el-option label="用户数据" value="custom" />
                 <el-option label="组织数据" value="org" />
@@ -185,7 +187,7 @@
 
             <!-- 用户 -->
             <el-form-item label="用户">
-              <el-select v-model="formData.dataPermissions.user" placeholder="请选择" style="width: 100%">
+              <el-select v-model="formData.dataPermissions.user" @change="dataPermissionsEdited = true" placeholder="请选择" style="width: 100%">
                 <el-option label="全部数据" value="all" />
                 <el-option label="用户数据" value="custom" />
                 <el-option label="组织数据" value="org" />
@@ -194,7 +196,7 @@
 
             <!-- 人员 -->
             <el-form-item label="人员">
-              <el-select v-model="formData.dataPermissions.personnel" placeholder="请选择" style="width: 100%">
+              <el-select v-model="formData.dataPermissions.personnel" @change="dataPermissionsEdited = true" placeholder="请选择" style="width: 100%">
                 <el-option label="全部数据" value="all" />
                 <el-option label="用户数据" value="custom" />
                 <el-option label="组织数据" value="org" />
@@ -206,7 +208,7 @@
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -215,6 +217,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, nextTick, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { extractErrorMessage } from '@/apis/utils/jsonResponse'
 import { Plus, Refresh, MoreFilled, Search } from '@element-plus/icons-vue'
 import { 
   getRolePermission, 
@@ -254,6 +257,9 @@ const loading = ref(false)
 
 // 对话框显示状态
 const dialogVisible = ref(false)
+const saving = ref(false)
+const functionPermissionsEdited = ref(false)
+const dataPermissionsEdited = ref(false)
 
 // 对话框标题
 const dialogTitle = ref('新增角色')
@@ -491,6 +497,7 @@ const fetchOrgTree = () => {
  * 组织机构树选中事件
  */
 const onOrgTreeCheck = (data: any, checkedInfo: any) => {
+  dataPermissionsEdited.value = true
   if (orgTreeRef.value) {
     formData.dataPermissions.org = orgTreeRef.value.getCheckedKeys()
   }
@@ -529,6 +536,8 @@ const handleResetSearch = () => {
  * 处理新增
  */
 const handleAdd = () => {
+  functionPermissionsEdited.value = false
+  dataPermissionsEdited.value = false
   dialogTitle.value = '新增角色'
   activeTab.value = 'basic'
   Object.assign(formData, {
@@ -559,6 +568,9 @@ const handleAdd = () => {
  * 处理详情
  */
 const handleDetail = async (row: any) => {
+  functionPermissionsEdited.value = false
+  dataPermissionsEdited.value = false
+  orgCheckedKeys.value = []
   dialogTitle.value = '详情'
   activeTab.value = 'basic'
   
@@ -624,8 +636,8 @@ const handleDetail = async (row: any) => {
         if (data.auth) {
           try {
             const authData = typeof data.auth === 'string' ? JSON.parse(data.auth) : data.auth
-            if (authData.org) {
-              orgCheckedKeys.value = authData.org
+            if (authData && typeof authData === 'object' && !Array.isArray(authData)) {
+              orgCheckedKeys.value = Array.isArray(authData.org) ? authData.org : []
               formData.dataPermissions = { 
                 ...formData.dataPermissions, 
                 ...authData,
@@ -647,12 +659,14 @@ const handleDetail = async (row: any) => {
           
           // 多次尝试设置权限树选中状态
           const trySetCheckedKeys = (attempt = 0) => {
+            if (!dialogVisible.value) return
             if (treeRef.value && permissionTree.value.length > 0) {
               console.log(`第${attempt + 1}次尝试设置权限树选中状态:`, checkedKeys.value)
               treeRef.value.setCheckedKeys(checkedKeys.value)
               
               // 验证设置是否成功
               setTimeout(() => {
+                if (!dialogVisible.value || !treeRef.value) return
                 const currentChecked = treeRef.value.getCheckedKeys()
                 console.log(`第${attempt + 1}次验证 - 当前选中的权限:`, currentChecked)
                 
@@ -717,74 +731,42 @@ const handleRefresh = () => {
 /**
  * 处理保存
  */
-const handleSave = () => {
-  // 获取勾选的权限
-  if (treeRef.value) {
-    const checkedKeys = treeRef.value.getCheckedKeys()
-    const halfCheckedKeys = treeRef.value.getHalfCheckedKeys()
-    
-    const allCheckedKeys = [...checkedKeys, ...halfCheckedKeys]
-    
-    formData.functionPermissions = allCheckedKeys.reduce((acc: any, key: string) => {
-      acc[key] = true
-      return acc
-    }, {})
-    
-    console.log('保存的权限:', formData.functionPermissions)
+const handleSave = async () => {
+  if (saving.value) return
+  const name = formData.name.trim()
+  const remark = formData.remark ?? ''
+  if (!name) { ElMessage.warning('请填写角色名称'); return }
+  if (name.length > 32 || remark.length > 256) {
+    ElMessage.warning('角色名称最长 32 字，备注最长 256 字')
+    return
   }
-  
-  // 获取组织机构树选中的节点
-  if (orgTreeRef.value && formData.dataPermissions) {
-    formData.dataPermissions.org = orgTreeRef.value.getCheckedKeys()
-  }
-  
-  if (formData.id) {
-    // 修改角色
-    const updateData: RoleListDTO = {
-      id: formData.id,
-      name: formData.name,
-      data: formData.data || formData.remark || '',
-      root: JSON.stringify(formData.functionPermissions || {}),
-      auth: JSON.stringify(formData.dataPermissions || {})
+  const editing = Boolean(formData.id)
+  saving.value = true
+  try {
+    if (treeRef.value && (!editing || functionPermissionsEdited.value)) {
+      const keys = [...treeRef.value.getCheckedKeys(), ...treeRef.value.getHalfCheckedKeys()]
+      formData.functionPermissions = Object.fromEntries(keys.map((key: string) => [key, true]))
     }
-    console.log('修改角色请求数据:', updateData)
-    
-    modifyRole(updateData).then((res: any) => {
-      console.log('修改角色响应:', res)
-      if (res.code === 10000) {
-        ElMessage.success('修改成功')
-        dialogVisible.value = false
-        fetchRoleList()
-      } else {
-        ElMessage.error(res.message || '修改失败')
-      }
-    }).catch(error => {
-      console.error('修改角色失败:', error)
-      ElMessage.error('修改失败，请稍后重试')
-    })
-  } else {
-    // 新增角色
-    const addData: RoleAddDTO = {
-      name: formData.name,
-      data: formData.data || formData.remark || '',
-      root: JSON.stringify(formData.functionPermissions || {}),
-      auth: JSON.stringify(formData.dataPermissions || {})
+    if (orgTreeRef.value && (!editing || dataPermissionsEdited.value)) {
+      formData.dataPermissions.org = orgTreeRef.value.getCheckedKeys()
     }
-    console.log('新增角色请求数据:', addData)
-    
-    addRole(addData).then((res: any) => {
-      console.log('新增角色响应:', res)
-      if (res.code === 10000) {
-        ElMessage.success('新增成功')
-        dialogVisible.value = false
-        fetchRoleList()
-      } else {
-        ElMessage.error(res.message || '新增失败')
-      }
-    }).catch(error => {
-      console.error('新增角色失败:', error)
-      ElMessage.error('新增失败，请稍后重试')
-    })
+    const payload: RoleAddDTO = {
+      name,
+      data: remark,
+      root: editing && !functionPermissionsEdited.value ? formData.root || '{}' : JSON.stringify(formData.functionPermissions || {}),
+      auth: editing && !dataPermissionsEdited.value ? formData.auth || '{}' : JSON.stringify(formData.dataPermissions || {})
+    }
+    const res = editing
+      ? await modifyRole({ ...payload, id: formData.id })
+      : await addRole(payload)
+    if (res?.code !== 10000) throw new Error(res?.message || '角色保存失败')
+    ElMessage.success(editing ? '修改成功' : '新增成功')
+    dialogVisible.value = false
+    await fetchRoleList()
+  } catch (error) {
+    ElMessage.error(extractErrorMessage(error))
+  } finally {
+    saving.value = false
   }
 }
 
