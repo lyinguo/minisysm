@@ -49,7 +49,7 @@
           <el-button type="primary" :disabled="isUploading">选择文件</el-button>
           <template #tip>
             <div class="el-upload__tip">
-              支持 xls、xlsx 格式，建议选择后编辑类型使模板名称自动加载
+              选择对应业务的空白 .xls / .xlsx 模板，文件名会自动填入模板名称。这里不导入业务数据。
             </div>
           </template>
         </el-upload>
@@ -61,11 +61,12 @@
       </el-form-item>
 
       <el-form-item label="模板名称" prop="templateName">
-        <el-input v-model="formData.templateName" placeholder="请输入" />
+        <el-input v-model="formData.templateName" placeholder="例如：供应商导入模板" />
       </el-form-item>
 
       <el-form-item label="存储方式" prop="saveType">
-        <el-input v-model="formData.saveType" placeholder="请输入" />
+        <el-input v-model="formData.saveType" placeholder="通常保持默认 local" />
+        <div class="el-form-item__tip">local 表示本地存储，无需填写文件路径或网络地址。</div>
       </el-form-item>
 
       <el-form-item v-if="mode === 'edit'" label="数据状态" prop="status">
@@ -76,7 +77,7 @@
       </el-form-item>
 
       <el-form-item label="备注" prop="remark">
-        <el-input v-model="formData.remark" type="textarea" :rows="4" placeholder="请输入" />
+        <el-input v-model="formData.remark" type="textarea" :rows="4" placeholder="说明适用业务、必填字段及填写要求" />
       </el-form-item>
     </el-form>
 

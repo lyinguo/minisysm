@@ -8,6 +8,37 @@
 -->
 <template>
   <div class="menu area">
+    <el-alert
+      title="这里管理 Excel 模板文件；导入业务数据，请进入对应业务页面。"
+      type="info"
+      :closable="false"
+      show-icon
+      class="template-notice"
+    />
+    <el-collapse v-model="helpPanels" class="template-help">
+      <el-collapse-item title="第一次使用：模板是什么？怎样导入数据？" name="usage">
+        <p>模板是一份预先设置好列名和格式的 Excel 表格，例如供应商模板会规定供应商名称、编号等字段。它让系统知道每列数据代表什么。</p>
+        <ol>
+          <li>进入需要导入数据的业务页面，找到“下载模板”（有些页面在“批量操作”里）。优先使用该业务页面提供的模板。</li>
+          <li>用 Excel 或 WPS 打开下载的文件，按说明填写必填项；保留原来的列名、工作表和格式，不要直接拿其他模块的模板套用。</li>
+          <li>保存填写后的文件，回到同一个业务页面，点击“导入”并选择文件。首次可先填一条测试记录，导入后检查列表结果。</li>
+        </ol>
+        <p>若管理员已在本页保存了对应模板，可点击该行“详情 → 下载文件”。本页的“新增”只登记模板文件，不会导入其中的业务记录，也不会自动改变其他模块的导入规则。</p>
+        <div class="business-links">
+          <el-button @click="router.push('/supplier-manage')">去供应商管理</el-button>
+          <el-button @click="router.push('/customer-manage')">去客户管理</el-button>
+          <el-button @click="router.push('/product-manage')">去商品管理</el-button>
+        </div>
+      </el-collapse-item>
+      <el-collapse-item title="管理员：如何新增和维护模板？" name="management">
+        <ol>
+          <li>先从对应业务模块获取正确模板，保留空白格式及填写说明，不要上传包含真实客户或业务记录的文件。</li>
+          <li>点击“新增”，选择 .xls 或 .xlsx 文件，填写易辨认的名称，如“供应商导入模板”。存储方式通常保持默认 local（本地存储）。</li>
+          <li>在备注中写明适用模块、必填字段和填写要求，再点击“添加”。如状态显示“未使用”，可通过“编辑”将其改为“使用中”。</li>
+          <li>通过“详情 → 下载文件”检查上传结果。若历史模板提示旧存储不可用，需要重新上传正确文件后再下载。</li>
+        </ol>
+      </el-collapse-item>
+    </el-collapse>
     <div class="layout">
       <SearchPopover v-model="searchFrom" @search="handleSearch(1)" />
       <el-button-group>
@@ -75,6 +106,7 @@
 
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import NormalTable from '@/components/normaltable/NormalTable.vue'
 import type { MyTableColumn, MyTableOperationsBtn, PageDTO } from '@/components/normaltable/type'
@@ -91,6 +123,8 @@ import {
 import type { PageRequest, ImportTemplateList } from '@/apis/sysmanage/import/type'
 
 // 响应式数据
+const router = useRouter()
+const helpPanels = ref<string[]>(['usage'])
 const createDialogVisible = ref(false) // 新增/编辑弹窗显示状态
 const detailDialogVisible = ref(false) // 详情弹窗显示状态
 const dialogMode = ref<'add' | 'edit'>('add')
@@ -415,6 +449,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.template-notice { margin-bottom: 12px; }
+.template-help { margin-bottom: 18px; }
+.template-help p, .template-help li { line-height: 1.8; }
+.template-help li { margin-bottom: 6px; }
+.business-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.business-links .el-button { margin-left: 0; }
 .layout {
   display: flex;
   justify-content: space-between;
