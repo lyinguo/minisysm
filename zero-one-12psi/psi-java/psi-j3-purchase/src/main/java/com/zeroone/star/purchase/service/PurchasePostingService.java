@@ -39,7 +39,7 @@ public class PurchasePostingService {
         UserDTO actor=access.authorize("/purchase-note/audit");
         if(ids==null || ids.isEmpty() || ids.size()>200 || new HashSet<>(ids).size()!=ids.size() || ids.stream().anyMatch(x->x==null || x.trim().isEmpty()))
             throw new IllegalArgumentException("请选择1到200张不同单据");
-        db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES('buy')");
+        db.update("INSERT INTO psi_document_write_lock(scope) VALUES('buy') ON DUPLICATE KEY UPDATE scope='buy'");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='buy' FOR UPDATE",String.class);
         List<String> ordered=new ArrayList<>(ids); Collections.sort(ordered);
         int changed=0;

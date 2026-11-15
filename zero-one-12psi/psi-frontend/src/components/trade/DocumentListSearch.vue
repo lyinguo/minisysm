@@ -18,13 +18,14 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-const props = withDefaults(defineProps<{ kind?: 'sale' | 'purchase' }>(), { kind: 'sale' })
+const props = withDefaults(defineProps<{ kind?: 'sale' | 'purchase'; initialNumber?: string }>(), { kind: 'sale', initialNumber: '' })
 const emit = defineEmits<{ search: [value: Record<string, any>] }>()
 const advanced = ref(false)
 const dates = ref<string[]>([])
 const draft = reactive({ number: '', counterparty: '', examine: undefined as number | undefined, goods: '', people: '', user: '', data: '' })
+watch(() => props.initialNumber, value => { draft.number = value }, { immediate: true })
 function search() {
   if (dates.value?.length === 2 && dates.value[0] > dates.value[1]) { ElMessage.warning('开始日期不能晚于结束日期'); return }
   emit('search', {

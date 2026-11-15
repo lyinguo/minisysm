@@ -66,6 +66,8 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
     private com.zeroone.star.purchase.service.PurchaseDraftValidation draftValidation;
     @Resource
     private com.zeroone.star.purchase.service.PurchaseDeleteService purchaseDelete;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseDraftAmounts purchaseAmounts;
 
     /**
      * 新增采购单
@@ -76,6 +78,7 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String addPurchaseNote(PurchaseNoteAddDTO purchaseNoteAddDTO) {
+        purchaseAmounts.calculate(purchaseNoteAddDTO);
         draftValidation.validate(purchaseNoteAddDTO);
         //合并 合并
         try {

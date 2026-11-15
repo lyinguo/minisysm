@@ -68,7 +68,7 @@ public class PurchaseDraftUpdateService {
     public void update(RevisePurchaseDTO request) {
         if(request==null || request.getId()==null || request.getId().trim().isEmpty()) throw new IllegalArgumentException("采购单ID不能为空");
         UserDTO actor=access.current();
-        db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES('buy')");
+        db.update("INSERT INTO psi_document_write_lock(scope) VALUES('buy') ON DUPLICATE KEY UPDATE scope='buy'");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='buy' FOR UPDATE",String.class);
         List<Map<String,Object>> found=db.queryForList("SELECT b.*,DATE_FORMAT(b.time,'%Y-%m-%d %H:%i:%s') AS time_text FROM buy b WHERE id=? FOR UPDATE",request.getId());
         if(found.size()!=1) throw new IllegalArgumentException("采购单不存在");

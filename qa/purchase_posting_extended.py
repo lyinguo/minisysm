@@ -31,11 +31,11 @@ class PurchasePostingExtended(PurchasePostingSuite):
     def run(self):
         def repeats():
             self.fixture();identifier=self.ready(50)
-            barrier=threading.Barrier(2)
+            barrier=threading.Barrier(4)
             def worker():
                 barrier.wait();return self.post([identifier])
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                results=list(pool.map(lambda _:worker(),range(2)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                results=list(pool.map(lambda _:worker(),range(4)))
             assert all(row.get('code')==10000 for row in results),'Repeated audit should be idempotent'
             assert self.inventory()==2 and self.balance('account',self.account)==50 and self.balance('supplier',self.supplier)==176
             for table in ['room_info','summary','account_info']: assert self.ledger(table,identifier)==1

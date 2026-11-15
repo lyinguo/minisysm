@@ -3,6 +3,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import ElementPlus, { ElDatePicker } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import { reactive } from 'vue'
+import { routeLocationKey } from 'vue-router'
 const api = vi.hoisted(() => ({ getList: vi.fn() }))
 vi.mock('@/apis/purchase/purchaseOrder', () => ({ PurchaseNoteAPI: api }))
 vi.mock('./PurchaseOrderDetailDialog.vue', () => ({ default: { template: '<div />' } }))
@@ -12,12 +14,24 @@ import PurchaseOrderForm from './PurchaseOrderForm.vue'
 function page(name = '真实采购供应商', total = 12) {
   return { code: 10000, data: { total, rows: [{ id: name, supplier: 'supplier-id', supplierName: name, frame: 'frame-id', frameName: '测试组织', number: name + '-单据', time: '2026-11-15 12:00:00', total: 100, actual: 100, buyMoney: 0, cost: 0, examine: 0, checkStatus: 0, nucleus: 0, cse: 3, invoice: 3 }] } }
 }
-function render() { return mount(PurchaseOrderForm, { global: { plugins: [createPinia(), [ElementPlus, { locale: zhCn }]] } }) }
+function render(route?: any) { return mount(PurchaseOrderForm, { global: { provide: route ? { [routeLocationKey as symbol]: route } : {}, plugins: [createPinia(), [ElementPlus, { locale: zhCn }]] } }) }
 
 describe('purchase document queries', () => {
   beforeEach(() => {
     api.getList.mockReset().mockResolvedValue(page())
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
+  })
+  it('queries the just-saved number and follows route changes in an existing list', async () => {
+    const route = reactive({ query: { number: 'NEW-SAVED' } })
+    const wrapper = render(route)
+    try {
+      await flushPromises()
+      expect(api.getList).toHaveBeenLastCalledWith(expect.objectContaining({ number: 'NEW-SAVED' }))
+      expect((wrapper.find('input[placeholder="输入编号，支持部分匹配"]').element as HTMLInputElement).value).toBe('NEW-SAVED')
+      route.query.number = 'NEXT-SAVED'
+      await flushPromises()
+      expect(api.getList).toHaveBeenLastCalledWith(expect.objectContaining({ number: 'NEXT-SAVED' }))
+    } finally { wrapper.unmount() }
   })
   it('uses server totals and displays page two without slicing it again', async () => {
     const wrapper = render()

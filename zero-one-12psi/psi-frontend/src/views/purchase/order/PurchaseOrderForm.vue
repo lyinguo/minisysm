@@ -4,7 +4,7 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <!-- 左上角搜索组件 -->
-          <DocumentListSearch kind="purchase" @search="onGoodSearch" />
+          <DocumentListSearch kind="purchase" :initial-number="routeNumber" @search="onGoodSearch" />
         </div>
         <div class="toolbar-right">
           <div class="btn-join">
@@ -500,7 +500,8 @@
   </template>
   
   <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick, type Ref } from 'vue'
+  import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick, inject, type Ref } from 'vue'
+  import { routeLocationKey } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
   import PurchaseOrderDetailDialog from './PurchaseOrderDetailDialog.vue'
@@ -564,7 +565,9 @@
   const tableData = ref<RowData[]>([])
   const serverTotal = ref(0)
   const queryError = ref('')
-  const appliedQuery = ref<Record<string, any>>({})
+  const route = inject(routeLocationKey, undefined)
+  const routeNumber = computed(() => typeof route?.query.number === 'string' ? route.query.number : '')
+  const appliedQuery = ref<Record<string, any>>(routeNumber.value ? { number: routeNumber.value } : {})
   let querySequence = 0
   async function loadPurchaseList() {
     const sequence = ++querySequence
@@ -697,6 +700,7 @@
     else void loadPurchaseList()
   }
   const onRefresh = () => { if (!refreshing.value) void loadPurchaseList() }
+  watch(routeNumber, number => { onGoodSearch({ number }) })
   watch(currentPage, () => { void loadPurchaseList() })
   watch(pageSize, () => { if (currentPage.value !== 1) currentPage.value = 1; else void loadPurchaseList() })
 

@@ -50,7 +50,7 @@ public class PurchaseDraftValidation {
         String frame=selectedFrame==null ? actor.getFrameId():selectedFrame;
         access.requireFrame(actor,frame);
         reference("frame",frame,"所属组织",null,false);
-        db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES('buy')");
+        db.update("INSERT INTO psi_document_write_lock(scope) VALUES('buy') ON DUPLICATE KEY UPDATE scope='buy'");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='buy' FOR UPDATE",String.class);
         PurchaseNoteBuyDTO head=request.getPurchaseNoteBuyDTO();
         date(head.getTime(),"单据日期");
@@ -66,6 +66,8 @@ public class PurchaseDraftValidation {
         for(PurchaseNoteInfoDTO line:request.getPurchaseNoteInfoDTOS()) {
             if(line==null) throw new IllegalArgumentException("采购商品明细不能为空");
             reference("goods",line.getGoods(),"商品",null,false);
+            if(!absent(line.getAttr()) && db.queryForObject("SELECT COUNT(*) FROM attr WHERE pid=? AND name=?",Integer.class,line.getGoods(),line.getAttr())!=1)
+                throw new IllegalArgumentException("商品辅助属性不存在，请重新选择商品属性");
             reference("warehouse",line.getWarehouse(),"仓库",frame,false);
             if(line.getNums()==null || line.getNums().compareTo(BigDecimal.ZERO)<=0) throw new IllegalArgumentException("采购数量必须大于零");
             if(line.getMfd()!=null && !line.getMfd().trim().isEmpty()) date(line.getMfd(),"生产日期");

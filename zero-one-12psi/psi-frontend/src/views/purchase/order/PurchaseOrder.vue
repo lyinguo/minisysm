@@ -124,7 +124,7 @@
           </el-table-column>
 
           <!-- 商品名称（表头带常规/扫码开关） -->
-          <el-table-column v-if="visibleColumns.productName" label="商品名称" align="center">
+          <el-table-column v-if="visibleColumns.productName" label="商品名称" align="center" min-width="200">
             <template #header>
               <div class="flex-center">
                 <span>商品名称</span>
@@ -145,14 +145,15 @@
             v-if="visibleColumns.productCode"
             prop="productCode"
             label="商品编号"
+            min-width="170"
             align="center"
           />
-          <el-table-column v-if="visibleColumns.spec" prop="spec" label="规格型号" align="center" />
-          <el-table-column v-if="visibleColumns.attr" prop="attr" label="辅助属性" align="center" />
-          <el-table-column v-if="visibleColumns.unit" prop="unit" label="单位" align="center" />
+          <el-table-column v-if="visibleColumns.spec" prop="spec" label="规格型号" align="center" min-width="130" />
+          <el-table-column v-if="visibleColumns.attr" prop="attr" label="辅助属性" align="center" min-width="120" />
+          <el-table-column v-if="visibleColumns.unit" prop="unit" label="单位" align="center" min-width="90" />
 
           <!-- 仓库 -->
-          <el-table-column v-if="visibleColumns.warehouse" label="仓库" align="center" min-width="160">
+          <el-table-column v-if="visibleColumns.warehouse" label="仓库" align="center" min-width="180">
             <template #header>
               <div class="flex-center">
                 <span>仓库</span>
@@ -194,7 +195,7 @@
           </el-table-column>
 
           <!-- 单价 -->
-          <el-table-column label="单价" align="center">
+          <el-table-column label="单价" align="center" min-width="120">
             <template #default="{ row }">
               <div
                 contenteditable="true"
@@ -208,7 +209,7 @@
           </el-table-column>
 
           <!-- 数量 -->
-          <el-table-column label="数量" align="center">
+          <el-table-column label="数量" align="center" min-width="110">
             <template #default="{ row }">
               <div
                 contenteditable="true"
@@ -230,7 +231,7 @@
           />
 
           <!-- 税率(%) -->
-          <el-table-column label="税率(%)" align="center">
+          <el-table-column label="税率(%)" align="center" min-width="125">
             <template #default="{ row }">
               <div
                 contenteditable="true"
@@ -258,7 +259,7 @@
             width="110"
           />
           <!-- 备注信息 -->
-          <el-table-column label="备注信息" align="center">
+          <el-table-column label="备注信息" align="center" min-width="180">
             <template #default="{ row }">
               <div
                 contenteditable="true"
@@ -305,7 +306,7 @@
     </div>
 
     <!-- 底部表单 -->
-    <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.paidAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
+    <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.paidAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
 
     <!-- 商品选择弹窗（用于 el-table） -->
     <OperationPopTable
@@ -332,6 +333,7 @@
 
 <script setup lang="ts">
 import { tradeDocumentDefaults } from '@/utils/tradeDocumentDefaults'
+import { purchaseSelectionRows, purchaseEntryPayload } from '@/utils/purchaseEntry'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import ButtonGroup from '@/components/mybutton/ButtonGroup.vue'
@@ -538,7 +540,7 @@ function onEditableInput(row: any, field: EditableField, e: Event) {
   }
 
   // 数值字段：清洗为数字/小数
-  const cleaned = raw.replace(/[^\d.]/g, '')
+  const cleaned = raw.trim()
   row[field] = cleaned
 
   // 只在内容变化时才重算（避免无谓渲染）
@@ -558,9 +560,9 @@ function onEditableBlur(row: any, field: EditableField, e: Event) {
     return
   }
 
-  const num = parseFloat(text)
+  const num = Number(text)
   // 失焦时把值规整为数值或空
-  row[field] = Number.isFinite(num) ? String(num) : ''
+  row[field] = !text.trim() ? '' : Number.isFinite(num) && num >= 0 ? String(num) : text
   recalculate(row)
 }
 // 表格数据定义（需要在 computed 之前定义）
@@ -594,16 +596,11 @@ const totalSum = computed(() => {
   const sum = tableData.value
     .filter((r) => r.productName)
     .reduce((sum, r) => sum + (Number(r.total) || 0), 0)
-  return Number(sum.toFixed(2))
+  return Number(sum.toFixed(4))
 })
 
-// 监听总合计变化，同步到 DocumentForm 的单据金额
-watch(totalSum, (newTotal) => {
-  if (documentFormRef.value?.formdata) {
-    documentFormRef.value.formdata.documentCost = newTotal
-    documentFormRef.value.formdata.documentBaseCost = newTotal
-  }
-}, { immediate: true })
+const documentNetAmount = computed(() => Number(tableData.value.filter(row => row.productName).reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(4)))
+watch(totalSum, value => { if (documentFormRef.value?.formdata) documentFormRef.value.formdata.actualAmount = value }, { immediate: true })
 
 // 根据表格的行数，初始化一模一样长度的弹层可见性数组
 // ====== 列显隐（设置⚙）======
@@ -652,14 +649,14 @@ function applyTaxBatch() {
 
 // ====== 金额/税额/合计 计算 ======
 function recalculate(row: any) {
-  const price = parseFloat(row.price) || 0
-  const qty = parseFloat(row.quantity) || 0
-  const rate = parseFloat(row.taxRate) || 0
+  const price = Number.isFinite(Number(row.price)) ? Number(row.price) : 0
+  const qty = Number.isFinite(Number(row.quantity)) ? Number(row.quantity) : 0
+  const rate = Number.isFinite(Number(row.taxRate)) ? Number(row.taxRate) : 0
 
   // 计算金额、税额、总计
-  row.amount = +(price * qty).toFixed(2)
-  row.taxAmount = +((row.amount * rate) / 100).toFixed(2)
-  row.total = +(row.amount + row.taxAmount).toFixed(2)
+  row.amount = +(price * qty - Number((price * qty * (Number(row.discount) || 0) / 100).toFixed(4))).toFixed(4)
+  row.taxAmount = +((row.amount * rate) / 100).toFixed(4)
+  row.total = +(row.amount + row.taxAmount).toFixed(4)
 
   // 计算完后立即刷新状态栏
   updateStatusBar()
@@ -690,55 +687,15 @@ function handleTableProductConfirm(selected: any[]) {
     showProductPopup.value = false
     return
   }
-  const first = selected[0]
-  const row = tableData.value[currentRowIndex.value]
-
-  if (!row) {
-    console.error('无法找到对应的行数据，索引:', currentRowIndex.value)
-    showProductPopup.value = false
-    return
-  }
-
-  // 适配你的商品结构字段名（如有不同自己改一下）
-  row.productName = first.name || first.productName || ''
-  row.productCode = first.code || first.productCode || ''
-  row.spec = first.model || first.spec || ''
-  row.attr = first.category || first.attr || ''
-  row.unit = first.unit || ''
-  row.warehouse = row.warehouse || '' // 不覆盖已有仓库
-  row.price = first.purchasePrice ?? first.price ?? 0
-  row.quantity = first.quantity ?? 1
-  row.taxRate = row.taxRate ?? 13
-  // 保存商品ID（用于提交到后端）
-  row.key = first.id || first.key || ''
-  row.goodsId = first.id || first.key || ''
-
-  recalculate(row)
+  const original = tableData.value[currentRowIndex.value]
+  if (!original) return
+  const additions = purchaseSelectionRows(selected, original)
+  tableData.value.splice(currentRowIndex.value, 1, ...additions as any[])
+  additions.forEach(recalculate)
+  if (tableData.value.at(-1)?.productName) tableData.value.push({ productName: '', productCode: '', spec: '', attr: '', unit: '', warehouse: '', warehouseId: null, price: '', quantity: '', amount: '', taxRate: '', taxAmount: '', total: '', remark: '', key: null, goodsId: null })
   showProductPopup.value = false
-  currentRowIndex.value = null // 重置索引
-
-  // 保证最后一行始终为空行
-  const last = tableData.value[tableData.value.length - 1]
-  if (last && last.productName) {
-    tableData.value.push({
-      productName: '',
-      productCode: '',
-      spec: '',
-      attr: '',
-      unit: '',
-      warehouse: '',
-      warehouseId: null,
-      price: '',
-      quantity: '',
-      amount: '',
-      taxRate: '',
-      taxAmount: '',
-      total: '',
-      remark: '',
-      key: null,
-      goodsId: null
-    })
-  }
+  currentRowIndex.value = null
+  persistDraft()
 }
 
 // 仓库选项
@@ -792,7 +749,7 @@ const purchaseOrderFields = [
 
 // 头部表单数据
 const headerForm = reactive({
-  supplier: '郑州方之花医药科技有限公司',
+  supplier: '',
   ...tradeDocumentDefaults('purchase')
 })
 
@@ -1444,190 +1401,24 @@ const handleProductConfirm = (selectedProducts: any[]) => {
  */
 const savingPurchase = ref(false)
 async function handleSave() {
-  if (savingPurchase.value) return
+  if (savingPurchase.value || !documentFormRef.value) return
   savingPurchase.value = true
-  console.log('保存数据')
-  console.log('头部表单数据:', headerForm)
-
   try {
-    // 获取当前表格数据（优先使用 el-table 的 tableData，如果没有则使用 AG-Grid）
-    let validTableData: any[] = []
-    
-    // 优先使用 el-table 的数据
-    if (tableData.value && tableData.value.length > 0) {
-      // 过滤掉空行（没有商品名称的行）
-      validTableData = tableData.value.filter((row: any) => row.productName && row.productName.trim() !== '')
-    } else if (grid.options.api) {
-      // 如果没有 el-table 数据，使用 AG-Grid 数据
-      grid.options.api.forEachNode((node: any) => {
-        if (node.data && node.data.key != null) {
-          validTableData.push(node.data)
-        }
-      })
-    }
-
-    // 验证是否有商品数据
-    if (validTableData.length === 0) {
-      ElMessage.warning('请至少添加一条商品数据')
-      return
-    }
-
-    // 获取底部表单数据
-    const documentFormData = documentFormRef.value?.formdata
-    if (!documentFormData) {
-      ElMessage.error('无法获取底部表单数据')
-      return
-    }
-
-    // 验证必填字段
-    if (!supplierId.value) {
-      persistDraft()
-      ElMessage.warning('请选择供应商')
-      return
-    }
-    
-    if (!headerForm.documentNumber) {
-      ElMessage.warning('请输入单据编号')
-      return
-    }
-    if (!headerForm.documentDate) {
-      ElMessage.warning('请选择单据日期')
-      return
-    }
-    const accountId = String(documentFormData.settlementAccount || '')
-    if (Number(documentFormData.paidAmount) > 0 && (!accountId || accountId === '0')) {
-      ElMessage.warning('填写实付金额时请选择结算账户')
-      return
-    }
-
-    // 组装采购单主表数据
-    const purchaseNoteBuyDTO = {
-      account: accountId,
-      actual: Number(documentFormData.actualAmount) || 0,
-      cost: Number(documentFormData.documentFee) || 0,
-      data: documentFormData.remarks || '',
-      file: documentFormData.documentAttachment?.[0]?.url || '',
-      logistics: documentFormData.logistics?.number || documentFormData.logistics?.name || '',
-      money: Number(documentFormData.paidAmount) || 0,
-      number: headerForm.documentNumber,
-      people: String(documentFormData.relatedPerson || ''),
-      source: 0, // 采购单默认为0，如果是从采购订单生成则为非0
-      supplier: String(supplierId.value),
-      time: headerForm.documentDate,
-      total: Number(documentFormData.documentCost) || 0
-    }
-
-    // 组装采购单明细数据
-    const purchaseNoteInfoDTOS = validTableData.map((row: any, index: number) => {
-      // 根据实际使用的表格类型，字段名可能不同
-      // el-table 使用: productName, productCode, spec, attr, unit, warehouse, price, quantity, taxRate, amount, taxAmount, total, remark
-      // AG-Grid 使用: name, number, spec, attr, unit, warehouse, price, nums, tax, total, tpt, data
-      
-      const isElTable = row.productName !== undefined
-      
-      // 将 goods ID 转换为字符串类型
-      const goodsId = row.key || row.goodsId || ''
-      if (!goodsId) {
-        throw new Error(`第 ${index + 1} 行的商品ID不能为空，请选择商品`)
-      }
-      const goods = String(goodsId)
-      
-      // 仓库标识保持字符串，兼容UUID和长编号。
-      if (!row.warehouseId) {
-        throw new Error(`第 ${index + 1} 行的仓库ID不能为空，请选择仓库`)
-      }
-      const warehouse = String(row.warehouseId)
-      if (!warehouse || warehouse === '0') {
-        throw new Error(`第 ${index + 1} 行的仓库ID格式错误，请重新选择仓库`)
-      }
-      
-      // 确保 unit 是字符串类型
-      const unitValue = row.unit || ''
-      const unit = typeof unitValue === 'string' ? unitValue : String(unitValue)
-      
-      // 计算折扣额和折后金额（el-table 可能没有 discount 字段，默认为 0）
-      const discount = Number(row.discount) || 0
-      // el-table 使用 amount（金额），AG-Grid 使用 total
-      const baseAmount = isElTable ? (Number(row.amount) || 0) : (Number(row.total) || 0)
-      const dsc = baseAmount * (discount / 100)
-      const discountedTotal = baseAmount - dsc
-
-      // 计算税额和价税合计
-      // el-table 使用 taxRate（税率），AG-Grid 使用 tax
-      const taxRate = isElTable ? (Number(row.taxRate) || 0) : (Number(row.tax) || 0)
-      const tat = discountedTotal * (taxRate / 100)
-      const tpt = discountedTotal + tat
-
-      return {
-        account: String(documentFormData.settlementAccount || ''),
-        actual: Number(documentFormData.actualAmount) || 0,
-        attr: row.attr || '',
-        batch: row.batch || '',
-        cost: Number(documentFormData.documentFee) || 0,
-        data: isElTable ? (row.remark || row.data || '') : (row.data || ''),
-        data2: '',
-        discount: discount,
-        dsc: dsc,
-        goods: goods, // 商品ID，字符串类型
-        goodsNumber: isElTable ? (row.productCode || '') : (row.number || ''),
-        logistics: documentFormData.logistics?.number || documentFormData.logistics?.name || '',
-        mfd: row.mfd || '', // 普通商品不生成虚构生产日期
-        money: Number(documentFormData.paidAmount) || 0,
-        name: isElTable ? (row.productName || '') : (row.name || ''),
-        noteTotal: Number(documentFormData.documentCost) || 0,
-        number: headerForm.documentNumber,
-        nums: isElTable ? (Number(row.quantity) || 0) : (Number(row.nums) || 0),
-        people: String(documentFormData.relatedPerson || ''),
-        price: Number(row.price) || 0,
-        serial: typeof row.serial === 'string' ? row.serial : JSON.stringify(row.serial || []),
-        source: '0', // 关联详情ID，默认为0
-        spec: row.spec || '',
-        supplier: String(supplierId.value || ''),
-        tat: tat,
-        tax: taxRate,
-        time: headerForm.documentDate,
-        total: discountedTotal,
-        tpt: tpt,
-        unit: unit, // 确保是字符串类型
-        warehouse: warehouse
-      }
-    })
-
-    // 组装请求数据
-    const requestData: PurchaseNoteAddDTO = {
-      purchaseNoteBuyDTO,
-      purchaseNoteInfoDTOS
-    }
-
-    console.log('📤 准备提交采购单数据:', JSON.stringify(requestData, null, 2))
-
-    // 调用新增采购单接口
-    const result = await PurchaseNoteAPI.addPurchaseNote(requestData)
-
-    console.log('✅ 采购单保存成功:', result)
-
-    // 保存到 Pinia store（用于页面恢复）
-    purchaseStore.savePurchaseOrderData({
-      headerForm: {
-        supplier: form.supplier || headerForm.supplier,
-        supplierId: supplierId.value || '',
-        documentDate: headerForm.documentDate,
-        documentNumber: headerForm.documentNumber
-      },
-      tableData: validTableData,
-      isAudited: false,
-      isChecked: isChecked.value
-    })
-
-    isAudited.value = false
-    ElMessage.success(`采购草稿已保存，共 ${validTableData.length} 条商品数据`)
-  } catch (error: any) {
-    console.error('❌ 保存采购单失败:', error)
-    const errorMessage = error.message || error.response?.data?.message || '保存失败，请检查数据后重试'
-    ElMessage.error(errorMessage)
-  } finally {
-    savingPurchase.value = false
-  }
+    const payload = purchaseEntryPayload(headerForm, String(supplierId.value || ''), tableData.value, documentFormRef.value.formdata)
+    const response = await PurchaseNoteAPI.addPurchaseNote(payload)
+    if (response.code !== 10000 || !response.data) throw new Error(response.message || '采购草稿保存失败')
+    const savedNumber = payload.purchaseNoteBuyDTO.number
+    purchaseStore.clearPurchaseOrderData()
+    purchaseStore.reset()
+    supplierId.value = null
+    headerForm.supplier = ''
+    Object.assign(headerForm, tradeDocumentDefaults('purchase'))
+    tableData.value = [{ productName: '', productCode: '', spec: '', attr: '', unit: '', warehouse: '', warehouseId: null, price: '', quantity: '', amount: '', taxRate: '', taxAmount: '', total: '', remark: '', key: null, goodsId: null }]
+    Object.assign(documentFormRef.value.formdata, { actualAmount: 0, paidAmount: 0, documentFee: 0, documentAttachment: [], remarks: '', settlementAccount: '', relatedPerson: '', logistics: { key: 'auto', name: '自动识别', number: '' } })
+    ElMessage.success('采购草稿已保存，可在列表继续查看和修改')
+    await router.push({ path: '/purchase-order-report', query: { number: savedNumber } })
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '采购草稿保存失败') }
+  finally { savingPurchase.value = false }
 }
 
 /**
@@ -1819,6 +1610,8 @@ onMounted(async () => {
   }
   await Promise.all([loadSupplierOptions(), loadWarehouseOptions()])
   restoreDraftFromStore()
+  await nextTick()
+  if (documentFormRef.value?.formdata) Object.assign(documentFormRef.value.formdata, { actualAmount: totalSum.value, paidAmount: 0, documentFee: 0 })
 })
 
 onBeforeUnmount(() => {

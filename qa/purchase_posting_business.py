@@ -81,6 +81,9 @@ class PurchaseBusinessSuite(PurchasePostingExtended):
             self.fixture();body=self.body();body['purchaseNoteBuyDTO'].update(actual=999)
             body['purchaseNoteInfoDTOS'][0].update(discount=0,tax=13,batch='',mfd=None,serial='[]')
             identifier=self.create(body);assert self.check([identifier]).get('code')==10000
+            # Persisted legacy corruption fixture: create now derives money, so only
+            # an explicitly owned QA record is changed to exercise the audit guard.
+            sql(self.state,'UPDATE buy SET actual=999 WHERE id='+literal(identifier)+';')
             assert self.post([identifier]).get('code')!=10000;self.empty([identifier])
             return ['Inconsistent saved header/detail money is rejected at posting instead of entering inventory/payables']
         self.case('purchase.posting_inconsistent_money_denied',inconsistent)
