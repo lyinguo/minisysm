@@ -30,7 +30,13 @@
 
     <select id="selectPageWithProduct" resultType="com.zeroone.star.purchase.VO.BuyVO">
         SELECT
-        b.*
+        b.*,
+        (SELECT name FROM supplier WHERE id=b.supplier) AS supplier_name,
+        (SELECT name FROM frame WHERE id=b.frame) AS frame_name,
+        (SELECT name FROM people WHERE id=b.people) AS people_name,
+        (SELECT name FROM `user` WHERE id=b.`user`) AS user_name,
+        (SELECT COALESCE(SUM(money),0) FROM buy_bill WHERE pid=b.id) AS bill_money,
+        ((SELECT COUNT(*) FROM room_info WHERE type='buy' AND `class`=b.id)+(SELECT COUNT(*) FROM serve_info WHERE type='buy' AND `class`=b.id)) AS stock_records
         FROM
         buy b <where>
         <if test="ew.sqlSegment != null and ew.sqlSegment != ''">

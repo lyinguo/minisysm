@@ -49,3 +49,9 @@
 运行 `python qa/purchase_revision_acceptance.py`。流程为实际创建采购草稿，GET `/purchase-note/document/{id}` 读取完整 `header/items/version`，POST `/purchase-note/revise` 提交 `id/version/details` 和需要修改的头字段，再独立核对MySQL。新建明细不带ID；保留的明细提交原ID；省略原明细表示删除，因此保存必须基于完整读取的版本。缺少版本或版本已过期会被拒绝。
 
 该旧修改DTO的折扣/税率使用百分数（例如13表示13%）；原记录存在比例表示时，未修改的比例须与原始折扣额/税额相符，按原有效比例计算，不能静默重新解释历史金额。修改不能设置审核或核对状态，也不能直接修改已核对、审核或有关联凭据的单据。接口测试不证明采购页面已接入真实编辑，完整角色授权和采购审核资金库存链仍需验收。
+
+## 采购页面专项复现
+
+运行 `python qa/purchase_ui_acceptance.py run` 验证真实名称、关联查询、组织数据范围、Excel内容和新增行元数据。所有写入限定专用QA库和18023采购服务。功能级角色授权、采购审核及资金库存链另行验收，不包含在这4项中。
+
+浏览器先运行 `python qa/purchase_ui_acceptance.py prepare`，在隔离UI采购单报表查询输出编号，详情数量2改3保存后运行 `verify-edit`。重新打开改4但不保存，运行 `advance-version` 模拟另一请求保存5，再从旧页面保存，应提示版本冲突且保留输入4；执行 `verify-conflict` 确认SQL仍为5。页面重新加载读取5后改3保存，再执行 `verify-edit`。私有会话、单据ID、导出文件及截图不发布。

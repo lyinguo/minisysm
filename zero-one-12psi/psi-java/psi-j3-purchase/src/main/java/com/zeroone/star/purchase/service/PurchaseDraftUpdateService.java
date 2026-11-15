@@ -17,7 +17,8 @@ public class PurchaseDraftUpdateService {
     private final JdbcTemplate db;
     private final UserHolder users;
     private final PurchaseDraftValidation validation;
-    public PurchaseDraftUpdateService(JdbcTemplate db,UserHolder users,PurchaseDraftValidation validation) { this.db=db;this.users=users;this.validation=validation; }
+    private final PurchaseDocumentAccess access;
+    public PurchaseDraftUpdateService(JdbcTemplate db,UserHolder users,PurchaseDraftValidation validation,PurchaseDocumentAccess access) { this.db=db;this.users=users;this.validation=validation;this.access=access; }
     private static String s(Object v) { return v==null ? "":v.toString(); }
     private static BigDecimal d(Object v) { return v==null ? BigDecimal.ZERO:new BigDecimal(v.toString()); }
     private static int n(Object v) { return v instanceof Boolean ? ((Boolean)v ? 1:0):v==null ? 0:((Number)v).intValue(); }
@@ -28,21 +29,20 @@ public class PurchaseDraftUpdateService {
     }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String,Object> detail(String id) {
-        UserDTO actor;
-        try { actor=users.getCurrentUser(); } catch(Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }
-        if(actor==null || actor.getId()==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
-        List<String> frames=db.queryForList("SELECT frame FROM `user` WHERE id=?",String.class,actor.getId());
+        UserDTO actor=access.current();
         List<Map<String,Object>> found=db.queryForList("SELECT b.*,DATE_FORMAT(b.time,'%Y-%m-%d %H:%i:%s') AS time_text FROM buy b WHERE id=?",id);
-        if(frames.size()!=1) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在");
         if(found.size()!=1) throw new IllegalArgumentException("采购单不存在");
         Map<String,Object> header=found.get(0);
-        if(!frames.get(0).equals(s(header.get("frame")))) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"不能查询其他组织的采购单");
+        access.requireFrame(actor,s(header.get("frame")));
         List<Map<String,Object>> lines=db.queryForList("SELECT * FROM buy_info WHERE pid=? ORDER BY id",id);
         Map<String,Object> result=new LinkedHashMap<>();
         result.put("version",version(header,lines));
         header.putAll(db.queryForMap("SELECT s.name AS supplierName,f.name AS frameName,p.name AS peopleName,a.name AS accountName FROM buy b LEFT JOIN supplier s ON s.id=b.supplier LEFT JOIN frame f ON f.id=b.frame LEFT JOIN people p ON p.id=b.people LEFT JOIN account a ON a.id=b.account WHERE b.id=?",id));
         result.put("header",header);
         result.put("items",db.queryForList("SELECT i.*,g.name AS goodsName,g.number AS goodsNumber,w.name AS warehouseName FROM buy_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));
+        result.put("settlements",db.queryForList("SELECT bb.*,CASE bb.type WHEN 'buy' THEN (SELECT number FROM buy WHERE id=bb.source) WHEN 'omy' THEN (SELECT number FROM omy WHERE id=bb.source) WHEN 'bre' THEN (SELECT number FROM bre WHERE id=bb.source) WHEN 'bill' THEN (SELECT number FROM bill WHERE id=bb.source) ELSE bb.source END AS sourceNumber FROM buy_bill bb WHERE bb.pid=? ORDER BY bb.time,bb.id",id));
+        result.put("expenses",db.queryForList("SELECT c.*,i.name AS expenseName FROM cost c LEFT JOIN iet i ON i.id=c.iet WHERE c.type='buy' AND c.`class`=? ORDER BY c.time,c.id",id));
+        result.put("invoices",db.queryForList("SELECT * FROM invoice WHERE type='buy' AND `class`=? ORDER BY time,id",id));
         return result;
     }
     private static BigDecimal amount(BigDecimal value,String field) {
@@ -67,17 +67,13 @@ public class PurchaseDraftUpdateService {
     @Transactional(rollbackFor=Exception.class)
     public void update(RevisePurchaseDTO request) {
         if(request==null || request.getId()==null || request.getId().trim().isEmpty()) throw new IllegalArgumentException("采购单ID不能为空");
-        UserDTO actor;
-        try { actor=users.getCurrentUser(); } catch(Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }
-        if(actor==null || actor.getId()==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
-        List<String> frames=db.queryForList("SELECT frame FROM `user` WHERE id=?",String.class,actor.getId());
-        if(frames.size()!=1) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在");
+        UserDTO actor=access.current();
         db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES('buy')");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='buy' FOR UPDATE",String.class);
         List<Map<String,Object>> found=db.queryForList("SELECT b.*,DATE_FORMAT(b.time,'%Y-%m-%d %H:%i:%s') AS time_text FROM buy b WHERE id=? FOR UPDATE",request.getId());
         if(found.size()!=1) throw new IllegalArgumentException("采购单不存在");
         Map<String,Object> head=found.get(0);
-        if(!frames.get(0).equals(s(head.get("frame")))) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"不能修改其他组织的采购单");
+        access.requireFrame(actor,s(head.get("frame")));
         if(n(head.get("examine"))!=0 || n(head.get("check"))!=0 || n(head.get("nucleus"))!=0) throw new IllegalArgumentException("单据已核对、审核或核销，请先按业务规则处理状态");
         if((request.getExamine()!=null && request.getExamine()!=0) || (request.getCheckStatus()!=null && request.getCheckStatus()!=0)) throw new IllegalArgumentException("草稿修改不能设置审核或核对状态");
         if(db.queryForObject("SELECT COUNT(*) FROM period WHERE date>=DATE(?)",Integer.class,head.get("time"))>0) throw new IllegalArgumentException("已结账期间的采购单不能修改");
@@ -137,7 +133,10 @@ public class PurchaseDraftUpdateService {
             BigDecimal net=gross.subtract(deduction),taxAmount=net.multiply(percentage(tax,original,false)).movePointLeft(2).setScale(4,RoundingMode.HALF_UP),inclusive=net.add(taxAmount);
             PurchaseNoteInfoDTO line=new PurchaseNoteInfoDTO();
             line.setGoods(input.getGoods());line.setWarehouse(input.getWarehouse());line.setUnit(input.getUnit());line.setNums(quantity);
-            line.setBatch(s(original.get("batch")));line.setMfd(original.get("mfd")==null ? null:s(original.get("mfd")));
+            line.setSource(optional(input.getSource(),original.get("source")));
+            line.setAttr(optional(input.getAttr(),original.get("attr")));
+            line.setSerial(optional(input.getSerial(),original.get("serial")));
+            line.setBatch(optional(input.getBatch(),original.get("batch")));line.setMfd(optional(input.getMfd(),original.get("mfd")));
             line.setPrice(price);line.setDiscount(discount);line.setTax(tax);line.setDsc(deduction);line.setTotal(net);line.setTat(taxAmount);line.setTpt(inclusive);
             lines.add(line);
             input.setId(lineId);
@@ -145,14 +144,15 @@ public class PurchaseDraftUpdateService {
         }
         header.setTotal(total);header.setActual(actual);
         PurchaseNoteAddDTO validated=new PurchaseNoteAddDTO();validated.setPurchaseNoteBuyDTO(header);validated.setPurchaseNoteInfoDTOS(lines);
-        validation.validate(validated,id);
+        validation.validate(validated,id,s(head.get("frame")));
         if(db.queryForObject("SELECT COUNT(*) FROM period WHERE date>=DATE(?)",Integer.class,header.getTime())>0) throw new IllegalArgumentException("不能将单据移入已结账期间");
         db.update("UPDATE buy SET supplier=?,time=?,number=?,total=?,actual=?,money=?,account=?,people=?,logistics=?,file=?,data=? WHERE id=?",header.getSupplier(),header.getTime(),header.getNumber(),total,actual,header.getMoney(),header.getAccount(),header.getPeople(),optional(request.getLogistics(),head.get("logistics")),optional(request.getFile(),head.get("file")),optional(request.getData(),head.get("data")),id);
         for(int index=0;index<request.getDetails().size();index++) {
             PurchaseBuyInfoDTO input=request.getDetails().get(index);PurchaseNoteInfoDTO line=lines.get(index);
-            Object[] values={line.getGoods(),line.getUnit(),line.getWarehouse(),line.getPrice(),line.getNums(),line.getDiscount(),line.getDsc(),line.getTotal(),line.getTax(),line.getTat(),line.getTpt(),input.getData()==null ? previous.containsKey(input.getId()) ? previous.get(input.getId()).get("data"):null:input.getData(),input.getId(),id};
-            if(previous.containsKey(input.getId())) db.update("UPDATE buy_info SET goods=?,unit=?,warehouse=?,price=?,nums=?,discount=?,dsc=?,total=?,tax=?,tat=?,tpt=?,data=? WHERE id=? AND pid=?",values);
-            else db.update("INSERT INTO buy_info(goods,unit,warehouse,price,nums,discount,dsc,total,tax,tat,tpt,data,id,pid,source,attr,serial,retreat) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'0','','[]',0)",values);
+            boolean existing=previous.containsKey(input.getId());
+            Object[] values={line.getGoods(),line.getUnit(),line.getWarehouse(),line.getPrice(),line.getNums(),line.getDiscount(),line.getDsc(),line.getTotal(),line.getTax(),line.getTat(),line.getTpt(),input.getData()==null ? existing ? previous.get(input.getId()).get("data"):null:input.getData(),line.getSource()==null && !existing ? "0":line.getSource(),line.getAttr()==null && !existing ? "":line.getAttr(),line.getSerial()==null && !existing ? "[]":line.getSerial(),line.getBatch(),line.getMfd()==null || line.getMfd().trim().isEmpty() ? null:line.getMfd(),input.getId(),id};
+            if(previous.containsKey(input.getId())) db.update("UPDATE buy_info SET goods=?,unit=?,warehouse=?,price=?,nums=?,discount=?,dsc=?,total=?,tax=?,tat=?,tpt=?,data=?,source=?,attr=?,serial=?,batch=?,mfd=? WHERE id=? AND pid=?",values);
+            else db.update("INSERT INTO buy_info(goods,unit,warehouse,price,nums,discount,dsc,total,tax,tat,tpt,data,source,attr,serial,batch,mfd,id,pid,retreat) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",values);
         }
         for(String old:previous.keySet()) if(!retained.contains(old)) db.update("DELETE FROM buy_info WHERE id=? AND pid=?",old,id);
         java.sql.Timestamp now=new java.sql.Timestamp(System.currentTimeMillis());

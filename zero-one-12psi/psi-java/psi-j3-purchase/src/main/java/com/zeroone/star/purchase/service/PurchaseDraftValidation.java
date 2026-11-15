@@ -15,7 +15,8 @@ import java.util.*;
 public class PurchaseDraftValidation {
     private final JdbcTemplate db;
     private final UserHolder users;
-    public PurchaseDraftValidation(JdbcTemplate db,UserHolder users) { this.db=db;this.users=users; }
+    private final PurchaseDocumentAccess access;
+    public PurchaseDraftValidation(JdbcTemplate db,UserHolder users,PurchaseDocumentAccess access) { this.db=db;this.users=users;this.access=access; }
     @PostConstruct public void initialize() {
         db.execute("CREATE TABLE IF NOT EXISTS psi_document_write_lock (scope VARCHAR(40) NOT NULL PRIMARY KEY)");
     }
@@ -40,15 +41,14 @@ public class PurchaseDraftValidation {
         validate(request,"");
     }
     public void validate(PurchaseNoteAddDTO request,String excludeId) {
+        validate(request,excludeId,null);
+    }
+    public void validate(PurchaseNoteAddDTO request,String excludeId,String selectedFrame) {
         if(!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("采购单保存必须位于事务中");
         if(request==null || request.getPurchaseNoteBuyDTO()==null || request.getPurchaseNoteInfoDTOS()==null || request.getPurchaseNoteInfoDTOS().isEmpty()) throw new IllegalArgumentException("采购单及商品明细不能为空");
-        UserDTO actor;
-        try { actor=users.getCurrentUser(); }
-        catch(Exception error) { throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED,"请重新登录"); }
-        if(actor==null || actor.getId()==null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED,"请重新登录");
-        List<String> frames=db.queryForList("SELECT frame FROM `user` WHERE id=?",String.class,actor.getId());
-        if(frames.size()!=1) throw new IllegalArgumentException("当前用户不存在");
-        String frame=frames.get(0);
+        UserDTO actor=access.current();
+        String frame=selectedFrame==null ? actor.getFrameId():selectedFrame;
+        access.requireFrame(actor,frame);
         reference("frame",frame,"所属组织",null,false);
         db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES('buy')");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='buy' FOR UPDATE",String.class);

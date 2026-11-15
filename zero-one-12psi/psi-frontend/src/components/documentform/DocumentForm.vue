@@ -80,6 +80,7 @@
           <el-form-item v-if="visibleFields.has('documentFee')" label="单据费用" prop="documentFee" :rules="optionalFields.includes('documentFee') ? [] : [{ required: true, message: '请输入单据费用', trigger: 'blur' }]">
             <el-input
               v-model="formdata.documentFee"
+              :readonly="readonlyFields.includes('documentFee')"
               placeholder="请输入单据费用"
               type="text"
               style="width: 100%"
@@ -260,6 +261,7 @@ interface FormData extends Record<string, any> {
 const props = defineProps({
   disabled: { type: Boolean, default: false },
   optionalFields: { type: Array as PropType<string[]>, default: () => [] },
+  readonlyFields: { type: Array as PropType<string[]>, default: () => [] },
   computedAmounts: { type: Boolean, default: false },
   amountPrecision: { type: Number, default: 2 },
   amount: { type: Number, default: undefined },

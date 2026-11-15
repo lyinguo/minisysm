@@ -5,7 +5,12 @@
     :close-on-click-modal="false"
     class="po-detail-dialog"
     title="采购单详情"
+    :close-on-press-escape="!saving"
+    :show-close="!saving"
   >
+    <el-alert v-if="loadError" type="error" :closable="false" show-icon><template #title>{{ loadError }}</template><el-button @click="loadDocument">重新加载</el-button></el-alert>
+    <el-alert v-if="saveError" type="error" :title="saveError" :closable="false" show-icon><el-button @click="loadDocument">重新加载单据</el-button></el-alert>
+    <el-alert v-if="isApproved || isChecked" type="info" :closable="false" :title="isApproved ? '已审核单据不能直接修改' : '已核对单据不能直接修改'" />
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <div class="left">
@@ -17,8 +22,8 @@
           width="800"
         >
           <template #reference>
-            <el-button plain class="square-btn party-selector">
-              <el-icon><MoreFilled /></el-icon><span>选择供应商</span>
+            <el-button plain class="square-btn party-selector" :disabled="readOnly">
+              <el-icon><MoreFilled /></el-icon><span>{{ supplierName || '选择供应商' }}</span>
             </el-button>
           </template>
           <!-- 供应商搜索组件 -->
@@ -29,6 +34,7 @@
         <el-form-item label="单据日期" class="compact-item">
           <el-date-picker
             v-model="header.documentDate"
+            :disabled="readOnly"
             type="date"
             value-format="YYYY-MM-DD"
             placeholder="选择日期"
@@ -40,6 +46,7 @@
         <el-form-item label="单据编号" class="compact-item">
           <el-input
             v-model="header.documentNumber"
+            :disabled="readOnly"
             placeholder="请输入单据编号"
             style="width: 240px"
           />
@@ -66,7 +73,7 @@
 
         <!-- 未审核时：显示 保存 + 审核（隐藏"生成"） -->
         <template v-else>
-          <el-button type="primary" @click="handleSave">保存</el-button>
+          <el-button type="primary" :loading="saving" :disabled="readOnly" @click="handleSave">保存修改</el-button>
           <el-button class="ml8" @click="toggleApprove">审核</el-button>
         </template>
         <!-- 无论是否审核，都显示这个"核对 / 反核对" -->
@@ -83,7 +90,7 @@
     <div class="main">
       <!-- 表格部分 -->
       <div class="table-wrap">
-        <el-table :data="tableData" border highlight-current-row style="width: 100%">
+        <el-table v-loading="loading" :data="tableData" border highlight-current-row style="width: 100%">
           <!-- 第一列：设置按钮 + 序号 -->
           <el-table-column label="设置" width="70" align="center">
             <template #header>
@@ -101,20 +108,21 @@
             <template #default="scope">
               <el-button
                 v-if="!scope.row.productName"
+                :disabled="readOnly"
                 type="text"
                 size="small"
                 @click="openProductPopup(scope.$index)"
               >
                 <el-icon><Edit /></el-icon>
               </el-button>
-              <el-button v-else type="text" size="small" @click="deleteRow(scope.$index)">
+              <el-button v-else type="text" size="small" :disabled="readOnly" @click="deleteRow(scope.$index)">
                 <el-icon><Delete /></el-icon>
               </el-button>
             </template>
           </el-table-column>
 
           <!-- 商品名称（表头带常规/扫码开关） -->
-          <el-table-column v-if="visibleColumns.productName" label="商品名称" align="center">
+          <el-table-column v-if="visibleColumns.productName" label="商品名称" align="center" min-width="200">
             <template #header>
               <div class="flex-center">
                 <span>商品名称</span>
@@ -135,14 +143,15 @@
             v-if="visibleColumns.productCode"
             prop="productCode"
             label="商品编号"
+            min-width="170"
             align="center"
           />
-          <el-table-column v-if="visibleColumns.spec" prop="spec" label="规格型号" align="center" />
-          <el-table-column v-if="visibleColumns.attr" prop="attr" label="辅助属性" align="center" />
-          <el-table-column v-if="visibleColumns.unit" prop="unit" label="单位" align="center" />
+          <el-table-column v-if="visibleColumns.spec" prop="spec" label="规格型号" align="center" min-width="130" />
+          <el-table-column v-if="visibleColumns.attr" prop="attr" label="辅助属性" align="center" min-width="120" />
+          <el-table-column v-if="visibleColumns.unit" prop="unit" label="单位" align="center" min-width="90" />
 
           <!-- 仓库（表头带🔁批量按钮） -->
-          <el-table-column v-if="visibleColumns.warehouse" label="仓库" align="center">
+          <el-table-column v-if="visibleColumns.warehouse" label="仓库" align="center" min-width="180">
             <template #header>
               <div class="flex-center">
                 <span>仓库</span>
@@ -177,7 +186,7 @@
                 <Warehouse @confirm="handleWarehouseConfirm" />
                 <template #reference>
                   <el-button type="text" size="small">
-                    {{ scope.row.warehouse || '选择仓库' }}
+                    {{ scope.row.warehouseName || scope.row.warehouse || '选择仓库' }}
                   </el-button>
                 </template>
               </el-popover>
@@ -185,10 +194,16 @@
           </el-table-column>
 
           <!-- 单价 -->
-          <el-table-column label="单价" align="center">
+          <el-table-column v-if="visibleColumns.batch" label="批次" width="140"><template #default="{ row }"><el-input v-if="row.productName" v-model="row.batch" :disabled="readOnly" placeholder="批次号" /></template></el-table-column>
+          <el-table-column v-if="visibleColumns.mfd" label="生产日期" width="170"><template #default="{ row }"><el-date-picker v-if="row.productName" v-model="row.mfd" type="date" value-format="YYYY-MM-DD" :disabled="readOnly" style="width:145px" /></template></el-table-column>
+          <el-table-column v-if="visibleColumns.serialText" label="序列号" width="220"><template #default="{ row }"><el-input v-if="row.productName" v-model="row.serialText" :disabled="readOnly" placeholder="多个序列号用逗号分隔" /></template></el-table-column>
+          <el-table-column v-if="visibleColumns.effectiveDiscount" label="折扣(%)" align="center" width="110">
+            <template #default="{ row }"><div :contenteditable="!readOnly" class="editable-cell" @input="onEditableInput(row, 'effectiveDiscount', $event)" @blur="onEditableBlur(row, 'effectiveDiscount', $event)">{{ row.effectiveDiscount || 0 }}</div></template>
+          </el-table-column>
+          <el-table-column label="单价" align="center" min-width="120">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!readOnly"
                 class="editable-cell"
                 @input="onEditableInput(row, 'price', $event)"
                 @blur="onEditableBlur(row, 'price', $event)"
@@ -199,10 +214,10 @@
           </el-table-column>
 
           <!-- 数量 -->
-          <el-table-column label="数量" align="center">
+          <el-table-column label="数量" align="center" min-width="110">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!readOnly"
                 class="editable-cell"
                 @input="onEditableInput(row, 'quantity', $event)"
                 @blur="onEditableBlur(row, 'quantity', $event)"
@@ -221,7 +236,7 @@
           />
 
           <!-- 税率(%) -->
-          <el-table-column label="税率(%)" align="center">
+          <el-table-column label="税率(%)" align="center" min-width="125">
             <!-- 表头：标题 + 批量按钮 -->
             <template #header>
               <div class="flex-center">
@@ -235,7 +250,7 @@
             <!-- 单行编辑 -->
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!readOnly"
                 class="editable-cell"
                 @input="onEditableInput(row, 'taxRate', $event)"
                 @blur="onEditableBlur(row, 'taxRate', $event)"
@@ -260,10 +275,10 @@
             width="110"
           />
           <!-- 备注信息 -->
-          <el-table-column label="备注信息" align="center">
+          <el-table-column label="备注信息" align="center" min-width="180">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!readOnly"
                 class="editable-cell"
                 @input="onEditableInput(row, 'remark', $event)"
                 @blur="onEditableBlur(row, 'remark', $event)"
@@ -317,13 +332,13 @@
       <div class="divider"></div>
 
       <!-- 底部表单 -->
-      <DocumentForm :fields="purchaseBookFields" />
+      <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" :disabled="readOnly" :readonly-fields="['documentFee']" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.paidAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="innerVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button :disabled="saving" @click="innerVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="saving" :disabled="readOnly" @click="handleSave">保存修改</el-button>
       </div>
     </template>
   </el-dialog>
@@ -338,6 +353,10 @@ import { useRouter } from 'vue-router'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import Warehouse from '@/components/goodSearchConpoent/Warehouse.vue'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
+import { PurchaseNoteAPI } from '@/apis/purchase/purchaseOrder'
+import type { PurchaseDocument } from '@/apis/purchase/purchaseOrder/type'
+import { purchaseEditorRows, purchaseEditorPayload, recalculatePurchaseRow } from '@/utils/purchaseDraft'
+import { extractErrorMessage } from '@/apis/utils/jsonResponse'
 
 interface Props {
   visible: boolean
@@ -352,6 +371,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   save: [data?: any]
+  changed: []
 }>()
 
 /* v-model:visible */
@@ -361,7 +381,16 @@ const innerVisible = computed({
 })
 
 /* 供应商组件 */
-const supplierModel = ref({})
+const supplierModel = ref<Record<string, any>>({})
+const supplierId = ref('')
+const supplierName = ref('')
+const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
+const saveError = ref('')
+const currentDocument = ref<PurchaseDocument | null>(null)
+const documentFormRef = ref<InstanceType<typeof DocumentForm> | null>(null)
+let documentSequence = 0
 const header = reactive({
   documentDate: '',
   documentNumber: ''
@@ -371,7 +400,10 @@ const header = reactive({
 const handleSupplierSearch = (params: any) => {
   if (params && typeof params === 'object') {
     const name = params.name || params.supplierName || ''
+    if (readOnly.value) return
     supplierModel.value = params
+    supplierId.value = String(params.id || params.supplierId || params.key || '')
+    supplierName.value = String(params.name || params.supplierName || '')
     console.log('选中的供应商:', params)
   }
 }
@@ -380,17 +412,10 @@ const router = useRouter()
 
 /* 审核状态 */
 const isApproved = ref(false)
-const toggleApprove = () => {
-  isApproved.value = !isApproved.value
-  ElMessage.success(isApproved.value ? '审核成功' : '反审核成功')
-}
-
-/* 核对状态 */
+const toggleApprove = () => ElMessage.warning('采购审核库存和资金联动尚在修复，本次未修改审核状态')
 const isChecked = ref(false)
-const toggleCheck = () => {
-  isChecked.value = !isChecked.value
-  ElMessage.success(isChecked.value ? '核对成功' : '反核对成功')
-}
+const toggleCheck = () => ElMessage.warning('采购核对业务尚在验收，本次未修改单据状态')
+const readOnly = computed(() => loading.value || saving.value || !!loadError.value || !currentDocument.value || isApproved.value || isChecked.value)
 
 /* 生成到其他单据 */
 const generateTo = (type: 'purchaseReturn') => {
@@ -443,23 +468,7 @@ const generateTo = (type: 'purchaseReturn') => {
 }
 
 // 表格数据
-const tableData = ref([
-  {
-    productName: '',
-    productCode: '',
-    spec: '',
-    attr: '',
-    unit: '',
-    warehouse: '',
-    price: '',
-    quantity: '',
-    amount: '',
-    taxRate: '',
-    taxAmount: '',
-    total: '',
-    remark: ''
-  }
-])
+const tableData = ref<Record<string, any>[]>([])
 
 // 根据表格的行数，初始化弹层可见性数组
 const rowPopoverVisible = ref<boolean[]>(tableData.value.map(() => false))
@@ -479,6 +488,10 @@ const columnLabels: Record<string, string> = {
   unit: '单位',
   warehouse: '仓库',
   price: '单价',
+  effectiveDiscount: '折扣(%)',
+  batch: '批次',
+  mfd: '生产日期',
+  serialText: '序列号',
   quantity: '数量',
   amount: '金额',
   taxRate: '税率(%)',
@@ -486,7 +499,7 @@ const columnLabels: Record<string, string> = {
   total: '价税合计',
   remark: '备注信息'
 }
-const checkedColumns = ref<string[]>(Object.keys(columnLabels))
+const checkedColumns = ref<string[]>(Object.keys(columnLabels).filter(key => !['batch', 'mfd', 'serialText'].includes(key)))
 const visibleColumns = reactive<Record<string, boolean>>({})
 watch(
   checkedColumns,
@@ -503,7 +516,7 @@ const scanMode = ref(false)
 const showTaxBatch = ref(false)
 const batchTax = ref<number | null>(null)
 function applyTaxBatch() {
-  if (batchTax.value == null) return
+  if (readOnly.value || batchTax.value == null) return
   tableData.value.forEach((r: any) => {
     if (r.productName) r.taxRate = Number(batchTax.value)
     recalculate(r)
@@ -513,19 +526,7 @@ function applyTaxBatch() {
 }
 
 // 金额/税额/合计计算
-function recalculate(row: any) {
-  const price = parseFloat(row.price) || 0
-  const qty = parseFloat(row.quantity) || 0
-  const rate = parseFloat(row.taxRate) || 0
-
-  // 计算金额、税额、总计
-  row.amount = +(price * qty).toFixed(2)
-  row.taxAmount = +((row.amount * rate) / 100).toFixed(2)
-  row.total = +(row.amount + row.taxAmount).toFixed(2)
-
-  // 计算完后立即刷新状态栏
-  updateStatusBar()
-}
+function recalculate(row: any) { recalculatePurchaseRow(row) }
 
 // === 状态栏更新 ===
 function updateStatusBar() {
@@ -541,7 +542,9 @@ function updateStatusBar() {
 function handleWarehouseConfirm(selected: any) {
   if (!selected || currentWarehouseIndex.value === null) return
   const row = tableData.value[currentWarehouseIndex.value]
-  row.warehouse = selected.name || selected.warehouseName || ''
+  if (readOnly.value) return
+  row.warehouse = String(selected.id || selected.warehouseId || selected.key || '')
+  row.warehouseName = selected.name || selected.warehouseName || ''
   rowPopoverVisible.value[currentWarehouseIndex.value] = false
   ElMessage.success(`已选择仓库：${row.warehouse}`)
 }
@@ -550,7 +553,7 @@ function handleBatchWarehouseSelect(selected: any) {
   if (!selected) return
   const selectedName = selected.name || selected.warehouseName || ''
   tableData.value.forEach((r) => {
-    if (r.productName) r.warehouse = selectedName
+    if (r.productName && !readOnly.value) { r.warehouse = String(selected.id || selected.warehouseId || selected.key || ''); r.warehouseName = selectedName }
   })
   batchWarehouseVisible.value = false
   ElMessage.success(`已批量设置仓库：${selectedName}`)
@@ -561,62 +564,37 @@ const showProductPopup = ref(false)
 const currentRowIndex = ref<number | null>(null)
 
 function openProductPopup(index: number) {
+  if (readOnly.value) return
   currentRowIndex.value = index
   showProductPopup.value = true
 }
 
 function handleTableProductConfirm(selected: any[]) {
-  if (!selected || selected.length === 0 || currentRowIndex.value === null) {
-    showProductPopup.value = false
-    return
-  }
-  const first = selected[0]
-  const row = tableData.value[currentRowIndex.value]
-
-  row.productName = first.name
-  row.productCode = first.code
-  row.spec = first.model || ''
-  row.attr = first.category || ''
-  row.unit = first.unit || ''
-  row.warehouse = row.warehouse || ''
-  row.price = first.purchasePrice ?? 0
-  row.quantity = first.quantity ?? 1
-  row.taxRate = row.taxRate ?? 13
-
-  recalculate(row)
+  if (readOnly.value || !selected?.length || currentRowIndex.value === null) return
+  const inserted = selected.map(first => ({
+    productName: first.name || '', productCode: first.number || first.code || '', goodsId: String(first.id || first.key || first.goodsId || ''),
+    spec: first.spec || first.model || '', attr: first.selectedAttr || first.attr || '', unit: first.unit || '',
+    warehouse: '', warehouseName: '', price: first.buy ?? first.purchasePrice ?? 0, quantity: 1,
+    discount: 0, effectiveDiscount: 0, taxRate: 0, amount: 0, taxAmount: 0, total: 0, remark: ''
+  }))
+  inserted.forEach(recalculate)
+  tableData.value.splice(currentRowIndex.value, 1, ...inserted)
+  if (tableData.value.at(-1)?.productName) tableData.value.push({ productName: '', goodsId: '', warehouse: '', price: '', quantity: '', taxRate: '' })
+  rowPopoverVisible.value = tableData.value.map(() => false)
   showProductPopup.value = false
-
-  // 保证最后一行始终为空行
-  const last = tableData.value[tableData.value.length - 1]
-  if (last && last.productName) {
-    tableData.value.push({
-      productName: '',
-      productCode: '',
-      spec: '',
-      attr: '',
-      unit: '',
-      warehouse: '',
-      price: '',
-      quantity: '',
-      amount: '',
-      taxRate: '',
-      taxAmount: '',
-      total: '',
-      remark: ''
-    })
-    rowPopoverVisible.value.push(false)
-  }
 }
 
 // 删除行
 function deleteRow(index: number) {
+  if (readOnly.value) return
   tableData.value.splice(index, 1)
+  if (!tableData.value.length || tableData.value[tableData.value.length - 1]?.productName) tableData.value.push({ productName: '', goodsId: '', warehouse: '', price: '', quantity: '', taxRate: '' })
   rowPopoverVisible.value.splice(index, 1)
   ElMessage.success('已删除该行')
 }
 
 // 可编辑单元格
-type EditableField = 'price' | 'quantity' | 'taxRate' | 'remark'
+type EditableField = 'price' | 'quantity' | 'taxRate' | 'effectiveDiscount' | 'remark'
 
 function getCaretPosition(el: HTMLElement): number {
   const sel = window.getSelection()
@@ -685,14 +663,14 @@ const totalSum = computed(() => {
   const sum = tableData.value
     .filter((r) => r.productName)
     .reduce((acc, r) => acc + (Number(r.total) || 0), 0)
-  return sum.toFixed(2)
+  return sum.toFixed(4)
 })
 
 // 底部表单字段
 const purchaseBookFields = [
   'documentCost', // 单据金额
   'actualAmount', // 实际金额
-  'receivedAmount', //实收金额
+  'paidAmount', //实付金额
   'documentFee', // 单据费用
   'settlementAccount', // 结算账户
   'relatedPerson', // 关联人员
@@ -715,16 +693,65 @@ const footer = reactive({
 })
 
 /* 保存 */
-const handleSave = () => {
-  emit('save', {
-    header,
-    supplier: supplierModel.value,
-    tableData: tableData.value,
-    footer,
-    isApproved: isApproved.value
-  })
-  // innerVisible.value = false // 保存后不关闭，保持打开状态
+const documentNetAmount = computed(() => tableData.value.filter(row => row.productName).reduce((sum, row) => sum + (Number(row.amount) || 0), 0))
+watch(totalSum, value => { if (documentFormRef.value?.formdata) documentFormRef.value.formdata.actualAmount = Number(value) })
+async function loadDocument() {
+  const sequence = ++documentSequence
+  loading.value = true
+  loadError.value = ''; saveError.value = ''; currentDocument.value = null
+  tableData.value = []
+  try {
+    if (!props.record?.id) throw new Error('请从已保存的采购单列表打开详情')
+    const response = await PurchaseNoteAPI.getDocument(String(props.record.id))
+    if (sequence !== documentSequence || !props.visible) return false
+    if (response.code !== 10000 || !response.data) throw new Error(response.message || '采购单读取失败')
+    currentDocument.value = response.data
+    const source = response.data.header
+    supplierId.value = String(source.supplier || '')
+    supplierName.value = source.supplierName || source.supplier || ''
+    supplierModel.value = { id: supplierId.value, name: supplierName.value }
+    header.documentDate = String(source.time_text || source.time || '').slice(0, 10)
+    header.documentNumber = source.number || ''
+    isApproved.value = Number(source.examine) === 1
+    isChecked.value = Number(source.check) === 1
+    tableData.value = [...purchaseEditorRows(response.data), { productName: '', goodsId: '', warehouse: '', price: '', quantity: '', taxRate: '' }]
+    rowPopoverVisible.value = tableData.value.map(() => false)
+    await nextTick()
+    let files: any[] = []
+    if (source.file) {
+      try { const parsed = JSON.parse(source.file); files = Array.isArray(parsed) ? parsed : [] }
+      catch { files = String(source.file).split(',').filter(Boolean).map(url => ({ url, name: url.split('/').pop() })) }
+    }
+    let logistics: any = source.logistics || ''
+    try { logistics = JSON.parse(logistics) } catch { /* Existing plain tracking number. */ }
+    if (documentFormRef.value?.formdata) Object.assign(documentFormRef.value.formdata, {
+      documentCost: Number(source.total || 0), actualAmount: Number(source.actual || 0), paidAmount: Number(source.money || 0), documentFee: Number(source.cost || 0),
+      settlementAccount: source.account || '', settlementAccountName: source.accountName || '', relatedPerson: source.people || '', relatedPersonName: source.peopleName || '',
+      logistics: typeof logistics === 'object' && logistics ? logistics : { key: 'auto', name: '自动识别', number: String(logistics || '') },
+      documentAttachment: files.map(file => ({ ...file, status: 'success' })), remarks: source.data || ''
+    })
+    return true
+  } catch (error) { if (sequence === documentSequence) loadError.value = extractErrorMessage(error); return false }
+  finally { if (sequence === documentSequence) loading.value = false }
 }
+async function handleSave() {
+  if (readOnly.value || !currentDocument.value || !documentFormRef.value) return
+  saving.value = true; saveError.value = ''
+  try {
+    const payload = purchaseEditorPayload(currentDocument.value, header, supplierId.value, tableData.value, documentFormRef.value.formdata)
+    const response = await PurchaseNoteAPI.revise(payload)
+    if (response.code !== 10000) throw new Error(response.message || '采购单保存失败')
+    if (!await loadDocument()) throw new Error('保存请求已提交，但读取结果失败，请重新加载单据核对')
+    ElMessage.success('采购单修改已保存')
+    emit('save', payload)
+    innerVisible.value = false
+  } catch (error) { saveError.value = extractErrorMessage(error); ElMessage.error(saveError.value) }
+  finally { saving.value = false }
+}
+watch(() => [props.visible, props.record?.id], () => {
+  if (props.visible) void loadDocument()
+  else { documentSequence++; loading.value = false }
+}, { immediate: true })
 
 /* 工具函数：数字加千分位 */
 const formatNumber = (n: number | undefined | null) => {
@@ -906,3 +933,11 @@ const formatNumber = (n: number | undefined | null) => {
 
 
 <style scoped>.party-selector.el-button{width:auto!important;min-width:100px;padding:8px 12px;gap:6px}</style>
+
+<style scoped>
+.toolbar{flex-wrap:wrap;gap:12px}.toolbar .left{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.toolbar .right{display:flex;flex-wrap:wrap;gap:8px}.main,.table-wrap{min-width:0;max-width:100%}.editable-cell{min-height:24px}.editable-cell[contenteditable="true"]{background:#f3f8ff;border-bottom:1px dashed #a5bddc}
+</style>
+
+<style scoped>
+.party-selector{max-width:100%}.party-selector span{max-width:220px;overflow:hidden;text-overflow:ellipsis}.toolbar .left,.toolbar .right{max-width:100%}
+</style>

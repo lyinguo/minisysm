@@ -97,6 +97,8 @@ import static com.alibaba.druid.util.StringUtils.*;
 @Service("purchaseIBuyService")
 public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBuyService {
     @Autowired
+    private com.zeroone.star.purchase.service.PurchaseDocumentAccess purchaseAccess;
+    @Autowired
     private com.zeroone.star.purchase.service.PurchaseDraftUpdateService purchaseDraftUpdate;
 
     @Resource
@@ -791,11 +793,13 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      */
     @Override
     public PageDTO<PurchaseNoteListDTO> listPurchaseNote(PurchaseNoteQuery query){
+        String allowedFrame=purchaseAccess.frame(purchaseAccess.current());
         //创建分页对象
         Page<BuyVO> page = new Page<>(Math.max(1, query.getPageIndex()), Math.max(1, Math.min(200, query.getPageSize())));
 
         //构建查询条件
         LambdaQueryWrapper<BuyDO> queryWrapper = new LambdaQueryWrapper<>();
+        if(allowedFrame!=null) queryWrapper.eq(BuyDO::getFrame,allowedFrame);
 
         //查询条件
         //商品名称留空（已经在xml文件中处理）

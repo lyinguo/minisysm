@@ -15,6 +15,11 @@ import java.math.BigDecimal;
 @Data
 @ApiModel("采购单详情DTO")
 public class PurchaseBuyInfoDTO {
+    private String source;
+    private String attr;
+    private String batch;
+    private String mfd;
+    private String serial;
     @ApiModelProperty("明细ID（修改时必传）")
     private String id;
 

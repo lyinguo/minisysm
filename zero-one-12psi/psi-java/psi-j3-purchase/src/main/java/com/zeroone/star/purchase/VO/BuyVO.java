@@ -11,6 +11,12 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @ApiModel("采购单VO")
 public class BuyVO extends BuyDO {
+    private String supplierName;
+    private String frameName;
+    private String peopleName;
+    private String userName;
+    private java.math.BigDecimal billMoney;
+    private Integer stockRecords;
     @ApiModelProperty(value = "商品名称")
     private String goodsName;
 }

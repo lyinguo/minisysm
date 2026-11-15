@@ -1,0 +1,44 @@
+package com.zeroone.star.purchase.service;
+
+import com.zeroone.star.project.components.user.UserDTO;
+import com.zeroone.star.project.components.user.UserHolder;
+import com.zeroone.star.project.components.user.RoleAuthority;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.*;
+
+/** Current identity and organization scope. Function-level grants have a separate pending gate. */
+@Service
+public class PurchaseDocumentAccess {
+    private final UserHolder users;
+    private final JdbcTemplate db;
+    public PurchaseDocumentAccess(UserHolder users,JdbcTemplate db) { this.users=users;this.db=db; }
+    public UserDTO current() {
+        UserDTO actor;
+        try { actor=users.getCurrentUser(); } catch(Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }
+        if(actor==null || actor.getId()==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
+        List<Map<String,Object>> found=db.queryForList("SELECT u.frame,u.role,r.id AS role_id,r.keyword FROM `user` u LEFT JOIN role r ON r.id=u.role WHERE u.id=?",actor.getId());
+        if(found.size()!=1) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在");
+        Map<String,Object> row=found.get(0);
+        actor.setFrameId(row.get("frame")==null ? null:row.get("frame").toString());
+        if("0".equals(String.valueOf(row.get("role")))) actor.setRoles(Collections.singletonList("ROLE_ADMIN"));
+        else {
+            if(row.get("role_id")==null) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号角色不存在");
+            actor.setRoles(Collections.singletonList(RoleAuthority.resolve(row.get("role_id").toString(),(String)row.get("keyword"))));
+            frame(actor);
+        }
+        return actor;
+    }
+    public String frame(UserDTO actor) {
+        if(actor.getRoles().contains("ROLE_ADMIN")) return null;
+        String frame=actor.getFrameId();
+        if(frame==null || frame.isEmpty() || "0".equals(frame)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号缺少有效组织");
+        return frame;
+    }
+    public void requireFrame(UserDTO actor,String selected) {
+        String allowed=frame(actor);
+        if(allowed!=null && !allowed.equals(selected)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"不能操作其他组织的采购单");
+    }
+}

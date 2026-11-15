@@ -14,6 +14,18 @@ const currBaseUrl = '/j3-purchase/purchase-note'
  */
 export class PurchaseNoteAPI {
   private static http = useHttp()
+  static getList(params: Record<string, any>) {
+    return this.http.get<import('@/apis/type').PageDTO<import('./type').PurchaseListItem>>(`${currBaseUrl}/list`, params)
+  }
+  static getDocument(id: string) {
+    return this.http.get<import('./type').PurchaseDocument>(`${currBaseUrl}/document/${encodeURIComponent(id)}`)
+  }
+  static revise(data: Record<string, any>) {
+    return this.http.post<string>(`${currBaseUrl}/revise`, data)
+  }
+  static exportSimpleReport(id: string | number) {
+    return this.http.getFile(`${currBaseUrl}/export/simple`, { ids: String(id) }, { responseType: 'blob', showLoading: true })
+  }
 
   /**
    * 格式化日期为 YYYY-MM-DD 格式

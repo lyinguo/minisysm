@@ -17,6 +17,11 @@ import java.time.LocalDateTime;
 @Data
 @ApiModel("采购单列表数据对象")
 public class PurchaseNoteListDTO {
+    private String supplierName;
+    private String frameName;
+    private String peopleName;
+    private String userName;
+    private Integer stockRecords;
     @ApiModelProperty(value = "主键ID", required = true, example = "BUY_ID_123456", position = 1)
     private String id;
 

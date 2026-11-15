@@ -104,3 +104,16 @@ export interface PurchaseNoteAddDTO {
   purchaseNoteInfoDTOS: PurchaseNoteInfoDTO[]
 }
 
+export interface PurchaseDocument {
+  version: string
+  header: Record<string, any>
+  items: Record<string, any>[]
+  settlements?: Record<string, any>[]
+  expenses?: Record<string, any>[]
+  invoices?: Record<string, any>[]
+}
+export interface PurchaseListItem extends Record<string, any> {
+  id: string
+  number: string
+}
+
