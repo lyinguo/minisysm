@@ -22,8 +22,8 @@ public class SaleStockSummaryService {
     private static int n(Object value) { return value instanceof Boolean ? ((Boolean)value ? 1:0):value==null ? 0:((Number)value).intValue(); }
     private static class Balance { BigDecimal quantity=BigDecimal.ZERO,value=BigDecimal.ZERO; }
     private static class Layer {
-        String id; BigDecimal available,cost;
-        Layer(String id,BigDecimal available,BigDecimal cost) { this.id=id;this.available=available;this.cost=cost; }
+        String id; BigDecimal available,value;
+        Layer(String id,BigDecimal available,BigDecimal value) { this.id=id;this.available=available;this.value=value; }
     }
     private static String key(Object... values) { return new JSONArray(Arrays.asList(values)).toString(); }
     private List<String> keys(Map<String,Object> row,String rule) {
@@ -71,7 +71,7 @@ public class SaleStockSummaryService {
         Map<String,BigDecimal> prices=new HashMap<>();
         for(Map<String,Object> attr:db.queryForList("SELECT name,buy FROM attr WHERE pid=?",goods)) prices.put(s(attr.get("name")),d(attr.get("buy")));
         String closedDate=s(db.queryForObject("SELECT MAX(date) FROM period",java.sql.Date.class));
-        List<Map<String,Object>> movements=db.queryForList("SELECT s.*,DATE_FORMAT(s.time,'%Y-%m-%d') AS posting_date FROM summary s LEFT JOIN psi_stock_posting_order o ON o.movement_id=s.id WHERE s.goods=? ORDER BY s.time,COALESCE(o.sequence,0),s.id FOR UPDATE",goods);
+        List<Map<String,Object>> movements=db.queryForList("SELECT s.*,CASE WHEN s.type='buy' THEN (SELECT total FROM buy_info WHERE id=s.info AND pid=s.`class`) END AS purchase_net,DATE_FORMAT(s.time,'%Y-%m-%d') AS posting_date FROM summary s LEFT JOIN psi_stock_posting_order o ON o.movement_id=s.id WHERE s.goods=? ORDER BY s.time,COALESCE(o.sequence,0),s.id FOR UPDATE",goods);
         clearFifo(goods);
         db.update("UPDATE summary SET handle=0 WHERE goods=?",goods);
         Map<String,Balance> balances=new HashMap<>();
@@ -87,10 +87,13 @@ public class SaleStockSummaryService {
             String selected=scopes.get(branch ? 3:2);
             Balance previous=balances.computeIfAbsent(selected,k->new Balance());
             BigDecimal purchase=prices.getOrDefault(s(row.get("attr")),d(product.get("buy")));
-            BigDecimal cost=purchase;
+            BigDecimal cost=purchase,exactValue=null;
             boolean fixed=Arrays.asList("buy","bre","entry","extry","swapOut","swapEnter").contains(type);
             if("base".equals(valuation)) cost=fixed ? d(row.get("price")):purchase;
             else if("ma".equals(valuation)) cost=fixed ? d(row.get("price")):previous.quantity.signum()>0 ? previous.value.divide(previous.quantity,8,RoundingMode.HALF_UP):purchase;
+            if(incoming && "buy".equals(type) && row.get("purchase_net")!=null) exactValue=d(row.get("purchase_net"));
+            if("ma".equals(valuation) && !fixed && !incoming && previous.quantity.signum()>0)
+                exactValue=previous.value.multiply(quantity).divide(previous.quantity,4,RoundingMode.HALF_UP);
             Deque<Layer> queue=layers.computeIfAbsent(selected,k->new ArrayDeque<>());
             if("fifo".equals(valuation)) {
                 if(incoming) cost=Arrays.asList("buy","entry","swapEnter").contains(type) ? d(row.get("price")):purchase;
@@ -99,13 +102,15 @@ public class SaleStockSummaryService {
                     while(remaining.signum()>0 && !queue.isEmpty()) {
                         Layer layer=queue.peek();
                         BigDecimal used=remaining.min(layer.available);
-                        total=total.add(used.multiply(layer.cost)); remaining=remaining.subtract(used); layer.available=layer.available.subtract(used);
+                        BigDecimal usedValue=used.compareTo(layer.available)==0 ? layer.value:layer.value.multiply(used).divide(layer.available,4,RoundingMode.HALF_UP);
+                        total=total.add(usedValue); layer.value=layer.value.subtract(usedValue); remaining=remaining.subtract(used); layer.available=layer.available.subtract(used);
                         db.update("INSERT INTO fifo(id,`out`,`in`,handle) VALUES(?,?,?,?)",id(),identifier,layer.id,used);
                         db.update("UPDATE summary SET handle=handle+? WHERE id=?",used,layer.id);
                         if(layer.available.signum()==0) queue.remove();
                     }
                     // Legacy opening balances may precede the available movement history.
-                    cost=total.add(remaining.multiply(purchase)).divide(quantity,8,RoundingMode.HALF_UP);
+                    exactValue=total.add(remaining.multiply(purchase)).setScale(4,RoundingMode.HALF_UP);
+                    cost=exactValue.divide(quantity,8,RoundingMode.HALF_UP);
                 }
             }
             List<String> serials=serials(row.get("serial"));
@@ -114,13 +119,14 @@ public class SaleStockSummaryService {
                 else {
                     BigDecimal total=BigDecimal.ZERO;
                     for(String serial:serials) total=total.add(serialCosts.getOrDefault(key(goods,serial),purchase));
-                    cost=total.divide(quantity,8,RoundingMode.HALF_UP);
+                    exactValue=total.setScale(4,RoundingMode.HALF_UP);
+                    cost=exactValue.divide(quantity,8,RoundingMode.HALF_UP);
                 }
             }
-            cost=cost.setScale(4,RoundingMode.HALF_UP);
-            if(closed) cost=d(row.get("uct"));
-            BigDecimal value=cost.multiply(quantity).setScale(4,RoundingMode.HALF_UP),delta=incoming ? quantity:quantity.negate();
-            if(closed) value=d(row.get("bct"));
+            BigDecimal value=exactValue==null ? cost.multiply(quantity).setScale(4,RoundingMode.HALF_UP):exactValue;
+            cost=value.divide(quantity,4,RoundingMode.HALF_UP);
+            if(closed) { cost=d(row.get("uct"));value=d(row.get("bct")); }
+            BigDecimal delta=incoming ? quantity:quantity.negate();
             JSONArray quantities=new JSONArray(),values=new JSONArray();
             for(String scope:scopes) {
                 Balance balance=balances.computeIfAbsent(scope,k->new Balance());
@@ -129,8 +135,14 @@ public class SaleStockSummaryService {
                 quantities.add(balance.quantity); values.add(balance.value);
             }
             if(!closed) db.update("UPDATE summary SET uct=?,bct=?,exist=?,balance=? WHERE id=?",cost,value,quantities.toString(),values.toString(),identifier);
-            for(String serial:serials) serialCosts.put(key(goods,serial),cost);
-            if(incoming && "fifo".equals(valuation)) queue.add(new Layer(identifier,quantity,cost));
+            if(incoming && !serials.isEmpty()) {
+                BigDecimal allocated=BigDecimal.ZERO;
+                for(int index=0;index<serials.size();index++) {
+                    BigDecimal serialValue=index==serials.size()-1 ? value.subtract(allocated):value.divide(BigDecimal.valueOf(serials.size()),4,RoundingMode.HALF_UP);
+                    serialCosts.put(key(goods,serials.get(index)),serialValue);allocated=allocated.add(serialValue);
+                }
+            }
+            if(incoming && "fifo".equals(valuation)) queue.add(new Layer(identifier,quantity,value));
         }
     }
 }

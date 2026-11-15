@@ -68,13 +68,13 @@
             </template>
           </el-dropdown>
 
-          <el-button class="ml8" @click="toggleApprove">反审核</el-button>
+          <el-button class="ml8" :loading="saving" :disabled="loading || saving || !!loadError || !currentDocument" @click="toggleApprove">反审核</el-button>
         </template>
 
         <!-- 未审核时：显示 保存 + 审核（隐藏"生成"） -->
         <template v-else>
           <el-button type="primary" :loading="saving" :disabled="readOnly" @click="handleSave">保存修改</el-button>
-          <el-button class="ml8" @click="toggleApprove">审核</el-button>
+          <el-button class="ml8" :loading="saving" :disabled="loading || saving || !isChecked || !!loadError || !currentDocument" @click="toggleApprove">审核</el-button>
         </template>
         <!-- 无论是否审核，都显示这个"核对 / 反核对" -->
         <el-button class="ml8" :loading="saving" :disabled="loading || saving || isApproved || !!loadError || !currentDocument" @click="toggleCheck">
@@ -412,7 +412,24 @@ const router = useRouter()
 
 /* 审核状态 */
 const isApproved = ref(false)
-const toggleApprove = () => ElMessage.warning('采购审核库存和资金联动尚在修复，本次未修改审核状态')
+const toggleApprove = async () => {
+  if (loading.value || saving.value || !currentDocument.value || loadError.value) return
+  const audited = !isApproved.value
+  if (audited && !isChecked.value) { ElMessage.warning('请先保存并核对采购单'); return }
+  try {
+    await ElMessageBox.confirm(audited ? '审核后将实际入库、扣减本单付款并登记应付，是否继续？' : '反审核将撤销本单入库、付款和应付；库存已被使用或存在后续关联时会拒绝。是否继续？', audited ? '审核采购单' : '反审核采购单', { type: 'warning' })
+  } catch { return }
+  if (saving.value || !currentDocument.value) return
+  saving.value = true; saveError.value = ''
+  try {
+    const response = await PurchaseNoteAPI.audit([String(currentDocument.value.header.id)], audited)
+    if (response.code !== 10000) throw new Error(response.message || '审核状态修改失败')
+    if (!await loadDocument()) throw new Error('操作已提交，读取最新状态失败，请重新加载单据')
+    emit('changed')
+    ElMessage.success(audited ? '采购单已审核入账' : '采购单已反审核')
+  } catch (error) { saveError.value = extractErrorMessage(error); ElMessage.error(saveError.value) }
+  finally { saving.value = false }
+}
 const isChecked = ref(false)
 const toggleCheck = async () => {
   if (loading.value || saving.value || isApproved.value || !currentDocument.value || loadError.value) return

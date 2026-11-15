@@ -10,6 +10,11 @@
     </parent>
     <artifactId>psi-domain</artifactId>
     <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- 导入common保证编译通过 -->
         <dependency>
             <groupId>com.zeroone.star</groupId>

@@ -14,6 +14,6 @@ public class PurchaseAuditDTO {
     private List<String> ids;
 
     @ApiModelProperty("是否审核：1=审核 / 0=反审核")
-    private int type;
+    private Integer type;
 
 }

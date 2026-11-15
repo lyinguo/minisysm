@@ -20,8 +20,8 @@
                   <el-button type="info">操作</el-button>
                 </template>
                 <ul>
-                  <li @click="onBatchExamine(0)">审核</li>
-                  <li @click="onBatchExamine(1)">反审核</li>
+                  <li @click="onBatchExamine(1)">审核</li>
+                  <li @click="onBatchExamine(0)">反审核</li>
                   <li @click="onBatchCheck(1)">核对</li>
                   <li @click="onBatchCheck(0)">反核对</li>
                 </ul>
@@ -738,7 +738,22 @@
   // These old actions only changed memory. Their business implementations remain pending.
   const onDelete = (_row: RowData) => ElMessage.warning('采购删除引用保护尚在验收，本次未删除单据')
   const onBatchDelete = () => ElMessage.warning('采购批量删除尚在验收，本次未删除单据')
-  const onBatchExamine = (_type: 0 | 1) => ElMessage.warning('采购审核库存和资金联动尚在修复，本次未修改审核状态')
+  const onBatchExamine = async (type: 0 | 1) => {
+    if (checking.value || refreshing.value) return
+    const ids = selected.value.map(row => String(row.id || '')).filter(Boolean)
+    if (!ids.length) { ElMessage.warning('请先选择采购单'); return }
+    try { await ElMessageBox.confirm(`确认${type ? '审核' : '反审核'}选中的 ${ids.length} 张采购单？将联动真实库存、付款和应付，任一失败将整批取消。`, '批量审核', { type: 'warning' }) }
+    catch { return }
+    if (checking.value) return
+    checking.value = true
+    try {
+      const response = await PurchaseNoteAPI.audit(ids, type === 1)
+      if (response.code !== 10000) throw new Error(response.message || '批量审核失败')
+      await loadPurchaseList()
+      ElMessage.success(type ? '所选采购单已审核入账' : '所选采购单已反审核')
+    } catch (error) { ElMessage.error(extractErrorMessage(error)) }
+    finally { checking.value = false }
+  }
   const checking = ref(false)
   const onBatchCheck = async (type: 0 | 1) => {
     if (checking.value || refreshing.value) return

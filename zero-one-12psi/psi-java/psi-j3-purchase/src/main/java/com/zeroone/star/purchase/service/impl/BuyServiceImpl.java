@@ -102,6 +102,8 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     private com.zeroone.star.purchase.service.PurchaseDraftUpdateService purchaseDraftUpdate;
     @Autowired
     private com.zeroone.star.purchase.service.PurchaseCheckService purchaseCheck;
+    @Autowired
+    private com.zeroone.star.purchase.service.PurchasePostingService purchasePosting;
 
     @Resource
     private BuyMapper buyMapper;
@@ -642,7 +644,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      */
     @Override
     public JsonVO<String> checkStatus(PurchaseCheckDTO checkList) {
-        if(checkList==null) throw new IllegalArgumentException("请选择采购单");
+        if(checkList==null || checkList.getType()==null) throw new IllegalArgumentException("请选择采购单和目标核对状态");
         purchaseCheck.change(checkList.getIds(),checkList.getType());
         return JsonVO.success("修改成功");
     }
@@ -654,67 +656,9 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     @Override
     @Transactional(rollbackFor = Exception.class)
     public JsonVO<String> examineStatus(PurchaseAuditDTO auditList) {
-        List<String> ids = auditList.getIds();
-        int target = auditList.getType(); // 0=反审核, 1=审核
-
-        if (ids == null || ids.isEmpty()) {
-            return JsonVO.fail("采购单ID列表不能为空");
-        }
-
-        int changed = 0;
-
-        for (String id : ids) {
-            try {
-                BuyDO buyDO = buyMapper.selectById(id);
-                if (buyDO == null) {
-                    // 没找到采购单，继续下一个
-                    log.warn("采购单不存在: {}", id);
-                    continue;
-                }
-
-                int current = buyDO.getExamine();
-                if (current == target) {
-                    log.info("采购单 [{}] 状态相同，无需修改", id);
-                    continue;
-                }
-
-                List<BuyInfoDO> infos = buyInfoMapper.selectByPid(id);
-                if (infos == null || infos.isEmpty()) {
-                    log.warn("采购单 [{}] 无明细", id);
-                    continue;
-                }
-
-                // 库存更新逻辑
-                for (BuyInfoDO info : infos) {
-                    BigDecimal delta = info.getNums();
-                    if (target == 0) {
-                        roomMapper.updateNumsByWarehouseAndGoods(info.getWarehouse(), info.getGoods(), delta);
-                    } else {
-                        roomMapper.updateNumsByWarehouseAndGoods(info.getWarehouse(), info.getGoods(), delta.multiply(BigDecimal.valueOf(-1)));
-                    }
-                }
-
-                // 资金更新逻辑
-                if (target == 0) {
-                    accountMapper.updateAccountByName(buyDO.getAccount(), buyDO.getMoney().multiply(BigDecimal.valueOf(-1)));
-                } else {
-                    accountMapper.updateAccountByName(buyDO.getAccount(), buyDO.getMoney());
-                }
-
-                changed++;
-
-            } catch (Exception e) {
-                // 捕获单条异常，打印日志，不影响其它条处理
-                log.error("处理采购单 [{}] 失败: {}", id, e.getMessage(), e);
-                return JsonVO.fail("处理采购单 " + id + " 时出错: " + e.getMessage());
-            }
-        }
-
-        if (changed == 0) {
-            return JsonVO.fail("没有任何采购单被修改，请检查ID是否正确或状态是否已一致");
-        }
-
-        return JsonVO.success("审核/反审核完成，共修改 " + changed + " 条");
+        if(auditList==null || auditList.getType()==null || (auditList.getType()!=0 && auditList.getType()!=1)) throw new IllegalArgumentException("请选择采购单和有效的目标审核状态");
+        purchasePosting.post(auditList.getIds(),auditList.getType()==1);
+        return JsonVO.success("采购审核状态已更新");
     }
 
     @Resource

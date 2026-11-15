@@ -14,5 +14,5 @@ public class PurchaseCheckDTO {
     private List<String> ids;
 
     @ApiModelProperty(value = "核对状态：1=核对 / 0=反核对", required = true, example = "1")
-    private int type;
+    private Integer type;
 }

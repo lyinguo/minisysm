@@ -164,10 +164,12 @@ class SaleDraftSuite(WarehouseSuite):
 
     def security(self):
         def role_and_frame():
-            own_id = self.create(self.body())
+            prefix='QASEC'+uuid.uuid4().hex[:18]
+            own_body=self.body();own_body['number']=prefix+'A'
+            own_id = self.create(own_body)
             foreign_frame = uuid.uuid4().hex
             sql(self.state, "INSERT INTO frame(id,pid,name,sort) VALUES(" + literal(foreign_frame) + ",'0','QA Other Sales Org',0);")
-            foreign_body = self.body(); foreign_body['frame'] = foreign_frame
+            foreign_body = self.body(); foreign_body['frame'] = foreign_frame;foreign_body['number']=prefix+'B'
             foreign_id = self.create(foreign_body)
             foreign_before = self.sale('GET', '/sale/form/document/' + foreign_id)
             entry_id, _ = self.create_inbound(3)
@@ -199,8 +201,8 @@ class SaleDraftSuite(WarehouseSuite):
                 for path in paths: redis('HSET', 'AUTH:RESOURCE_ROLES', path, grants)
                 own = self.sale('GET', '/sale/form/document/' + own_id)
                 assert own['header']['id'] == own_id
-                listing = self.sale('GET', '/sale/form/getSaleList?pageIndex=1&pageSize=200&authorizedFrame=' + foreign_frame)
-                assert own_id in [row['id'] for row in listing.get('rows', [])] and foreign_id not in [row['id'] for row in listing.get('rows', [])], 'Caller could override organization scope'
+                listing = self.sale('GET', '/sale/form/getSaleList?pageIndex=1&pageSize=200&number='+prefix+'&authorizedFrame=' + foreign_frame)
+                assert listing.get('total')==1 and own_id in [row['id'] for row in listing.get('rows', [])] and foreign_id not in [row['id'] for row in listing.get('rows', [])], 'Caller could override organization scope'
                 assert self.request('GET', '/sale/form/document/' + foreign_id, service='sale').get('code') == 403
                 blocked = self.body(); blocked['frame'] = foreign_frame
                 assert self.request('POST', '/sale/form/addSale', blocked, service='sale').get('code') == 403

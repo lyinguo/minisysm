@@ -32,6 +32,7 @@ public class SaleDTO {
 
     @ApiModelProperty(value = "单据时间", example = "2025-10-18")
     @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.zeroone.star.project.dto.BusinessDateDeserializer.class)
     private Date time;
 
     @ApiModelProperty(value = "单据编号", example = "SELL202504050001", allowableValues = "length <= 32")

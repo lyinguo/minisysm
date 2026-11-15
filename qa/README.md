@@ -58,6 +58,12 @@
 
 ## 采购核对/审核专项
 
-运行 `python qa/purchase_posting_acceptance.py check` 验证核对事务、真实存储故障回滚/重试、组织与角色授权。`posting` 验证实际入库、应付、部分付款和反审核；当前4项仍失败，非零退出必须保留为未完成证据。默认 `all` 执行全部，不能只运行check便宣称采购审核通过。
+运行 `python qa/purchase_posting_acceptance.py check` 验证核对事务、真实存储故障回滚/重试、组织与角色授权。`posting` 验证实际入库、应付、部分付款和反审核；修复前4项失败，修复进展见下节；任何非零退出仍必须保留为未完成证据。默认 `all` 执行全部，不能只运行check便宣称采购审核通过。
 
 沿用采购页面专项的数量3草稿，在真实浏览器点击核对后运行 `verify-checked`，点击反核对后运行 `verify-unchecked`，独立验证状态及库存资金不变量。正常业务环境不运行任何这些写入测试。
+
+## 采购入账修复与成本联动
+
+修复前采购审核4项失败基线现已通过。依次执行 `purchase_posting_acceptance.py all`、`purchase_posting_extended.py`、`purchase_posting_business.py`，共29项实际采购核对/入账验收；任一断言失败都必须保留失败状态。`sale_business_time_acceptance.py` 实际验证日期/完整时间/ISO/毫秒格式及非法日期不持久化。成本测试仅调整专用QA配置并恢复两条参数保护触发器，不代表系统参数管理完成。
+
+浏览器运行 `python qa/purchase_browser_acceptance.py prepare`，按输出编号打开采购单报表，核对后审核，运行 `verify-audited` 独立核对库存/现金/应付/流水；页面反审核后运行 `verify-reversed`。夹具、token、SQL结果、截图及JAR均不发布。来源订单/发票SQL夹具、普通def成本规则和单仓测试不等同完整订单/发票生命周期或全部成本组合通过。
