@@ -22,6 +22,15 @@
 #include "UserController.h"
 #include<string>
 
+static size_t utf8Chars(const oatpp::String& value)
+{
+    if (!value) return 0;
+    size_t count = 0;
+    for (unsigned char character : *value) if ((character & 0xc0) != 0x80) ++count;
+    return count;
+}
+
+
 //负责设置VO的失败状态
 #define SET_VO_FAIL(vo, err_code, err_msg) \
     do { \
@@ -62,7 +71,7 @@ do{\
 		SET_VO_FAIL(uvo, 9999, "user.id.empty_error");\
 		return uvo;\
 	}\
-	if (id->size() != 32) {\
+	if (utf8Chars(id) > 32) {\
 		SET_VO_FAIL(uvo, 9999, "user.id.length_error");\
 		return uvo;\
 	}\
@@ -82,7 +91,7 @@ do{\
 //检查长度是否超限
 #define CHECK_FIELD_MAX_LENGTH(field, max_len, err_msg) \
     do { \
-        if ((dto)->field != nullptr && (dto)->field->size() > (max_len)) { \
+        if ((dto)->field != nullptr && utf8Chars((dto)->field) > (max_len)) { \
             SET_VO_FAIL(uvo, 9999, err_msg); \
             return uvo; \
         } \
@@ -110,11 +119,17 @@ UserJsonVO::Wrapper UserController::executeAddUser(const UserAddDTO::Wrapper& dt
 	//创建响应并初始化
 	auto uvo = UserJsonVO::createShared();
 	INIT_VO_SUCCESS(uvo);
+    if (!dto || !dto->pwd || dto->pwd->empty()) {
+        uvo->code = 9999;
+        uvo->message = "Password is required";
+        return uvo;
+    }
+
 	//依次检查字段合法性
 //---------------------------------------------------------------------------------------//	
 	//检查用户名存在性和长度合法性
 	{
-		CHECK_FIELD_NOT_EMPTY(name, "user.name,empty_error");
+		CHECK_FIELD_NOT_EMPTY(name, "user.name.empty_error");
 		CHECK_FIELD_MAX_LENGTH(name, 32, "user.name.length_error");
 	}
 	//检查账号存在性、唯一性和长度合法性
@@ -180,94 +195,50 @@ UserJsonVO::Wrapper UserController::executeAddUser(const UserAddDTO::Wrapper& dt
 
 UserJsonVO::Wrapper UserController::executeModUser(const UserModDTO::Wrapper& dto)
 {
-	//service实例
-	UserService us;
-	//创建响应并初始化
-	auto uvo = UserJsonVO::createShared();
-	INIT_VO_SUCCESS(uvo);
-	//依次检查字段合法性(ID必填，其他字段只在有值时检验合法性,无值时统一设为nullptr，简化后续判断)
-//---------------------------------------------------------------------------------------//	
-	//检查id存在性和长度合法性
-	{
-		CHECK_ID_FORM(dto->id);
-	}
-	//检查用户名长度合法性	
-	{
-		if (dto->name != nullptr && !dto->name->empty()) {
-			CHECK_FIELD_MAX_LENGTH(name, 32, "user.name.length_error");
-		}
-		else {
-			dto->name = String("");
-		}
-	}
-	//检查账号唯一性和长度合法性
-	{
-		if (dto->user != nullptr && !dto->user->empty()) {
-			CHECK_FIELD_MAX_LENGTH(user, 32, "user.user.length_error");
-			CHECK_VALUE_EXISTS(us.checkUserExists, user, "user.user.exist_error");
-		}
-		else {
-			dto->user = String("");
-		}
-	}
-	//检查手机号码唯一性和长度合法性以及格式
-	{
-		if (dto->tel != nullptr && !dto->tel->empty()) {
-			//检验手机号码格式（第一位是否为1？是否全是数字？长度是否为11？）
-			CHECK_TEL_FORM(dto->tel);
-			CHECK_VALUE_EXISTS(us.checkTelExists, tel, "user.tel.exist_error");
-		}
-		else {
-			dto->tel = String("");
-		}
-		
-	}
-	//检查组织存在性和长度合法性
-	{
-		if (dto->frame != nullptr && !dto->frame->empty()) {
-			CHECK_FIELD_MAX_LENGTH(frame, 32, "user.frame.length_error");
-			CHECK_VALUE_NOT_EXISTS(us.checkFrameExists, frame, "user.frame.exist_error");
-		}else {
-			dto->frame = String("");
-		}
-	}
-	//检查角色存在性和长度合法性
-	{
-		if (dto->role != nullptr && !dto->role->empty()) {
-			CHECK_FIELD_MAX_LENGTH(role, 32, "user.role.length_error");
-			CHECK_VALUE_NOT_EXISTS(us.checkRoleExists, role, "user.role.exist_error");
-		}
-		else {
-			dto->role = String("");
-		}
-	}
-	//检查密码长度合法性
-	{
-		if (dto->pwd != nullptr && !dto->pwd->empty()) {
-			CHECK_FIELD_MAX_LENGTH(pwd, 20, "user.pwd.length_error");
-		}else {
-			dto->pwd = String("");
-		}
-	}
-	//检查备注长度合法性
-	{
-		if (dto->data != nullptr && !dto->data->empty()) {
-			CHECK_FIELD_MAX_LENGTH(data, 256, "user.data.length_error");
-		}else {
-			dto->data = String("");
-		}
-	}
-	//用户头像检查？
-
-	//调用service层修改用户
-	if (us.modUser(dto)) {
-		INIT_VO_SUCCESS(uvo);
-		uvo->data = dto->id;
-	}
-	else {
-		SET_VO_FAIL(uvo, 9999, "user.fail");
-	}
-	return uvo;
+    UserService us;
+    auto uvo = UserJsonVO::createShared();
+    INIT_VO_SUCCESS(uvo);
+    if (!dto) { SET_VO_FAIL(uvo, 9999, "user.id.empty_error"); return uvo; }
+    CHECK_ID_FORM(dto->id);
+    UserDAO dao;
+    auto original = dao.selectById(dto->id.getValue(""));
+    if (!original) { SET_VO_FAIL(uvo, 9999, "user.id.exist_error"); return uvo; }
+    if (dto->name) {
+        CHECK_FIELD_NOT_EMPTY(name, "user.name.empty_error");
+        CHECK_FIELD_MAX_LENGTH(name, 32, "user.name.length_error");
+    }
+    if (dto->user) {
+        CHECK_FIELD_NOT_EMPTY(user, "user.user.empty_error");
+        CHECK_FIELD_MAX_LENGTH(user, 32, "user.user.length_error");
+        if (dto->user.getValue("") != original->getUser()) {
+            uvo->code = 9999;
+            uvo->message = u8"登录账号创建后不能修改，请保留历史关联";
+            return uvo;
+        }
+    }
+    if (dto->tel) {
+        CHECK_FIELD_NOT_EMPTY(tel, "user.tel.empty_error");
+        CHECK_TEL_FORM(dto->tel);
+        if (dto->tel.getValue("") != original->getTel() && us.checkTelExists(dto->tel, dto->id)) {
+            SET_VO_FAIL(uvo, 9999, "user.tel.exist_error"); return uvo;
+        }
+    }
+    if (dto->frame) {
+        CHECK_FIELD_NOT_EMPTY(frame, "user.frame.empty_error");
+        CHECK_FIELD_MAX_LENGTH(frame, 32, "user.frame.length_error");
+        CHECK_VALUE_NOT_EXISTS(us.checkFrameExists, frame, "user.frame.exist_error");
+    }
+    if (dto->role) {
+        CHECK_FIELD_NOT_EMPTY(role, "user.role.empty_error");
+        CHECK_FIELD_MAX_LENGTH(role, 32, "user.role.length_error");
+        CHECK_VALUE_NOT_EXISTS(us.checkRoleExists, role, "user.role.exist_error");
+    }
+    if (dto->pwd && !dto->pwd->empty()) CHECK_FIELD_MAX_LENGTH(pwd, 20, "user.pwd.length_error");
+    if (dto->data) CHECK_FIELD_MAX_LENGTH(data, 256, "user.data.length_error");
+    if (dto->py) CHECK_FIELD_MAX_LENGTH(py, 32, "user.name.length_error");
+    if (us.modUser(dto)) { INIT_VO_SUCCESS(uvo); uvo->data = dto->id; }
+    else { SET_VO_FAIL(uvo, 9999, "user.fail"); }
+    return uvo;
 }
 
 UserJsonVO::Wrapper UserController::executeDelUser(const String& id)
@@ -300,9 +271,9 @@ UserPageJsonVO::Wrapper UserController::executeQueryAll(const UserQuery::Wrapper
 	// 输入检查逻辑
 	// 1. 检查用户名称长度
 	if (query->name != nullptr && !query->name->empty()) {
-		if (query->name->size() > 32) {
+		if (utf8Chars(query->name) > 32) {
 			vo->code = 9999;
-			vo->message = "用户名称过长（最大32个字符）";
+			vo->message = u8"用户名称过长（最大32个字符）";
 			vo->data = {};
 			return vo;
 		}
@@ -310,9 +281,9 @@ UserPageJsonVO::Wrapper UserController::executeQueryAll(const UserQuery::Wrapper
 
 	// 2. 检查用户账号长度
 	if (query->user != nullptr && !query->user->empty()) {
-		if (query->user->size() > 32) {
+		if (utf8Chars(query->user) > 32) {
 			vo->code = 9999;
-			vo->message = "用户账号过长（最大32个字符）";
+			vo->message = u8"用户账号过长（最大32个字符）";
 			vo->data = {};
 			return vo;
 		}
@@ -324,14 +295,14 @@ UserPageJsonVO::Wrapper UserController::executeQueryAll(const UserQuery::Wrapper
 		// 检查长度是否为11位
 		if (tel.size() > 11) {
 			vo->code = 9999;
-			vo->message = "手机号码格式错误（必须小于11位）";
+			vo->message = u8"手机号码格式错误（必须小于11位）";
 			vo->data = {};
 			return vo;
 		}
 		// 检查首位是否为1
 		if (tel[0] != '1') {
 			vo->code = 9999;
-			vo->message = "手机号码格式错误（必须是1开头）";
+			vo->message = u8"手机号码格式错误（必须是1开头）";
 			vo->data = {};
 			return vo;
 		}
@@ -339,7 +310,7 @@ UserPageJsonVO::Wrapper UserController::executeQueryAll(const UserQuery::Wrapper
 		for (int i = 1; i < tel.size(); i++) {
 			if (tel[i] < '0' || tel[i] > '9') {
 				vo->code = 9999;
-				vo->message = "手机号码格式错误（只能包含数字）";
+				vo->message = u8"手机号码格式错误（只能包含数字）";
 				vo->data = {};
 				return vo;
 			}
@@ -348,9 +319,9 @@ UserPageJsonVO::Wrapper UserController::executeQueryAll(const UserQuery::Wrapper
 
 	// 4. 检查备注信息长度
 	if (query->data != nullptr && !query->data->empty()) {
-		if (query->data->size() > 256) {
+		if (utf8Chars(query->data) > 256) {
 			vo->code = 9999;
-			vo->message = "备注信息过长（最大256个字符）";
+			vo->message = u8"备注信息过长（最大256个字符）";
 			vo->data = {};
 			return vo;
 		}
@@ -359,9 +330,9 @@ UserPageJsonVO::Wrapper UserController::executeQueryAll(const UserQuery::Wrapper
 	// 检查通过，执行查询
 	auto result = us.listAll(query);
 	// 关键修改：判断分页结果中是否无数据（total=0或rows为空）
-	if (result == nullptr || result->total == 0) {
+	if (result == nullptr) {
 		vo->code = 9999;
-		vo->message = "无符合要求的用户存在";
+		vo->message = u8"无符合要求的用户存在";
 		vo->data = {};
 	}
 	else {
@@ -379,7 +350,7 @@ UserDetailJsonVO::Wrapper UserController::executeQueryOne(const String& id)
 	// 1. 检查ID是否为空
 	if (id == nullptr || id->empty()) {
 		jvo->code = 9999;
-		jvo->message = "ID必须输入";
+		jvo->message = u8"ID必须输入";
 		jvo->data = {};
 		return jvo;
 	}
@@ -390,9 +361,9 @@ UserDetailJsonVO::Wrapper UserController::executeQueryOne(const String& id)
 		jvo->success(data);
 	}
 	else {
-		// 数据为null时返回"该用户不存在"
+		// 数据为null时返回u8"该用户不存在"
 		jvo->code = 9999;
-		jvo->message = "该用户不存在";
+		jvo->message = u8"该用户不存在";
 		jvo->data = {};
 	}
 	return jvo;

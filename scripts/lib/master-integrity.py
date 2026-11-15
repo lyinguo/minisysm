@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / 'database/migrations/20261114_master_integrity.sql'
 # Only relational IDs, never supplier.account/customer.account (bank account text).
 REFS = {
+    'annex': [('user', 'img')],
     'customer': [('bill', 'customer'), ('extry', 'customer'), ('ice', 'customer'),
                  ('imy', 'customer'), ('sell', 'customer'), ('sor', 'customer'), ('sre', 'customer')],
     'supplier': [('bill', 'supplier'), ('bor', 'supplier'), ('bre', 'supplier'),

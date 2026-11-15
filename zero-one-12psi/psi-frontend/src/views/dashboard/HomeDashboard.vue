@@ -17,11 +17,23 @@ import {
   getFunds
 } from '@/apis/dashboard/dashboard'
 import dayjs from 'dayjs'
+import { ElMessage } from 'element-plus'
+import GettingStarted from '@/components/workspace/GettingStarted.vue'
+import { useUserStore } from '@/stores/user'
+import { navigationEntries } from '@/utils/workspaceNavigation'
 
 type FundItem = { name: string; value: number }
 
 const router = useRouter()
-const go = (path: string) => router.push(path)
+const userStore = useUserStore()
+const destinations = computed(() => navigationEntries(userStore.menus || [], path => router.resolve(path).matched.length > 0 && router.resolve(path).name !== 'NotFound'))
+const availablePath = (path: string) => destinations.value.some(entry => entry.path === path)
+const go = (path: string) => {
+  if (availablePath(path)) void router.push(path)
+  else ElMessage.info('当前入口不可用，请通过顶部搜索或左侧菜单选择业务页面')
+}
+const dashboardLoading = ref(true)
+const failedSections = ref(0)
 
 /* ========================= 顶部四项统计 ========================= */
 type KpiItem = {
@@ -77,7 +89,7 @@ async function fetchStatistics() {
       value: data.dailySales.amount,
       rate: data.dailySales.rate,
       unit: '元',
-      to: '/reports/daily-sales'
+      to: '/report/sales/summary'
     },
     {
       key: 'gross',
@@ -85,7 +97,7 @@ async function fetchStatistics() {
       value: data.dailyGross.amount,
       rate: data.dailyGross.rate,
       unit: '元',
-      to: '/reports/daily-gross'
+      to: '/report/sales/profit'
     },
     {
       key: 'count',
@@ -93,7 +105,7 @@ async function fetchStatistics() {
       value: data.dailyCount.amount,
       rate: data.dailyCount.rate,
       unit: '笔',
-      to: '/reports/daily-orders'
+      to: '/report/sales/detail'
     },
     {
       key: 'income',
@@ -101,7 +113,7 @@ async function fetchStatistics() {
       value: data.dailyIncome.amount,
       rate: data.dailyIncome.rate,
       unit: '元',
-      to: '/funds/daily-in'
+      to: '/receipt-order-report'
     }
   ]
 }
@@ -110,7 +122,7 @@ async function fetchStatistics() {
 async function fetchShortcuts() {
   const { data } = await getFunctions()
   if (!data) return
-  shortcuts.value = data
+  shortcuts.value = Array.isArray(data) ? data.filter(item => availablePath(item.to)) : []
 }
 
 // 汇总信息
@@ -283,8 +295,10 @@ function drawFunds() {
 }
 
 /* ========================= 生命周期 ========================= */
+const resizeCharts = () => { overviewChart?.resize(); fundsChart?.resize() }
 onMounted(async () => {
-  await Promise.all([
+  window.addEventListener('resize', resizeCharts)
+  const results = await Promise.allSettled([
     fetchStatistics(),
     fetchShortcuts(),
     fetchSummary(),
@@ -292,13 +306,12 @@ onMounted(async () => {
     fetchFundsData(),
     fetchOverviewData(0)
   ])
-  window.addEventListener('resize', () => {
-    overviewChart?.resize()
-    fundsChart?.resize()
-  })
+  failedSections.value = results.filter(result => result.status === 'rejected').length
+  dashboardLoading.value = false
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts)
   overviewChart?.dispose()
   fundsChart?.dispose()
 })
@@ -306,9 +319,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="home">
+    <GettingStarted />
+    <el-alert v-if="failedSections" title="部分统计暂未加载成功，可继续使用业务入口，稍后刷新页面重试。" type="warning" :closable="false" show-icon />
+    <div class="dashboard-section-heading"><h2>经营概览</h2><span>统计数据以已录入的业务为准</span></div>
     <!-- 顶部统计 -->
-    <div class="top-row">
-      <div v-for="item in kpis" :key="item.key" class="kpi-card hoverable" @click="go(item.to)">
+    <div v-if="kpis.length || dashboardLoading" v-loading="dashboardLoading" class="top-row">
+      <button v-for="item in kpis" :key="item.key" type="button" class="kpi-card hoverable" :disabled="!availablePath(item.to)" :title="availablePath(item.to) ? '查看相关报表' : '当前账号没有相关报表入口'" @click="go(item.to)">
         <div class="kpi-header">
           <span>{{ item.label }}</span>
         </div>
@@ -318,7 +334,7 @@ onBeforeUnmount(() => {
             {{ item.rate }}%
           </div>
         </div>
-      </div>
+      </button>
     </div>
 
     <!-- 常用功能 & 汇总信息 -->
@@ -329,6 +345,7 @@ onBeforeUnmount(() => {
           <div v-for="s in shortcuts" :key="s.label" class="shortcut hoverable" @click="go(s.to)">
             <span>{{ s.label }}</span>
           </div>
+          <p v-if="!shortcuts.length" class="dashboard-empty">可从上方业务入口或顶部功能搜索开始。</p>
         </div>
       </div>
 
@@ -353,18 +370,20 @@ onBeforeUnmount(() => {
             :key="i"
             class="dot"
             :class="{ active: activeDot === i }"
-            @mouseenter="hoverDot(i)"
-          ></span>
+            role="button" tabindex="0" :aria-label="'查看' + chartTitles[i]" :title="chartTitles[i]" :aria-pressed="activeDot === i"
+            @click="hoverDot(i)" @keydown.enter="hoverDot(i)" @keydown.space.prevent="hoverDot(i)"
+          >{{ chartTitles[i] }}</span>
         </div>
       </div>
-      <div ref="overviewRef" class="chart"></div>
+      <div class="chart-panel"><div ref="overviewRef" class="chart"></div><el-empty v-if="!dashboardLoading && !(activeDot < 6 ? overviewData.length : stockData.length)" description="暂无可用统计数据" :image-size="64" /></div>
     </div>
 
     <!-- 底部资产 & 资金 -->
     <div class="bottom">
       <div class="panel">
         <div class="panel-title">资产数据</div>
-        <div class="total">总资产：{{ totalAsset.toFixed(2) }} 元</div>
+        <div v-if="assets.length" class="total">总资产：{{ totalAsset.toFixed(2) }} 元</div>
+        <el-empty v-else-if="!dashboardLoading" description="暂无可用资产数据" :image-size="64" />
         <div class="asset-list">
           <div v-for="a in assets" :key="a.label" class="asset-item hoverable" @click="go(a.to)">
             <div class="left">{{ a.label }}</div>
@@ -375,7 +394,7 @@ onBeforeUnmount(() => {
 
       <div class="panel">
         <div class="panel-title">资金数据</div>
-        <div ref="fundsRef" class="funds-chart"></div>
+        <div class="chart-panel"><div ref="fundsRef" class="funds-chart"></div><el-empty v-if="!dashboardLoading && !fundsData.length" description="暂无可用资金数据" :image-size="64" /></div>
       </div>
     </div>
   </div>
@@ -521,3 +540,10 @@ onBeforeUnmount(() => {
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.06);
 }
 </style>
+
+<style scoped>
+.home{padding:0;background:transparent;gap:20px}.dashboard-section-heading{display:flex;align-items:center;gap:12px;margin:8px 0 -6px}.dashboard-section-heading h2{font-size:17px;font-weight:600;color:#26344a}.dashboard-section-heading span{font-size:12px;color:#8490a3}.kpi-card{border:1px solid #e5eaf1;box-shadow:none;min-height:115px;text-align:left;font:inherit;gap:16px;padding:20px}.kpi-card:disabled{cursor:default;opacity:.8}.kpi-card:disabled:hover{transform:none;box-shadow:none}.amount{font-size:27px;font-variant-numeric:tabular-nums;color:#26344a}.rate{font-size:12px}.panel{border:1px solid #e5eaf1;padding:20px}.panel-title{padding-bottom:14px;color:#34455f;font-size:14px;gap:16px;flex-wrap:wrap}.dots{flex-wrap:wrap;gap:5px}.dot{width:auto;height:auto;border-radius:6px;padding:5px 9px;font-size:11px;line-height:1.4;background:#f3f6fb;color:#7a899f;cursor:pointer}.dot.active{background:#ecf2ff;color:#3565dc}.dashboard-empty{font-size:13px;color:#8a95a6;padding:14px 0}.shortcut{border-radius:8px;background:#f5f8ff;color:#4c6ba8}.asset-item{background:#f8faff;border:0}.total{color:#3565dc;font-size:18px;padding:20px 0}
+@media(max-width:1050px){.top-row{grid-template-columns:repeat(2,minmax(0,1fr))}.section,.bottom{grid-template-columns:1fr}.panel{padding:16px}}@media(max-width:560px){.top-row{grid-template-columns:1fr}.dashboard-section-heading{align-items:flex-start;flex-direction:column;gap:4px}.amount{font-size:24px}.chart{height:260px}}
+</style>
+
+<style scoped>.chart-panel{position:relative}.chart-panel>.el-empty{position:absolute;inset:0;pointer-events:none}</style>

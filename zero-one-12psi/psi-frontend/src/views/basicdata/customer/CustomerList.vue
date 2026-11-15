@@ -3,11 +3,11 @@
     <!-- 操作按钮区域 -->
     <div class="operation-bar">
       <div class="operation-left">
+        <el-input v-model="searchForm.name" aria-label="搜索客户名称" placeholder="搜索客户名称" clearable style="width:220px" @keyup.enter="handleSearch" />
+        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
         <!-- 三点下拉菜单 -->
         <div class="dropdown-menu">
-          <button class="dropdown-button" @click="dropdownVisible = !dropdownVisible">
-            <span class="dots-menu">•••</span>
-          </button>
+          <el-button class="dropdown-button" :aria-expanded="dropdownVisible" @click="dropdownVisible = !dropdownVisible">更多筛选</el-button>
           <div v-if="dropdownVisible" class="dropdown-content" @click.stop>
             <!-- 搜索表单 -->
             <div class="search-form">
@@ -89,9 +89,7 @@
                 />
               </div>
               <div class="form-row search-button-row">
-                <el-button circle @click="handleSearch">
-                  <el-icon><Search /></el-icon>
-                </el-button>
+                <el-button type="primary" :icon="Search" @click="handleSearch">查询客户</el-button>
                 <el-button @click="handleResetSearch">重置</el-button>
               </div>
             </div>
@@ -106,7 +104,7 @@
         </el-button>
         <el-button @click="handleBatch" class="action-btn">
           <el-icon><Collection /></el-icon>
-          批量
+          导入 / 导出
         </el-button>
         <el-button @click="handleRefresh" class="action-btn">
           <el-icon><Refresh /></el-icon>
@@ -141,7 +139,7 @@
   <!-- 客户编辑对话框 -->
   <el-dialog
     v-model="dialogVisible"
-    :title="dialogType === 'add' ? '新增客户' : '客户详情'"
+    :title="dialogType === 'add' ? '新增客户' : '编辑客户资料'"
     width="800px"
     :before-close="handleDialogClose"
   >
@@ -513,7 +511,7 @@ const tabdatacolumns: MyTableColumn[] = [
 // 表格操作按钮配置
 const taboperbtns: MyTableOperationsBtn[] = [
   {
-    text: '详情',
+    text: '编辑',
     attr: {
       size: 'small',
       type: 'primary',
@@ -653,7 +651,7 @@ const contactTableColumns = ref<MyTableColumn[]>([
 // 联系人表格操作按钮
 const contactTableOperBtns = ref<MyTableOperationsBtn[]>([
   {
-    text: '详情',
+    text: '编辑',
     attr: {
       size: 'small',
       type: 'primary',
@@ -1559,4 +1557,9 @@ function handleExportData() {
   padding: 6px 12px;
   font-size: 13px;
 }
+</style>
+
+<style scoped>
+.operation-bar{padding:4px 0 16px;box-shadow:none;gap:14px;flex-wrap:wrap;border-bottom:1px solid #e9eef5;border-radius:0}.operation-left{gap:9px;flex-wrap:wrap}.operation-right{gap:8px;flex-wrap:wrap}.dropdown-button{font-size:13px;padding:8px 12px}.dropdown-content{min-width:0;width:min(640px,calc(100vw - 80px));max-height:65vh;z-index:15;border:1px solid #e5eaf1;border-radius:10px}.sys-area{border-radius:12px;min-height:100%;background:#fff;border:1px solid #e5eaf1}.search-button-row{justify-content:flex-end}
+@media(max-width:720px){.dropdown-content{position:fixed;left:16px;top:150px;width:calc(100vw - 32px);max-height:calc(100dvh - 180px)}.operation-left>.el-input{width:100%!important}.operation-left,.operation-right{width:100%}}
 </style>

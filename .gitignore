@@ -28,6 +28,11 @@
 *.pdf
 *.docx
 # Local credentials, keys and deployment state
+qa/.state.json
+qa/runtime/
+qa/reports/
+**/__pycache__/
+**/data/attachments/
 **/.env*
 !**/.env.example
 *.pem

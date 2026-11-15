@@ -20,6 +20,7 @@
 #include "UserDAO.h"
 #include "UserMapper.h"
 #include "UserDetailMapper.h"
+#include "UserWriteLock.h"
 
 uint64_t UserDAO::count(const UserQuery::Wrapper& query)
 {
@@ -111,7 +112,7 @@ PtrUserDO UserDAO::selectById(const string& id)
 {
 	// 查询字段：用户名称、所属组织、所属角色、用户账号、手机号码、用户密码、用户头像、备注信息
 	string sql = "SELECT su.id, su.`name`, su.frame, su.role, su.`user`, su.tel, su.pwd, su.img, su.`data`, "
-		"an.save_path AS avatar_save_path, an.`name` AS avatar_name "  // 保留头像关联信息
+		"su.py, su.more, an.save_path AS avatar_save_path, an.`name` AS avatar_name "  // 保留头像关联信息
 		"FROM `user` su "
 		"LEFT JOIN annex an ON su.img = an.id "  // 关联附件表获取头像路径
 		"WHERE su.id = ?";  // 修正原代码的字符串拼接错误
@@ -121,7 +122,7 @@ PtrUserDO UserDAO::selectById(const string& id)
 
 
 
-PtrUserDO UserDAO::countByColumn(const string columnName,const string& columnValue) {
+PtrUserDO UserDAO::countByColumn(const string columnName,const string& columnValue, const string& excludedId) {
 	string sql = "";
 	SqlParams params;
 	//frame字段要去frame表查
@@ -138,15 +139,17 @@ PtrUserDO UserDAO::countByColumn(const string columnName,const string& columnVal
 	}
 	//user字段是sql关键字，需要特殊处理
 	if (columnName == "user") {
-		sql = "SELECT name FROM `user` WHERE `user` = ? LIMIT 1";
+		sql = "SELECT name FROM `user` WHERE `user` = ? AND id <> ? LIMIT 1";
 		SQLPARAMS_PUSH(params, "s", std::string, columnValue);
+		SQLPARAMS_PUSH(params, "s", std::string, excludedId);
 		return sqlSession->executeQueryOne<PtrUserDO>(sql, CommonUserMapper(), params);
 	}
 //----------------------------------------------------------------------------------------//
 	//其他字段都查user表（查哪个字段都行，这里随便选了name），只是条件不一样
 	if (columnName == "tel") {
-		sql = "SELECT name FROM `user` WHERE tel = ? LIMIT 1";
+		sql = "SELECT name FROM `user` WHERE tel = ? AND id <> ? LIMIT 1";
 		SQLPARAMS_PUSH(params, "s", std::string, columnValue);
+		SQLPARAMS_PUSH(params, "s", std::string, excludedId);
 		return sqlSession->executeQueryOne<PtrUserDO>(sql, CommonUserMapper(), params);
 	}
 	if (columnName == "id") {
@@ -160,6 +163,8 @@ PtrUserDO UserDAO::countByColumn(const string columnName,const string& columnVal
 }
 bool UserDAO::insertOne(const PtrUserDO& user)
 {
+	UserWriteLock writeLock(sqlSession->getConnection());
+	if (writeLock.conflicts(user->getUser(), user->getTel(), "")) return false;
 	// 构建插入SQL，使用?作为参数占位符
 	string sql = "INSERT INTO `user` ("
 		"id, name, py, tel, frame, role, `user`, pwd, img, data,token,expire,more) "  // 注意user是关键字，用`反引号包裹
@@ -190,6 +195,8 @@ bool UserDAO::insertOne(const PtrUserDO& user)
 }
 bool UserDAO::updateOne(const PtrUserDO& user)
 {
+	UserWriteLock writeLock(sqlSession->getConnection());
+	if (writeLock.conflicts(user->getUser(), user->getTel(), user->getId())) return false;
 	// 构建插入SQL，使用?作为参数占位符
 	string sql = "UPDATE `user` SET ";
 	bool isChanged = false;
@@ -200,7 +207,7 @@ bool UserDAO::updateOne(const PtrUserDO& user)
 		SQLPARAMS_PUSH(params, "s", std::string, user->getName());         // 用户名
 		isChanged = true;
 	}
-	if (!user->getPy().empty()) {
+	if (user->getPyPtr()) {
 		sql += "py = ? , ";
 		SQLPARAMS_PUSH(params, "s", std::string, user->getPy());           // 拼音（假设py是拼音字段）
 		isChanged = true;
@@ -230,12 +237,12 @@ bool UserDAO::updateOne(const PtrUserDO& user)
 		SQLPARAMS_PUSH(params, "s", std::string, user->getPwd());          // 密码
 		isChanged = true;
 	}
-	if (!user->getImg().empty()) {
+	if (user->getImgPtr()) {
 		sql += "img = ? , ";
 		SQLPARAMS_PUSH(params, "s", std::string, user->getImg());          // 头像附件ID（关联annex表的id）
 		isChanged = true;
 	}
-	if (!user->getData().empty()) {
+	if (user->getDataPtr()) {
 		sql += "data = ? , ";
 		SQLPARAMS_PUSH(params, "s", std::string, user->getData());          // 备注
 		isChanged = true;
@@ -250,14 +257,13 @@ bool UserDAO::updateOne(const PtrUserDO& user)
 	//	SQLPARAMS_PUSH(params, "i", std::int32_t, user->getExpire());          // 密钥时长
 	//	isChanged = true;
 	//}
-	if (!user->getMore().empty()) {
+	if (user->getMorePtr()) {
 		sql += "more = ? , ";
 		SQLPARAMS_PUSH(params, "s", std::string, user->getMore());          // 扩展
 		isChanged = true;
 	}
 	if (!isChanged) {
-		//没有更新
-		return false;
+		return selectById(user->getId()) != nullptr;
 	}
 	sql = sql.substr(0, sql.size() - 2);// 去掉最后的逗号和空格
 	sql += " WHERE id = ?";
@@ -266,8 +272,19 @@ bool UserDAO::updateOne(const PtrUserDO& user)
 	// 执行插入操作，返回是否成功（影响行数>0则视为成功）
 	int64_t affectedRows = sqlSession->executeUpdate(sql, params);
 
-	return affectedRows > 0;
-	//return true;
+	if (affectedRows > 0) return true;
+	auto saved = selectById(user->getId());
+	if (!saved) return false;
+	return (user->getName().empty() || saved->getName() == user->getName()) &&
+		(!user->getPyPtr() || saved->getPy() == user->getPy()) &&
+		(user->getTel().empty() || saved->getTel() == user->getTel()) &&
+		(user->getFrame().empty() || saved->getFrame() == user->getFrame()) &&
+		(user->getRole().empty() || saved->getRole() == user->getRole()) &&
+		(user->getUser().empty() || saved->getUser() == user->getUser()) &&
+		(user->getPwd().empty() || saved->getPwd() == user->getPwd()) &&
+		(!user->getImgPtr() || saved->getImg() == user->getImg()) &&
+		(!user->getDataPtr() || saved->getData() == user->getData()) &&
+		(!user->getMorePtr() || saved->getMore() == user->getMore());
 }
 bool UserDAO::deleteOneById(const std::string& id) {
 	string sql = "DELETE FROM `user` WHERE id = ?";

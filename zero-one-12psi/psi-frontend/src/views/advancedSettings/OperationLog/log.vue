@@ -131,7 +131,7 @@
         </div>
         <template #reference>
           <!-- 筛选按钮 -->
-          <el-button :icon="MoreFilled" @click="togglePopover" />
+          <el-button :icon="MoreFilled" @click="togglePopover">筛选查询</el-button>
         </template>
       </el-popover>
 

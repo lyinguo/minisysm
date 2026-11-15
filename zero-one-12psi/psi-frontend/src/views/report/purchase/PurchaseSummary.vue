@@ -15,7 +15,7 @@
         >
           <template #reference>
             <el-button class="search-btn">
-              <el-icon><MoreFilled /></el-icon>
+              <el-icon><MoreFilled /></el-icon><span>筛选查询</span>
             </el-button>
           </template>
           <div class="search-popover">

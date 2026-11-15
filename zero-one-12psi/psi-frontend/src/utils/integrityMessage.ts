@@ -1,6 +1,6 @@
 const names: Record<string, string> = {
   customer: '客户', supplier: '供应商', goods: '商品', warehouse: '仓库', account: '资金账户',
-  frame: '组织', people: '人员', role: '角色', menu: '菜单', dict_type: '字典类型', user: '用户'
+  frame: '组织', people: '人员', role: '角色', menu: '菜单', dict_type: '字典类型', user: '用户', annex: '附件'
 }
 
 export function integrityMessage(value: unknown): string | undefined {

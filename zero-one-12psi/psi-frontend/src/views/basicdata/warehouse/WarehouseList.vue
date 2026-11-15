@@ -5,8 +5,8 @@
       <div class="operation-left">
         <!-- 三点下拉菜单 -->
         <div class="dropdown-menu">
-          <button class="dropdown-button" @click="dropdownVisible = !dropdownVisible">
-            <span class="dots-menu">•••</span>
+          <button class="dropdown-button visible-filter-trigger" :aria-expanded="dropdownVisible" @click="dropdownVisible = !dropdownVisible">
+            <span class="dots-menu">筛选查询</span>
           </button>
           <div v-if="dropdownVisible" class="dropdown-content" @click.stop>
             <!-- 搜索表单（移除联系人员、电话、地址） -->

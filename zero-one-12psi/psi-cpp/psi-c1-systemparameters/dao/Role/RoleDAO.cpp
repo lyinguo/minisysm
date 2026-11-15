@@ -154,7 +154,25 @@ uint64_t RoleDAO::countUsersByRoleId(const std::string& roleId)
 // Supply the required keyword without altering RoleDO's layout or built-in keywords.
 int RoleDAO::insertCustomRole(const RoleDO& role)
 {
+    // Encode all 128 UUID bits into 22 URL-safe characters; keyword is varchar(24).
+    const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    std::string keyword = "R_";
+    unsigned int buffer = 0;
+    int bits = 0;
+    for (char character : role.getId()) {
+        if (character == '-') continue;
+        int digit = character >= '0' && character <= '9' ? character - '0' :
+            character >= 'a' && character <= 'f' ? character - 'a' + 10 :
+            character >= 'A' && character <= 'F' ? character - 'A' + 10 : -1;
+        if (digit < 0) return 0;
+        buffer = (buffer << 4) | digit;
+        bits += 4;
+        if (bits >= 6) { bits -= 6; keyword += alphabet[(buffer >> bits) & 63]; }
+    }
+    if (bits) keyword += alphabet[(buffer << (6 - bits)) & 63];
+    if (keyword.size() != 24) return 0;
     return sqlSession->executeUpdate(
-        "INSERT INTO role(id,name,data,root,auth,keyword) VALUES(?,?,?,?,?,'')",
-        "%s%s%s%s%s", role.getId(), role.getName(), role.getData(), role.getRoot(), role.getAuth());
+        "INSERT INTO role(id,name,data,root,auth,keyword) VALUES(?,?,?,?,?,?)",
+        "%s%s%s%s%s%s", role.getId(), role.getName(), role.getData(), role.getRoot(), role.getAuth(),
+        keyword);
 }

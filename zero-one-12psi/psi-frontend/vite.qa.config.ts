@@ -1,0 +1,33 @@
+import { mergeConfig, defineConfig } from 'vite'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import base from './vite.config'
+
+const privateSession = fileURLToPath(new URL('../../qa/runtime/browser-session.json', import.meta.url))
+const config = mergeConfig(base, defineConfig({
+  server: {
+    host: '127.0.0.1', port: 18030, strictPort: true, open: false,
+    hmr: { host: '127.0.0.1', port: 18030 },
+  },
+  plugins: [{
+    name: 'private-qa-session',
+    configureServer(server) {
+      server.middlewares.use('/api', (request, response, next) => {
+        if (request.url?.startsWith('/c1-systemparameters/') || request.url?.startsWith('/j7-sysargs/')) { next(); return }
+        response.statusCode = 503
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.end(JSON.stringify({ code: 9998, message: '隔离验收环境尚未启动此业务服务' }))
+      })
+      server.middlewares.use('/qa-session', (_request, response) => {
+        response.setHeader('Content-Type', 'application/json')
+        response.setHeader('Cache-Control', 'no-store')
+        response.end(readFileSync(privateSession, 'utf-8'))
+      })
+    }
+  }]
+}))
+config.server!.proxy = {
+  '/api/c1-systemparameters': { target: 'http://127.0.0.1:18091', rewrite: path => path.replace('/api/c1-systemparameters', '') },
+  '/api/j7-sysargs': { target: 'http://127.0.0.1:18007', rewrite: path => path.replace('/api/j7-sysargs', '') }
+}
+export default config

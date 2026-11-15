@@ -94,7 +94,7 @@ export function modifyUser(data: UserModDTO): Promise<UserJsonVO> {
  */
 export function deleteUser(id: string): Promise<UserJsonVO> {
   const http = useHttp()
-  return http.delete<UserJsonVO>(currBaseUrl + '/del-user', { data: id }) as Promise<UserJsonVO>
+  return http.delete<UserJsonVO>(currBaseUrl + '/del-user?id=' + encodeURIComponent(id)) as Promise<UserJsonVO>
 }
 
 export default {

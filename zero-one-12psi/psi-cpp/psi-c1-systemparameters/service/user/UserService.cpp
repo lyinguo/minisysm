@@ -103,28 +103,33 @@ UserDetailDTO::Wrapper UserService::getUserDetail(const oatpp::String& id)
 	return dto;
 }
 
-bool UserService::checkUserExists(const String& user) {
+bool UserService::checkUserExists(const String& user, const String& excludedId) {
+	if (!user || user->empty()) return false;
 	UserDAO ud;
-	return ud.countByColumn("user", std::string(user->c_str())) != nullptr;
+	return ud.countByColumn("user", user.getValue(""), excludedId.getValue("")) != nullptr;
 	//return true;
 }
-bool UserService::checkTelExists(const String& tel) {
+bool UserService::checkTelExists(const String& tel, const String& excludedId) {
+	if (!tel || tel->empty()) return false;
 	UserDAO ud;
-	return ud.countByColumn("tel", std::string(tel->c_str())) != nullptr;
+	return ud.countByColumn("tel", tel.getValue(""), excludedId.getValue("")) != nullptr;
 	//return true;
 }
 bool UserService::checkFrameExists(const String& frame) {
+	if (!frame || frame->empty()) return false;
 	UserDAO ud;
 	return ud.countByColumn("frame", std::string(frame->c_str()))!= nullptr;
 	//return true;
 }
 bool UserService::checkRoleExists(const String& role) {
+	if (!role || role->empty()) return false;
 	UserDAO ud;
 	return ud.countByColumn("role", std::string(role->c_str()))!= nullptr;
 	//return true;
 }
 
 bool UserService::checkIdExists(const String& id) {
+	if (!id || id->empty()) return false;
 	UserDAO ud;
 	return ud.countByColumn("id", std::string(id->c_str()))!= nullptr;
 	//return true;
@@ -154,7 +159,7 @@ String UserService::addUser(const UserAddDTO::Wrapper& dto) {
 	PtrUserDO udo=std::make_shared<UserDO>();
 	//必填字段
 	udo->setName(dto->name->c_str());
-	udo->setPy(dto->py->c_str());
+	udo->setPy(dto->py.getValue(dto->user.getValue("")));
 	udo->setTel(dto->tel->c_str());
 	udo->setFrame(dto->frame->c_str());
 	udo->setRole(dto->role->c_str());
@@ -205,27 +210,30 @@ String UserService::addUser(const UserAddDTO::Wrapper& dto) {
 	return "";
 }
 bool UserService::modUser(const UserModDTO::Wrapper& dto) {
+	if (!dto || !dto->id) return false;
+	UserDAO ud;
+	auto original = ud.selectById(dto->id.getValue(""));
+	if (!original) return false;
 	PtrUserDO udo = std::make_shared<UserDO>();
 	//将dto中的数据复制到udo中
 	udo->setId(dto->id->c_str());
-	udo->setName(dto->name->c_str());
-	udo->setPy(dto->py->c_str());
-	udo->setTel(dto->tel->c_str());
-	udo->setFrame(dto->frame->c_str());
-	udo->setRole(dto->role->c_str());
-	udo->setUser(dto->user->c_str());
+	udo->setName(dto->name.getValue(original->getName()));
+	if (dto->py) udo->setPy(dto->py.getValue(""));
+	udo->setTel(dto->tel.getValue(original->getTel()));
+	udo->setFrame(dto->frame.getValue(original->getFrame()));
+	udo->setRole(dto->role.getValue(original->getRole()));
+	udo->setUser(dto->user.getValue(original->getUser()));
 	//若密码不为空，则加密密码
-	if (!dto->pwd->empty()) {
+	if (dto->pwd && !dto->pwd->empty()) {
 		std::string hash = bcrypt::generateHash(dto->pwd->c_str());
 		udo->setPwd(hash);
 	}
 	else {
-		udo->setPwd(dto->pwd->c_str());
+		udo->setPwd("");
 	}
-	udo->setImg(dto->img->c_str());
-	udo->setData(dto->data->c_str());
-	udo->setMore(dto->more->c_str());
-	UserDAO ud;
+	if (dto->img) udo->setImg(dto->img.getValue(""));
+	if (dto->data) udo->setData(dto->data.getValue(""));
+	if (dto->more) udo->setMore(dto->more.getValue(""));
 	return ud.updateOne(udo);
 }
 

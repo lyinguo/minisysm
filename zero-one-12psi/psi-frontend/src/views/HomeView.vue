@@ -1,13 +1,14 @@
 <template>
   <div class="header-row">
     <!-- 应用信息栏 -->
-    <div class="header-title">
+    <div class="header-title" :class="{ 'is-collapsed': isCollapse }">
       <img v-show="!isCollapse" class="app-icon" src="/logo.jpg" :title="appName" />
       <el-text v-show="!isCollapse" class="app-name">{{ appName }}</el-text>
       <el-button
         v-show="isCollapse"
         link
         class="collapse-btn"
+        aria-label="展开导航"
         icon="IconExpand"
         @click="isCollapse = !isCollapse"
       ></el-button>
@@ -15,14 +16,16 @@
         v-show="!isCollapse"
         link
         class="collapse-btn"
+        aria-label="收起导航"
         icon="IconFold"
         @click="isCollapse = !isCollapse"
       ></el-button>
     </div>
     <!-- 导航栏 -->
     <div class="header-nav">
-      <el-tooltip content="刷新Token" effect="light" placement="bottom">
-        <el-button link class="nav-btn" @click="handleReload">
+      <NavigationSearch />
+      <el-tooltip content="重新加载当前页面" effect="light" placement="bottom">
+        <el-button link class="nav-btn" aria-label="刷新当前页面" @click="handleReload">
           <el-icon size="18">
             <IconReset />
           </el-icon>
@@ -52,11 +55,13 @@
   <div class="content-row">
     <!-- 侧边菜单栏 -->
     <el-menu
+      class="sidebar-menu"
+      aria-label="业务功能导航"
       :collapse="isCollapse"
       :default-active="menuActivePath"
-      active-text-color="#409EFF"
-      text-color="#fff"
-      background-color="#545c64"
+      active-text-color="#fff"
+      text-color="#b6c5dc"
+      background-color="#14243e"
       unique-opened
       :collapse-transition="false"
       @select="handleMenuSelect"
@@ -65,7 +70,7 @@
         <el-icon>
           <IconHomeFilled />
         </el-icon>
-        <span>首页</span>
+        <span>工作台</span>
       </el-menu-item>
       <!-- 菜单为空时的提示 -->
       <el-menu-item v-if="menus.length === 0" disabled>
@@ -169,7 +174,7 @@
             <el-icon>
               <IconHomeFilled />
             </el-icon>
-            <span style="padding-left: 5px">首页</span>
+            <span style="padding-left: 5px">工作台</span>
           </template>
         </el-tab-pane>
 
@@ -222,6 +227,7 @@
         </el-tab-pane>
       </el-tabs>
 
+      <PageGuide />
       <!-- 由 RouterView 管理组件实例和路由离开守卫。 -->
       <div class="routerPage">
         <router-view v-slot="{ Component, route: pageRoute }">
@@ -240,21 +246,22 @@ import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useUserStore } from '@/stores/user'
 import { useTabStore } from '@/stores/tab'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import type { TabPaneName, TabsPaneContext } from 'element-plus'
 import type { Menu } from '@/apis/login/type'
 import { useRenderIcon } from '@/components/ReIcon/src/hooks'
 import RoutePageBoundary from '@/components/RoutePageBoundary.vue'
+import NavigationSearch from '@/components/workspace/NavigationSearch.vue'
+import PageGuide from '@/components/workspace/PageGuide.vue'
 // 应用名称
-const appName = import.meta.env.VITE_APP_TITLE
+const appName = import.meta.env.VITE_APP_TITLE || '进销存管理系统'
 // 当前用户信息
 const ustore = useUserStore()
 // 用户信息提示
 const { user, menus } = storeToRefs(ustore)
-const userInfo = ref('欢迎用户：' + (user.value === null ? '游客' : user.value.username))
 // 菜单是是否折叠
-const isCollapse = ref(false)
+const isCollapse = ref(typeof window !== 'undefined' && window.innerWidth < 1000)
 // 监听菜单变化，如果菜单为空则提示用户
 const hasShownEmptyMenuWarning = ref(false)
 watch(
@@ -373,30 +380,12 @@ function openReport(menuItem: any) {
   }
 }
 
-/** 刷新token */
+/** Reload only the current business page; session refresh belongs to the HTTP layer. */
 async function handleReload() {
   try {
-    // 调用 store 的刷新 token 方法
-    await ustore.reloadToken()
-    // 注意：不在这里调用 loadUser()，因为页面刷新后路由守卫会自动调用
-    ElMessage({
-      type: 'success',
-      message: 'Token刷新成功，正在刷新页面...',
-      duration: 1000
-    })
-    // 延迟一下让用户看到成功消息，然后刷新页面
-    // 页面刷新后，路由守卫会自动调用 loadUser() 加载用户信息
-    setTimeout(() => {
-      window.location.reload()
-    }, 500)
-  } catch (err) {
-    ElMessage({
-      type: 'error',
-      message: 'Token刷新失败，请重新登录!'
-    })
-    // 如果刷新失败，跳转到登录页
-    router.push({ name: 'Login' })
-  }
+    await ElMessageBox.confirm('重新加载后，当前页面尚未保存的内容将丢失。是否继续？', '刷新当前页面', { confirmButtonText: '重新加载', cancelButtonText: '保留当前页面', type: 'warning' })
+    tabstore.bumpViewKey()
+  } catch { /* Cancellation keeps the current page intact. */ }
 }
 
 /** 处理下拉菜单命令 */
@@ -431,7 +420,7 @@ async function handleLogout() {
 <style>
 :root {
   --home-header-height: 60px;
-  --home-menu-width: 220px;
+  --home-menu-width: 240px;
 }
 .main .el-tabs {
   .el-tabs__header {
@@ -449,178 +438,19 @@ async function handleLogout() {
 </style>
 
 <style scoped>
-.header-row {
-  height: var(--home-header-height);
-  background-color: #6c777f;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  .header-title {
-    width: var(--home-menu-width);
-    padding-left: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    .app-icon {
-      width: 30px;
-      border-radius: 5px;
-    }
-    .app-name {
-      color: white;
-      font-size: 16px;
-    }
-
-    .collapse-btn {
-      color: white;
-      font-size: 24px;
-    }
-  }
-
-  .header-nav {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 10px;
-    padding-right: 15px;
-    color: #f8f8f8;
-    text-align: right;
-
-    .nav-btn {
-      color: #f8f8f8;
-      padding: 8px;
-    }
-
-    .nav-btn:hover {
-      color: #409eff;
-    }
-
-    .user-dropdown {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      color: #f8f8f8;
-      padding: 4px 8px;
-      border-radius: 4px;
-      transition: background-color 0.3s;
-
-      &:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-      }
-
-      .user-name {
-        font-size: 14px;
-      }
-    }
-  }
-}
-.content-row {
-  height: calc(100vh - var(--home-header-height));
-  display: flex;
-  flex-direction: row;
-
-  .el-menu {
-    border: 0;
-    width: var(--home-menu-width);
-    height: 100%;
-    overflow: auto;
-  }
-
-  .el-menu--collapse {
-    width: calc(var(--el-menu-icon-width) + var(--el-menu-base-level-padding) * 2);
-  }
-
-  .main {
-    flex: 1;
-    background-color: #edecec;
-    width: calc(100vw - var(--home-menu-width));
-    height: 100%;
-    overflow: auto;
-
-    .operation-icon {
-      padding: calc(var(--el-tabs-header-height) / 2 - 12px) 20px;
-    }
-  }
-}
-.routerPage {
-  position: relative;
-  isolation: isolate;
-  padding: 12px;
-  overflow: auto;
-  box-sizing: border-box;
-  height: calc(100% - 41px);
-  min-height: 0;
-}
-
-/* 菜单项报表按钮样式 */
-.menu-item-with-report {
-  padding: 0 !important;
-}
-
-/* 居中显示的菜单项（无报表按钮） */
-.menu-item-centered {
-  padding: 0 !important;
-}
-
-.menu-item-centered .menu-item-content {
-  padding-left: 60px;
-  justify-content: flex-start;
-}
-
-.menu-item-content {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding-left: 40px;
-  padding-right: 10px;
-}
-
-.menu-item-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.report-btn {
-  font-size: 12px;
-  padding: 2px 8px;
-  height: 24px;
-  margin-left: 8px;
-  opacity: 0.8;
-}
-
-.report-btn:hover {
-  opacity: 1;
-}
-
-/* 子菜单标题样式 */
-.sub-menu-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding-right: 10px;
-}
-
-.sub-menu-title-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-
-.sub-menu-report-btn {
-  font-size: 12px;
-  padding: 2px 8px;
-  height: 24px;
-  margin-left: 8px;
-  opacity: 0.8;
-}
-
-.sub-menu-report-btn:hover {
-  opacity: 1;
-}
+.header-row{height:var(--home-header-height);background:#fff;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e8edf5;position:relative;z-index:10}
+.header-title{width:var(--home-menu-width);height:100%;padding:0 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;background:#14243e}
+.app-icon{width:32px;height:32px;object-fit:cover;border-radius:8px}.app-name{color:#fff;font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.collapse-btn{color:#b6c5dc;font-size:22px;margin-left:auto}
+.header-title.is-collapsed{width:64px;padding:0;justify-content:center}.header-title.is-collapsed .collapse-btn{margin:0}.header-nav{flex:1;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:18px;padding:0 24px;color:#405371}.nav-btn{color:#68788f;padding:8px}.nav-btn:hover{color:#3565dc}
+.user-dropdown{display:flex;align-items:center;gap:9px;cursor:pointer;color:#34435b;padding:4px 8px;border-radius:8px}.user-dropdown:hover{background:#f2f5fa}.user-name{font-size:13px}
+.content-row{height:calc(100dvh - var(--home-header-height));display:flex;overflow:hidden}.sidebar-menu{flex-shrink:0;width:var(--home-menu-width);height:100%;overflow:auto;border:0;padding:14px 8px}
+.sidebar-menu.el-menu--collapse{width:64px;padding-inline:4px}.sidebar-menu :deep(.el-sub-menu__title),.sidebar-menu :deep(.el-menu-item){height:44px;line-height:44px;margin:3px 0;border-radius:7px;font-size:13px}
+.sidebar-menu :deep(.el-menu-item.is-active){background:#315fcd!important;box-shadow:0 3px 12px #091a3838}.sidebar-menu :deep(.el-sub-menu__title:hover),.sidebar-menu :deep(.el-menu-item:not(.is-active):hover){background:#203554!important}
+.sidebar-menu :deep(.el-menu-item-group__title){padding:0}.sidebar-menu :deep(.el-sub-menu .el-menu){background:#14243e}.sidebar-menu :deep(.el-sub-menu__title .el-icon){color:inherit}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:#f3f6fb;height:100%;overflow:hidden}.main>.el-tabs{flex:none;border:0;box-shadow:none;background:#fff}.main :deep(.el-tabs__nav-wrap){padding-left:14px}.main :deep(.el-tabs__item){font-size:13px}.main :deep(.el-tabs__item.is-active){color:#3565dc;background:#f2f6ff!important}
+.operation-icon{padding:8px 16px}.routerPage{position:relative;padding:18px 22px;overflow:auto;box-sizing:border-box;flex:1;min-height:0;min-width:0}
+.menu-item-with-report,.menu-item-centered{padding:0!important}.menu-item-content{display:flex;align-items:center;justify-content:space-between;width:100%;padding-left:32px;padding-right:8px;min-width:0}.menu-item-left,.sub-menu-title-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1}.menu-item-left>span,.sub-menu-title-left>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.report-btn,.sub-menu-report-btn{font-size:11px;padding:2px 6px;height:22px;margin-left:6px;color:#a9c5ff!important;background:#254067!important}.report-btn:hover,.sub-menu-report-btn:hover{color:#fff!important;background:#365a95!important}.sub-menu-title{display:flex;align-items:center;justify-content:space-between;width:100%;padding-right:5px;min-width:0}
+@media(max-width:1000px){.header-nav{gap:10px;padding:0 14px}.user-name{max-width:90px;overflow:hidden;text-overflow:ellipsis}.routerPage{padding:14px}}
+@media(max-width:720px){.header-title{width:64px;padding:0 14px}.app-name,.app-icon{display:none!important}.header-nav{gap:6px;padding:0 8px}.user-name{display:none}.sidebar-menu:not(.el-menu--collapse){position:absolute;z-index:20;box-shadow:8px 0 24px #15243b26;width:220px}.routerPage{padding:10px}}
 </style>

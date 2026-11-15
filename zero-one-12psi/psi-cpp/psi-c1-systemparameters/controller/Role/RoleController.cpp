@@ -52,7 +52,7 @@ StringJsonVO::Wrapper RoleController::executeAddRole(const RoleAddDTO::Wrapper& 
 	dto->setPayload(&payload);
 	std::string id = service.saveData(dto);
 	if (id != "") {
-		jvo->success("");
+		jvo->success(id);
 	}
 	else
 	{

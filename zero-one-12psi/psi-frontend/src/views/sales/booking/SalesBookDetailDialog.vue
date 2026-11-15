@@ -17,8 +17,8 @@
           width="800"
         >
           <template #reference>
-            <el-button plain class="square-btn">
-              <el-icon><MoreFilled /></el-icon>
+            <el-button plain class="square-btn party-selector">
+              <el-icon><MoreFilled /></el-icon><span>选择客户</span>
             </el-button>
           </template>
           <!-- 客户搜索组件 -->
@@ -1149,3 +1149,5 @@ const save = async () => {
   gap: 10px;
 }
 </style>
+
+<style scoped>.party-selector.el-button{width:auto!important;min-width:100px;padding:8px 12px;gap:6px}</style>
