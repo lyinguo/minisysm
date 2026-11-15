@@ -29,3 +29,7 @@
 在专用 sale 服务运行后，分别执行 `python qa/sale_draft_acceptance.py baseline`、`python qa/sale_draft_acceptance.py lifecycle`、`python qa/sale_draft_acceptance.py security`。测试真实创建新账号和销售草稿，并验证持久化、版本冲突、回滚及权限撤销；权限数据仅调整专用 QA Redis，结束恢复原测试键。不能指向运行环境 Redis。
 
 `python qa/sale_schema_acceptance.py` 另建临时空库并实际启动候选服务，验证旧 DECIMAL(5,2) 税率/折扣字段自动扩为 DECIMAL(7,4)，已有数值不变；不把历史百分数自动重写为比例。源码迁移位于 `database/migrations/20261115_sale_rate_precision.sql`。审核、库存和资金联动仍须独立验收。
+
+## 销售审核与资金库存基线
+
+运行 `python qa/sale_posting_acceptance.py`。每个场景重新建立专用资料，通过真实库存入库接口准备数量，再通过销售新增、核对、审核接口检查真实库存、应收、账户、流水、反审核、批量与并发。当前已复现6项失败，命令返回非零是拒绝交付的验收结果，不能删除断言或改成仅检查审核状态来消除失败。销售服务与库存服务必须连接同一个专用QA数据库，库存服务不能指向现有业务端口。
