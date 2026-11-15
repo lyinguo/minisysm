@@ -1,7 +1,7 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest'
 import {shallowMount,flushPromises} from '@vue/test-utils'
 import {ElMessage,ElMessageBox} from 'element-plus'
-const api=vi.hoisted(()=>({deletePurchaseOrders:vi.fn()}))
+const api=vi.hoisted(()=>({deletePurchaseOrders:vi.fn(),importTemplate:vi.fn()}))
 vi.mock('@/apis/purchase/PurchaseBooking/order',()=>({PurchaseOrderAPI:api}))
 vi.mock('@/components/goodSearchConpoent',()=>({PurchaseSearchForm:{template:'<div />'}}))
 vi.mock('./PurchaseBookDetailDialog.vue',()=>({default:{template:'<div />'}}))

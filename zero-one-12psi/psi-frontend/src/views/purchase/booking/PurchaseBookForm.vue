@@ -38,6 +38,8 @@
             :show-refresh="false"
             :table-columns="columns"
             :import-api="handleImportFile"
+            :import-template-api="PurchaseOrderAPI.importTemplate.bind(PurchaseOrderAPI)"
+            import-instructions="先下载模板并阅读“填写说明”，第3行开始填写资料编号。供应商需有启用的商品供货关系；每张订单一家供应商。自动计算金额留空，重复单号整批拒绝，仅保存未审核草稿。"
             :template-file-name="'采购订单导入模板'"
             :export-simple-report-api="handleExportSimpleReport"
             :selected-order-ids="selectedOrderIds"

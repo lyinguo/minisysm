@@ -7,6 +7,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.*;
+import cn.hutool.json.JSONArray;
+import cn.hutool.json.JSONObject;
 
 /** Atomic order draft creation; it neither audits nor posts stock or money. */
 @Service
@@ -27,9 +29,30 @@ public class PurchaseOrderDraftService {
             if(!"0".equals(actual) && !frame.equals(actual))throw new IllegalArgumentException(label+"与制单组织不一致");
         }
     }
+    private void requireUnit(String goods,String unit){
+        Map<String,Object> product=db.queryForMap("SELECT unit,units FROM goods WHERE id=?",goods);
+        if(!"-1".equals(String.valueOf(product.get("unit")))){
+            if(!unit.equals(String.valueOf(product.get("unit"))))throw new IllegalArgumentException("商品单位不匹配");return;
+        }
+        try{
+            JSONArray units=new JSONArray(String.valueOf(product.get("units")));
+            if(units.isEmpty())throw new IllegalArgumentException("商品多单位配置为空");
+            if(unit.equals(units.getJSONObject(0).getStr("source")))return;
+            BigDecimal factor=BigDecimal.ONE;
+            for(Object value:units){JSONObject row=new JSONObject(value);factor=factor.multiply(row.getBigDecimal("nums",BigDecimal.ZERO));if(factor.signum()<=0)throw new IllegalArgumentException("单位换算率必须大于零");if(unit.equals(row.getStr("name")))return;}
+        }catch(IllegalArgumentException error){throw error;}catch(Exception error){throw new IllegalArgumentException("商品多单位配置无效");}
+        throw new IllegalArgumentException("单位不存在于商品多单位配置");
+    }
     @Transactional(rollbackFor=Exception.class)
     public String create(PurchaseOrderAddDTO request) {
-        UserDTO actor=access.authorize("/purchase-order/add");String frame=actor.getFrameId();
+        return createAuthorized(request,"/purchase-order/add");
+    }
+    @Transactional(rollbackFor=Exception.class)
+    public String createImported(PurchaseOrderAddDTO request) {
+        return createAuthorized(request,"/purchase-order/import-bor");
+    }
+    private String createAuthorized(PurchaseOrderAddDTO request,String resource) {
+        UserDTO actor=access.authorize(resource);String frame=actor.getFrameId();
         reference("frame",frame,null,"所属组织",false);
         if(request==null || request.getPurchaseOrderInfoDTOList()==null || request.getPurchaseOrderInfoDTOList().isEmpty() || request.getPurchaseOrderInfoDTOList().size()>200)
             throw new IllegalArgumentException("请填写1到200条采购订单明细");
@@ -48,6 +71,7 @@ public class PurchaseOrderDraftService {
             reference("goods",line.getGoods(),null,"商品",false);
             reference("warehouse",line.getWarehouse(),frame,"仓库",false);
             if(line.getUnit()==null || line.getUnit().trim().isEmpty())throw new IllegalArgumentException("商品单位不能为空");
+            requireUnit(line.getGoods(),line.getUnit());
             length(line.getUnit(),32,"商品单位");length(line.getAttr(),64,"辅助属性");length(line.getData(),256,"明细备注");
             if(!absent(line.getAttr()) && db.queryForObject("SELECT COUNT(*) FROM attr WHERE pid=? AND name=?",Integer.class,line.getGoods(),line.getAttr())!=1)
                 throw new IllegalArgumentException("商品辅助属性不存在，请重新选择");

@@ -170,11 +170,15 @@ public class PurchaseOrderController implements PurchaseOrderApis {
     @ApiOperation("导入数据")
     @Override
     public JsonVO<String> importBor(@RequestParam("file") MultipartFile file) {
-        if (borService.importBor(file)) {
-            return JsonVO.success("导入数据成功!");
-        }else {
-            return JsonVO.fail("导入数据失败!");
-        }
+        try { return JsonVO.success(orderImports.importFile(file)); }
+        catch(java.io.IOException error) { throw new IllegalArgumentException("Excel文件无法读取，请重新下载模板",error); }
+    }
+
+    @Resource private PurchaseOrderImportService orderImports;
+    @GetMapping("/import/template")
+    public ResponseEntity<byte[]> importTemplate() throws java.io.IOException {
+        return ResponseEntity.ok().header("Content-Disposition","attachment; filename=purchase-order-import.xlsx")
+                .header("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").body(orderImports.template());
     }
 
     @GetMapping("/export-bor")

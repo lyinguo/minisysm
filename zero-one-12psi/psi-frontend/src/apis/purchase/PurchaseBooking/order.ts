@@ -1,6 +1,5 @@
 import { useHttp, DataUpType } from '@/plugins/http'
 import type { ApiResponse, PageDTO } from '@/apis/type'
-import { read, utils } from 'xlsx'
 
 // 定义一个功能模块基础url，方便替换
 const currBaseUrl = '/j3-purchase/purchase-order'
@@ -971,112 +970,16 @@ export class PurchaseOrderAPI {
    * @param file 要上传的Excel文件
    * @returns 响应数据
    */
-  static async importPurchaseOrders(
-    file: File
-  ): Promise<ApiResponse<string>> {
-    try {
-      if (!file) {
-        throw new Error('文件不能为空')
-      }
+  static async importTemplate(): Promise<Blob> {
+    return this.http.getFile(`${currBaseUrl}/import/template`, {}, { responseType: 'blob' })
+  }
 
-      // 验证文件类型
-      const fileName = file.name.toLowerCase()
-      if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
-        throw new Error('只支持上传 .xlsx 或 .xls 格式的Excel文件')
-      }
-
-      console.log('📤 [导入采购订单] 开始上传文件:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        url: `${currBaseUrl}/import-bor`
-      })
-
-      // 在上传前读取Excel内容，用于调试
-      try {
-        const fileBuffer = await file.arrayBuffer()
-        const workbook = read(fileBuffer, { type: 'array' })
-        const sheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[sheetName]
-        
-        // 读取Excel数据（包含表头）
-        const jsonData = utils.sheet_to_json(worksheet, { 
-          header: 1, // 使用数组格式，第一行是表头
-          defval: '' // 空单元格使用空字符串
-        })
-        
-        console.log('📋 [导入采购订单] Excel文件内容预览:')
-        console.log('工作表名称:', sheetName)
-        console.log('总行数:', jsonData.length)
-        console.log('前5行数据:', jsonData.slice(0, 5))
-        
-        // 如果有数据，打印表头和前几行数据
-        if (jsonData.length > 0) {
-          console.log('表头（第1行）:', jsonData[0])
-          if (jsonData.length > 1) {
-            console.log('第2行数据:', jsonData[1])
-          }
-          if (jsonData.length > 2) {
-            console.log('第3行数据:', jsonData[2])
-            const row3 = jsonData[2] as any[]
-            if (Array.isArray(row3)) {
-              console.log('第3行数据类型检查:', row3.map((cell: any, index: number) => ({
-                index,
-                value: cell,
-                type: typeof cell,
-                isEmpty: cell === null || cell === undefined || cell === '' || String(cell).trim() === ''
-              })))
-            }
-          }
-          if (jsonData.length > 3) {
-            console.log('第4行数据:', jsonData[3])
-            const row4 = jsonData[3] as any[]
-            if (Array.isArray(row4)) {
-              console.log('第4行数据类型检查:', row4.map((cell: any, index: number) => ({
-                index,
-                value: cell,
-                type: typeof cell,
-                isEmpty: cell === null || cell === undefined || cell === '' || String(cell).trim() === ''
-              })))
-            }
-          }
-        }
-        
-        // 使用对象格式读取（以表头为key）
-        const jsonDataWithHeaders = utils.sheet_to_json(worksheet, {
-          defval: '',
-          raw: false // 不保留原始值，转换为字符串
-        })
-        console.log('📊 [导入采购订单] Excel数据（对象格式，前3条）:', jsonDataWithHeaders.slice(0, 3))
-        
-      } catch (parseError) {
-        console.warn('⚠️ [导入采购订单] 解析Excel文件失败（不影响上传）:', parseError)
-      }
-
-      // 使用 postWithFile 方法上传文件
-      const result = await this.http.postWithFile<string>(
-        `${currBaseUrl}/import-bor`,
-        { file },
-        {
-          showLoading: true
-        }
-      )
-
-      console.log('✅ [导入采购订单] 上传成功:', result)
-      return result
-    } catch (error: any) {
-      console.error('❌ [导入采购订单] 上传失败:', error)
-      if (error.response) {
-        console.error('响应数据:', error.response.data)
-        console.error('响应状态:', error.response.status)
-        
-        // 如果后端返回了详细的错误信息，打印出来
-        if (error.response.data?.data) {
-          console.error('后端错误详情:', error.response.data.data)
-        }
-      }
-      throw error
-    }
+  static async importPurchaseOrders(file: File): Promise<ApiResponse<string>> {
+    if (!file || !/\.xlsx?$/i.test(file.name)) throw new Error('请选择 .xlsx 或 .xls 格式的Excel文件')
+    if (file.size > 5 * 1024 * 1024) throw new Error('Excel文件最大5MiB')
+    const result = await this.http.postWithFile<string>(`${currBaseUrl}/import-bor`, { file }, { showLoading: true })
+    if (result.code !== 10000) throw new Error(result.message || '导入失败，整文件未保存')
+    return result
   }
 
   /**
