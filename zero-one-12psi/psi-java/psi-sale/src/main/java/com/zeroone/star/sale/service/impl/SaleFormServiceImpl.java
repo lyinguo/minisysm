@@ -40,6 +40,8 @@ public class SaleFormServiceImpl implements SaleFormService {
     private com.zeroone.star.sale.service.SaleDraftService saleDrafts;
     @Resource
     private com.zeroone.star.sale.service.SaleDocumentAccess saleAccess;
+    @Resource
+    private com.zeroone.star.sale.service.SalePostingService salePosting;
 
     @Resource
     private SaleFormMapper saleFormMapper;
@@ -181,6 +183,7 @@ public class SaleFormServiceImpl implements SaleFormService {
             if(sale.getNucleus() != 0){
                 throw new IllegalArgumentException("id:" + id + ",销售单已核销,不能删除");
             }
+            salePosting.requireDeletable(id);
         }
         /// 执行批量删除 同时删除主表以及详情表有关的数据
         saleMapper.deleteBatchWithDetails(ids);
@@ -257,56 +260,7 @@ public class SaleFormServiceImpl implements SaleFormService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public Integer examineSales(List<String> ids, boolean examine) {
-        com.zeroone.star.project.components.user.UserDTO actor = saleAccess.authorize("/sale/form/examine");
-        if (ids == null || ids.isEmpty() || ids.size() > 200 || new HashSet<>(ids).size() != ids.size()) throw new IllegalArgumentException("请选择1到200张不同单据");
-        saleDrafts.lockWrites();
-        /// 先获取到ids列表中所有销售单
-        List<SaleDO> sales = saleMapper.selectBatchIds(ids);
-        for (SaleDO current : sales) saleAccess.requireFrame(actor, current.getFrame());
-        /// 把每一个销售单的详情id存入一个Map中
-        Map<String,SaleDO> saleMap = new HashMap<>();
-        for (SaleDO sale : sales) {
-            saleMap.put(sale.getId(),sale);
-        }
-        /// 允许审核的id
-        List<String> validIds = new ArrayList<>();
-        /// 批量校验
-        for (String id : ids) {
-            SaleDO sale = saleMap.get(id);
-            if(sale == null){
-                throw new IllegalArgumentException("id:" + id + ",销售单不存在");
-            }
-            /// 审核操作校验
-            if(examine){
-                if(Boolean.TRUE.equals(sale.getExamine())){
-                    throw new IllegalArgumentException("id:" + id + ",销售单已审核,不能重复审核");
-                }
-                if(sale.getNucleus()!=0){
-                    throw new IllegalArgumentException("id:" + id + ",销售单已核销,不能审核");
-                }
-                if(!Boolean.TRUE.equals(sale.getCheck())){
-                    throw new IllegalArgumentException("id:" + id + ",销售单未核对,不能审核");
-                }
-                /// 允许审核
-                validIds.add(id);
-            }else{
-                /// 反审核操作校验
-                if(!Boolean.TRUE.equals(sale.getExamine())){
-                    throw new IllegalArgumentException("id:" + id + ",销售单未审核,不能反审核");
-                }
-                if(sale.getNucleus()!=0){
-                    throw new IllegalArgumentException("id:" + id + ",销售单已核销,不能反审核");
-                }
-                /// 只有examine为true的时候且nucleus为0 才允许反审核
-                validIds.add(id);
-            }
-        }
-
-        if(validIds.isEmpty()){
-            return 0;
-        }
-        /// 批量更新数据库
-        return saleMapper.updateExamine(validIds,examine);
+        return salePosting.post(ids, examine);
     }
 
     /**

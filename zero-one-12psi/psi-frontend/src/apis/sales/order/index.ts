@@ -36,7 +36,7 @@ export class SaleOrderApi {
    * 删除销售单(支持批量)
    */
   async deleteSales(ids: string[]): Promise<JsonVO<number>> {
-    return this.http.delete<number>('/sale/form/deleteSales', { ids })
+    return this.http.delete<number>('/sale/form/deleteSales', ids)
   }
 
   /**
@@ -45,7 +45,7 @@ export class SaleOrderApi {
   async examineSales(ids: string[], examine: boolean): Promise<JsonVO<number>> {
     return this.http.post<number>(
       '/sale/form/examine',
-      { ids },
+      ids,
       {
         params: { examine }
       }
@@ -58,7 +58,7 @@ export class SaleOrderApi {
   async checkSales(ids: string[], check: boolean): Promise<JsonVO<number>> {
     return this.http.post<number>(
       '/sale/form/check',
-      { ids },
+      ids,
       {
         params: { check }
       }

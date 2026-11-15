@@ -14,6 +14,7 @@ public class StockDocumentWriteLock {
     @PostConstruct
     public void initialize() {
         db.execute("CREATE TABLE IF NOT EXISTS psi_document_write_lock (scope VARCHAR(40) NOT NULL PRIMARY KEY)");
+        db.execute("CREATE TABLE IF NOT EXISTS psi_stock_posting_order (sequence BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,movement_id VARCHAR(32) NOT NULL UNIQUE)");
     }
     public void lock(String kind) {
         if (!Arrays.asList("entry", "extry", "swap").contains(kind) || !TransactionSynchronizationManager.isActualTransactionActive())

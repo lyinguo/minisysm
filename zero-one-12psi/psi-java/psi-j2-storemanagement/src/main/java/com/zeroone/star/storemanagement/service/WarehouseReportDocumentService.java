@@ -151,6 +151,7 @@ public class WarehouseReportDocumentService {
             if (num(product.get("serial")) == 1) serials(t, id, item, target, product);
         }
         if (target == 0) {
+            db.update("DELETE FROM psi_stock_posting_order WHERE movement_id IN (SELECT id FROM summary WHERE `class`=? AND type IN (?,?,?))",id,t,"swapOut","swapEnter");
             for (String ledger : Arrays.asList("summary", "room_info", "batch_info", "serve_info", "serial_info")) {
                 db.update("DELETE FROM `" + ledger + "` WHERE `class`=? AND type IN (?,?,?)", id, t, "swapOut", "swapEnter");
             }
@@ -186,7 +187,9 @@ public class WarehouseReportDocumentService {
             BigDecimal value = db.queryForObject("SELECT COALESCE(SUM(CASE WHEN direction=1 THEN price*nums ELSE -price*nums END),0) FROM room_info WHERE pid=?", BigDecimal.class, roomId);
             String exists = Collections.nCopies(4, remaining).toString();
             String balances = Collections.nCopies(4, value).toString();
-            db.update("INSERT INTO summary(id,pid,type,`class`,info,time,goods,attr,warehouse,batch,mfd,serial,direction,price,nums,uct,bct,exist,balance,handle) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", uid(), ledgerId, type, id, item.get("id"), head.get("time"), goods, item.get("attr"), warehouse, item.get("batch"), item.get("mfd"), item.get("serial"), sign > 0 ? 1 : 0, item.get("price"), qty, item.get("price"), decimal(item.get("price")).multiply(qty), exists, balances, BigDecimal.ZERO);
+            String summaryId=uid();
+            db.update("INSERT INTO summary(id,pid,type,`class`,info,time,goods,attr,warehouse,batch,mfd,serial,direction,price,nums,uct,bct,exist,balance,handle) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", summaryId, ledgerId, type, id, item.get("id"), head.get("time"), goods, item.get("attr"), warehouse, item.get("batch"), item.get("mfd"), item.get("serial"), sign > 0 ? 1 : 0, item.get("price"), qty, item.get("price"), decimal(item.get("price")).multiply(qty), exists, balances, BigDecimal.ZERO);
+            db.update("INSERT INTO psi_stock_posting_order(movement_id) VALUES(?)",summaryId);
         }
     }
 

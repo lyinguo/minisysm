@@ -285,3 +285,4 @@ CREATE TABLE `serial_info` (
   `info` varchar(32) NOT NULL,
   PRIMARY KEY (`id`)
 );
+CREATE TABLE psi_stock_posting_order(sequence BIGINT AUTO_INCREMENT PRIMARY KEY,movement_id VARCHAR(32) NOT NULL UNIQUE);

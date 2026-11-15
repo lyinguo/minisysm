@@ -1,13 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ get: vi.fn(), delete: vi.fn(), request: vi.fn() }))
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), delete: vi.fn(), request: vi.fn() }))
 vi.mock('@/plugins/http', () => ({ useHttp: () => mocks, DataUpType: { json: 1 } }))
 import { PurchaseOrderAPI } from './purchase/PurchaseBooking/order'
 import { SupplierAPI } from './basicdata/supplier'
 import request from './openapi-ts-request-shim'
 import { getOrgTree } from './common'
+import { SaleOrderApi } from './sales/order'
 
 describe('unfinished API actions', () => {
   beforeEach(() => vi.clearAllMocks())
+  it.each([true, false])('sends sales audit and check IDs as JSON arrays (target=%s)', async target => {
+    const api = new SaleOrderApi()
+    const ids = ['1234567890123456789', 'sale-uuid']
+    mocks.post.mockResolvedValue({ code: 10000, data: 2 })
+    await api.examineSales(ids, target)
+    expect(mocks.post).toHaveBeenCalledWith('/sale/form/examine', ids, { params: { examine: target } })
+    await api.checkSales(ids, target)
+    expect(mocks.post).toHaveBeenCalledWith('/sale/form/check', ids, { params: { check: target } })
+  })
+  it('sends sales deletion IDs in the array expected by the existing controller', async () => {
+    mocks.delete.mockResolvedValue({ code: 10000, data: 1 })
+    await new SaleOrderApi().deleteSales(['1234567890123456789'])
+    expect(mocks.delete).toHaveBeenCalledWith('/sale/form/deleteSales', ['1234567890123456789'])
+  })
   it('receives Excel export bytes as a Blob', async () => {
     mocks.request.mockResolvedValueOnce(new Blob(['excel']))
     await request('/j5-reportmanagement/procurement-payment-form/export', { method: 'GET' })

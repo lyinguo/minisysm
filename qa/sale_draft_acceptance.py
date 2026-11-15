@@ -170,6 +170,8 @@ class SaleDraftSuite(WarehouseSuite):
             foreign_body = self.body(); foreign_body['frame'] = foreign_frame
             foreign_id = self.create(foreign_body)
             foreign_before = self.sale('GET', '/sale/form/document/' + foreign_id)
+            entry_id, _ = self.create_inbound(3)
+            self.audit(entry_id, 1)
             role = self.success('POST', '/role/add-role', {'name': 'QA Sales Access ' + uuid.uuid4().hex[:7], 'data': '', 'root': '[]', 'auth': '{}'})
             keyword = sql(self.state, 'SELECT keyword FROM role WHERE id=' + literal(role) + ';')
             user_id, user, _ = self.new_user(role=role)
@@ -183,7 +185,7 @@ class SaleDraftSuite(WarehouseSuite):
             assert actual == container, 'Refusing to alter an unverified Redis instance'
             def redis(*arguments):
                 return subprocess.run(['docker', 'exec', container, 'redis-cli', '--raw'] + list(arguments), capture_output=True, text=True, check=True).stdout.rstrip('\r\n')
-            paths = ['/sale/form/getSaleList', '/sale/form/getSaleDetail', '/sale/form/addSale', '/sale/form/updateSale']
+            paths = ['/sale/form/getSaleList', '/sale/form/getSaleDetail', '/sale/form/addSale', '/sale/form/updateSale', '/sale/form/check', '/sale/form/examine']
             previous = {path: (redis('HEXISTS', 'AUTH:RESOURCE_ROLES', path), redis('HGET', 'AUTH:RESOURCE_ROLES', path)) for path in paths}
             admin = self.token
             try:
@@ -191,6 +193,8 @@ class SaleDraftSuite(WarehouseSuite):
                 for path in paths: redis('HDEL', 'AUTH:RESOURCE_ROLES', path)
                 assert self.request('GET', '/sale/form/getSaleList', service='sale').get('code') == 403, 'Role without query grant could query sales'
                 assert self.request('GET', '/sale/form/document/' + own_id, service='sale').get('code') == 403
+                assert self.request('POST', '/sale/form/check?check=true', [own_id], service='sale').get('code') == 403
+                assert self.request('POST', '/sale/form/examine?examine=true', [own_id], service='sale').get('code') == 403
                 grants = json.dumps(['java.util.ArrayList', [keyword]])
                 for path in paths: redis('HSET', 'AUTH:RESOURCE_ROLES', path, grants)
                 own = self.sale('GET', '/sale/form/document/' + own_id)
@@ -203,6 +207,17 @@ class SaleDraftSuite(WarehouseSuite):
                 assert sql(self.state, 'SELECT COUNT(*) FROM sell WHERE number=' + literal(blocked['number']) + ';') == '0'
                 changed = dict(foreign_before['header']); changed.update(time=changed.pop('timeEpoch'), version=foreign_before['version'], items=foreign_before['items'])
                 assert self.request('PUT', '/sale/form/updateSale', changed, service='sale').get('code') == 403
+                assert self.request('POST', '/sale/form/check?check=true', [foreign_id], service='sale').get('code') == 403
+                assert self.request('POST', '/sale/form/examine?examine=true', [foreign_id], service='sale').get('code') == 403
+                self.sale('POST', '/sale/form/check?check=true', [own_id])
+                self.sale('POST', '/sale/form/examine?examine=true', [own_id])
+                assert self.inventory() == 1
+                redis('HDEL', 'AUTH:RESOURCE_ROLES', '/sale/form/examine')
+                assert self.request('POST', '/sale/form/examine?examine=false', [own_id], service='sale').get('code') == 403
+                assert self.inventory() == 1, 'Revoked posting permission changed stock'
+                redis('HSET', 'AUTH:RESOURCE_ROLES', '/sale/form/examine', grants)
+                self.sale('POST', '/sale/form/examine?examine=false', [own_id])
+                assert self.inventory() == 3
                 redis('HDEL', 'AUTH:RESOURCE_ROLES', '/sale/form/getSaleDetail')
                 assert self.request('GET', '/sale/form/document/' + own_id, service='sale').get('code') == 403, 'Cached credential ignored permission revocation'
                 self.token = admin
