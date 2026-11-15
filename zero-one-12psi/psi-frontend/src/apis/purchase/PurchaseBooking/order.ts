@@ -290,6 +290,13 @@ export interface PurchaseOrderGenerateDataDTO {
 export class PurchaseOrderAPI {
   private static http = useHttp()
 
+  static receivePreview(id:string) {
+    return this.http.get<{header:Record<string,any>;items:Record<string,any>[];drafts:Array<{id:string;number:string}>}>(`${currBaseUrl}/receive-preview?id=${encodeURIComponent(id)}`)
+  }
+  static receiveOrder(data:{id:string;number:string;time:string;items:Array<{id:string;nums:number}>}) {
+    return this.http.post<{id:string;number:string;source:string;lineCount:number;total:number;actual:number}>(`${currBaseUrl}/receive`,data,{upType:DataUpType.json})
+  }
+
   static supply(goods: string) {
     return this.http.get<Array<{id:string;name:string;number:string;enabled:number}>>(`${currBaseUrl}/supply?goods=${encodeURIComponent(goods)}`)
   }

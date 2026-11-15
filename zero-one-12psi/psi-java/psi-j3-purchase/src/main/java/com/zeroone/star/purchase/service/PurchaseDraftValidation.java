@@ -16,7 +16,8 @@ public class PurchaseDraftValidation {
     private final JdbcTemplate db;
     private final UserHolder users;
     private final PurchaseDocumentAccess access;
-    public PurchaseDraftValidation(JdbcTemplate db,UserHolder users,PurchaseDocumentAccess access) { this.db=db;this.users=users;this.access=access; }
+    private final PurchaseOrderSources sources;
+    public PurchaseDraftValidation(JdbcTemplate db,UserHolder users,PurchaseDocumentAccess access,PurchaseOrderSources sources) { this.db=db;this.users=users;this.access=access;this.sources=sources; }
     @PostConstruct public void initialize() {
         db.execute("CREATE TABLE IF NOT EXISTS psi_document_write_lock (scope VARCHAR(40) NOT NULL PRIMARY KEY)");
     }
@@ -74,5 +75,6 @@ public class PurchaseDraftValidation {
             Integer batch=db.queryForObject("SELECT CAST(batch AS SIGNED) FROM goods WHERE id=?",Integer.class,line.getGoods());
             if(batch!=null && batch==1 && (absent(line.getBatch()) || line.getMfd()==null || line.getMfd().trim().isEmpty())) throw new IllegalArgumentException("批次商品必须填写批次号和生产日期");
         }
+        sources.validate(request,excludeId,frame);
     }
 }

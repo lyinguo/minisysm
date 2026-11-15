@@ -95,6 +95,7 @@ public class PurchaseDraftUpdateService {
             previous.put(s(row.get("id")),row);
         }
         PurchaseNoteBuyDTO header=new PurchaseNoteBuyDTO();
+        header.setSource(s(head.get("source")));
         header.setSupplier(choose(request.getSupplier(),head.get("supplier")));
         header.setTime(request.getTime()==null ? s(head.get("time_text")):request.getTime().toString());
         header.setNumber(choose(request.getNumber(),head.get("number")));

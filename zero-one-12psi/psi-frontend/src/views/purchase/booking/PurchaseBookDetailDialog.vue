@@ -386,6 +386,7 @@
       </div>
     </template>
   </el-dialog>
+  <PurchaseReceiveDialog v-model:visible="receiveVisible" :order-id="String(orderId)" @created="handleReceived" @open-draft="openReceivingDraft" />
 </template>
 
 <script setup lang="ts">
@@ -402,6 +403,7 @@ import type { PurchaseOrderDetailResponse, PurchaseOrderDetailItem, PurchaseOrde
 import { PurchaseOrderAPI } from '@/apis/purchase/PurchaseBooking/order'
 import type { ComponentPublicInstance } from 'vue'
 import { usePurchaseStore } from '@/stores/purchase'
+import PurchaseReceiveDialog from './PurchaseReceiveDialog.vue'
 
 /* props & emits */
 interface Props {
@@ -804,204 +806,20 @@ function generateTo(type: 'purchaseOrder') {
  * 生成采购单处理函数（调用接口获取数据）
  */
 async function handleGeneratePurchaseOrder() {
-  console.log('🚀 [handleGeneratePurchaseOrder] 开始执行')
-
-  // 检查订单ID
-  if (!orderId.value) {
-    ElMessage.error('订单ID不能为空，请先保存订单')
-    return
-  }
-
-  // 检查前端是否有明细行数据
-  const validRows = tableData.value.filter((r) => r.productName && r.goodsId)
-  if (validRows.length === 0) {
-    ElMessage.warning('订单中没有商品明细，请先添加商品明细后再生成采购单')
-    return
-  }
-
-  // 检查订单是否已审核（只有审核通过的订单才能生成采购单）
-  if (!isApproved.value) {
-    ElMessage.warning('订单尚未审核，请先审核订单后再生成采购单')
-    return
-  }
-
-  // 提示：如果前端有未保存的明细行数据，建议先保存
-  // 注意：这里不强制保存，因为可能用户已经保存过了，只是前端数据有变化
-  // 如果后端返回"明细行不存在"错误，会在 catch 中提示用户
-
-  try {
-    // 调用接口获取生成采购单数据
-    const response = await PurchaseOrderAPI.getGeneratePurchaseData(orderId.value)
-    
-    if (response.code === 10000 && response.data) {
-      console.log('📥 获取到生成采购单数据:', response.data)
-      
-      // 将接口返回的数据转换为传输格式
-      // 注意：接口返回的 data 可能是数组或单个对象
-      const generateDataList = Array.isArray(response.data) ? response.data : [response.data]
-      
-      // 获取第一个商品的其他信息（所有商品共享同一份订单信息）
-      const firstItem = generateDataList[0]
-      const otherData = firstItem?.purchaseNoteOtherGenerateDataDTO
-      
-      // 将生成数据转换为表格数据格式
-      const transferTableData = generateDataList.map((item) => ({
-        key: item.goods || null,
-        name: item.name || '',
-        number: item.goods || '',
-        spec: item.spec || '',
-        attr: item.attr || '',
-        unit: item.unit || '',
-        warehouse: item.warehouse || '',
-        warehouseId: item.warehouse || null,
-        price: Number(item.price) || 0,
-        nums: Number(item.nums) || 0,
-        handle: 0,
-        discount: 0,
-        dsc: 0,
-        total: Number(item.amount) || 0,
-        tax: Number(item.tax) || 0,
-        tat: Number(item.tat) || 0,
-        tpt: Number(item.tpt) || 0,
-        data: item.data || '',
-        goodsType: 0
-      }))
-
-      // 使用 Pinia Store 存储传输数据
-      const transferData = {
-        tableData: transferTableData,
-        supplier: otherData?.supplier || supplierModel.name || '',
-        documentDate: otherData?.time || header.documentDate || '',
-        documentNumber: otherData?.number || header.documentNumber || '',
-        from: 'purchase-book-detail'
-      }
-      console.log('📦 准备传输的数据:', transferData)
-
-      // 检查方法是否存在
-      if (typeof purchaseStore.setTransferData === 'function') {
-        purchaseStore.setTransferData(transferData)
-        console.log('✅ 传输数据已存储到 Store')
-      } else {
-        console.error('❌ setTransferData 方法不存在，使用备用方案')
-        // 备用方案：直接设置 state（使用类型断言避免类型检查错误）
-        purchaseStore.$patch({
-          transferData: {
-            ...transferData,
-            timestamp: Date.now()
-          } as any
-        })
-        console.log('✅ 使用 $patch 存储传输数据')
-      }
-
-      // 跳转到采购单页面
-      const targetRoute = {
-        path: '/purchase-order',
-        query: {
-          from: 'purchase-booking',
-          dataTransfer: 'true'
-        }
-      }
-      console.log('🎯 准备跳转到:', targetRoute)
-
-      router
-        .push(targetRoute)
-        .then(() => {
-          console.log('✅ 路由跳转成功')
-          if (transferTableData.length === 0) {
-            ElMessage.info('正在跳转到采购单页面（无商品数据）')
-          } else {
-            ElMessage.success(`正在跳转到采购单页面，共 ${transferTableData.length} 条数据`)
-          }
-        })
-        .catch((error: any) => {
-          console.error('❌ 路由跳转失败:', error)
-          ElMessage.error('路由跳转失败，请检查路由配置')
-        })
-    } else {
-      // 优先显示 data 字段的错误信息（如果 data 是字符串）
-      const errorData = response.data
-      const errorMessage = typeof errorData === 'string' && errorData 
-        ? errorData 
-        : (response.message || '获取生成采购单数据失败')
-      ElMessage.error(errorMessage)
-      
-      // 如果是明细行不存在的错误，给出更详细的提示
-      if (typeof errorData === 'string' && (errorData as string).includes('明细行')) {
-        console.warn('⚠️ 订单没有明细行数据，请先添加商品明细后再生成采购单')
-      }
-    }
-  } catch (error: any) {
-    console.error('❌ 获取生成采购单数据失败:', error)
-    
-    // 处理不同类型的错误响应
-    // 注意：响应拦截器 reject 的是整个 response 对象，所以 error 可能是 response 对象本身
-    let errorMessage = '获取生成采购单数据失败，请稍后重试'
-    
-    // 情况1：error 是被 reject 的 response 对象（响应拦截器 reject 的情况）
-    if (error?.data) {
-      const errorData = error.data
-      // 如果 error.data 是响应体对象，包含 code、message、data 字段
-      if (errorData && typeof errorData === 'object' && 'code' in errorData) {
-        // 优先使用 data.data 中的错误信息（如果它是字符串且不为空）
-        if (typeof errorData.data === 'string' && errorData.data.trim()) {
-          errorMessage = errorData.data
-        } else if (errorData.message) {
-          errorMessage = errorData.message
-        }
-      } else if (typeof errorData === 'string' && errorData) {
-        // 如果 error.data 直接是字符串
-        errorMessage = errorData
-      }
-    } 
-    // 情况2：error 是标准的 AxiosError 对象（网络错误等情况）
-    else if (error?.response?.data) {
-      const errorData = error.response.data
-      // 如果 data 是字符串，优先使用它
-      if (typeof errorData === 'string' && errorData) {
-        errorMessage = errorData
-      } else if (errorData && typeof errorData === 'object' && 'code' in errorData) {
-        // 如果 data 是响应体对象
-        if (typeof errorData.data === 'string' && errorData.data.trim()) {
-          errorMessage = errorData.data
-        } else if (errorData.message) {
-          errorMessage = errorData.message
-        }
-      }
-    } 
-    // 情况3：其他错误
-    else if (error?.message) {
-      errorMessage = error.message
-    }
-    
-    // 注意：响应拦截器已经显示了错误信息，这里不再重复显示
-    // 只在响应拦截器没有处理的情况下才显示（比如网络错误）
-    // 如果错误已经被响应拦截器处理过（code 9994），则不再显示
-    if (error?.data?.code !== 9994) {
-      ElMessage.error(errorMessage)
-    }
-    
-    // 如果是明细行不存在的错误，给出更详细的提示和解决方案
-    if (typeof errorMessage === 'string' && errorMessage.includes('明细行')) {
-      console.warn('⚠️ 订单没有明细行数据，请先添加商品明细后再生成采购单')
-      // 给出更明确的解决方案提示
-      ElMessageBox.confirm(
-        '后端数据库中找不到该订单的明细行数据。可能的原因：\n' +
-        '1. 订单明细尚未保存到后端\n' +
-        '2. 订单明细已被删除\n\n' +
-        '解决方案：\n' +
-        '1. 如果前端有商品明细，请先点击"保存"按钮保存订单\n' +
-        '2. 如果订单已保存，请检查订单明细是否正确',
-        '明细行不存在',
-        {
-          confirmButtonText: '我知道了',
-          type: 'warning',
-          showCancelButton: false
-        }
-      ).catch(() => {})
-    }
-  }
-
-  console.log('🏁 [handleGeneratePurchaseOrder] 执行完成')
+  if (!orderId.value) { ElMessage.warning('请先保存并重新打开实际订单'); return }
+  if (!isApproved.value) { ElMessage.warning('请先审核采购订单，再生成收货草稿'); return }
+  showGeneratePopup.value = false
+  receiveVisible.value = true
+}
+const receiveVisible = ref(false)
+async function openReceivingDraft(number: string) {
+  receiveVisible.value = false
+  innerVisible.value = false
+  await router.push({ path: '/purchase-order-report', query: { number } })
+}
+async function handleReceived(document: {id:string;number:string}) {
+  ElMessage.success('采购草稿已生成，尚未入库或付款')
+  await openReceivingDraft(document.number)
 }
 
 /** 计算 el 内（纯文本）的光标位置 */

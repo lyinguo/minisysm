@@ -104,6 +104,8 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     private com.zeroone.star.purchase.service.PurchaseCheckService purchaseCheck;
     @Autowired
     private com.zeroone.star.purchase.service.PurchasePostingService purchasePosting;
+    @Autowired
+    private com.zeroone.star.purchase.service.PurchaseOrderReceiveService orderReceive;
 
     @Resource
     private BuyMapper buyMapper;
@@ -480,54 +482,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      */
     @Override
     public PurchaseNoteGenerateDataDTO generatePurchaseData(String id) {
-        // bor_info.id定位
-        BuyInfoDO info = buyInfoMapper.selectById(id);
-        if (info == null) throw new RuntimeException("明细行不存在");
-
-        // 拿到 buy抬头
-        BuyDO buy = buyMapper.selectById(info.getPid());
-        if (buy == null || !Boolean.TRUE.equals(buy.getExamine())) {
-            throw new RuntimeException("主单不存在或未审核");
-        }
-
-        GoodsDO g = goodsMapper.selectById(info.getGoods());
-
-        // 构造返回 DTO
-        PurchaseNoteGenerateDataDTO dto = new PurchaseNoteGenerateDataDTO();
-
-        // 明细字段
-        dto.setGoods(info.getGoods());
-        dto.setName(g == null ? "" : g.getName());
-        dto.setSpec(g == null ? "" : g.getSpec());
-        dto.setAttr(info.getAttr());
-        dto.setWarehouse(info.getWarehouse());
-        dto.setUnit(info.getUnit());
-        dto.setBatch(info.getBatch());
-        dto.setPrice(info.getPrice().toPlainString());
-        dto.setNums(info.getNums().toPlainString());
-        dto.setAmount(info.getTotal().toPlainString());
-        dto.setTax(info.getTax().toPlainString());
-        dto.setTat(info.getTat().toPlainString());
-        dto.setTpt(info.getTpt().toPlainString());
-        dto.setData(info.getData());
-
-        // 抬头字段
-        PurchaseNoteOtherGenerateDataDTO header = new PurchaseNoteOtherGenerateDataDTO();
-        header.setSupplier(buy.getSupplier());
-        header.setTime(buy.getTime().toLocalDate().toString());
-        header.setNumber(buy.getNumber());
-        header.setTotal(buy.getTotal().toPlainString());
-        header.setActual(buy.getActual().toPlainString());
-        header.setMoney(buy.getMoney() == null ? "" : buy.getMoney().toPlainString());
-        header.setCost(buy.getCost() == null ? "" : buy.getCost().toPlainString());
-        header.setAccount(buy.getAccount());
-        header.setPeople(buy.getPeople());
-        header.setLogistics(buy.getLogistics());
-        header.setFile(buy.getFile());
-        header.setData(buy.getData());
-
-        dto.setPurchaseNoteOtherGenerateDataDTO(header);
-        return dto;
+        return orderReceive.legacy(id);
     }
 
     /**

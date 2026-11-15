@@ -13,20 +13,28 @@ class PurchaseBusinessSuite(PurchasePostingExtended):
             self.fixture();order,line=uuid.uuid4().hex,uuid.uuid4().hex
             sql(self.state,'INSERT INTO bor(id,frame,supplier,time,number,total,actual,arrival,examine,state,`user`) VALUES('+','.join(literal(v) for v in [order,self.state['frame_id'],self.supplier,'2026-11-14','QA-BOR-'+order[:16],300,339,'2026-11-15',1,0,self.actor])+');'+
                 'INSERT INTO bor_info(id,pid,goods,attr,unit,price,nums,total,tpt,handle) VALUES('+','.join(literal(v) for v in [line,order,self.goods,'','unit',100,3,300,339,0])+');')
-            ids=[]
-            for _ in range(2):
-                body=self.body();body['purchaseNoteBuyDTO']['source']=order
-                body['purchaseNoteInfoDTOS'][0].update(source=line,discount=0,tax=13,batch='',mfd=None,serial='[]')
-                identifier=self.create(body);assert self.check([identifier]).get('code')==10000;ids.append(identifier)
-            assert self.post([ids[0]]).get('code')==10000
+            assert self.request('POST','/purchase-order/supply',dict(goods=self.goods,supplier=self.supplier,enabled=True),service='purchase').get('code')==10000
+            body=self.body();body['purchaseNoteBuyDTO']['source']=order
+            body['purchaseNoteInfoDTOS'][0].update(source=line,discount=0,tax=13,batch='',mfd=None,serial='[]')
+            identifier=self.create(body);assert self.check([identifier]).get('code')==10000
+            overflow=self.body();overflow['purchaseNoteBuyDTO']['source']=order;overflow['purchaseNoteInfoDTOS'][0].update(source=line,discount=0,tax=13,batch='',mfd=None,serial='[]')
+            assert self.request('POST','/purchase-note/add',overflow,service='purchase').get('code')!=10000,'Pending draft did not reserve source quantity'
+            assert self.post([identifier]).get('code')==10000
             assert Decimal(sql(self.state,'SELECT handle FROM bor_info WHERE id='+literal(line)+';'))==2
             assert sql(self.state,'SELECT CAST(state AS SIGNED) FROM bor WHERE id='+literal(order)+';')=='1'
-            assert self.post([ids[1]]).get('code')!=10000,'Second receipt exceeded remaining order quantity'
-            assert self.inventory()==2 and self.balance('supplier',self.supplier)==226 and self.status(ids[1])=='0'
-            assert self.post([ids[0]],0).get('code')==10000
+            assert self.request('POST','/purchase-note/add',overflow,service='purchase').get('code')!=10000,'Second receipt exceeded remaining order quantity'
+            # Retain the posting guard test: only this new QA draft is deliberately
+            # corrupted after a valid remaining-quantity create, simulating legacy data.
+            residual=self.body();residual['purchaseNoteBuyDTO']['source']=order;residual['purchaseNoteInfoDTOS'][0].update(source=line,nums=1,discount=0,tax=13,batch='',mfd=None,serial='[]')
+            bad=self.create(residual)
+            sql(self.state,'UPDATE buy SET total=200,actual=226 WHERE id='+literal(bad)+';'+'UPDATE buy_info SET nums=2,total=200,tat=26,tpt=226 WHERE pid='+literal(bad)+';')
+            assert self.check([bad]).get('code')==10000 and self.post([bad]).get('code')!=10000,'Posting failed to refuse legacy over-receipt'
+            assert self.inventory()==2 and self.balance('supplier',self.supplier)==226
+            assert self.check([bad],0).get('code')==10000 and self.request('POST','/purchase-note/delete',[bad],service='purchase').get('code')==10000
+            assert self.post([identifier],0).get('code')==10000
             assert Decimal(sql(self.state,'SELECT handle FROM bor_info WHERE id='+literal(line)+';'))==0
             assert sql(self.state,'SELECT CAST(state AS SIGNED) FROM bor WHERE id='+literal(order)+';')=='0'
-            return ['SQL source-order fixture; actual purchase updates linked received quantity/state, over-receipt rolls back, reversal restores quantity', 'This is not complete purchase-order lifecycle acceptance']
+            return ['SQL source-order fixture with actual supply relation; actual purchase reserves pending quantity, refuses excess before and after posting, updates received quantity/state and restores on reversal', 'This is not complete purchase-order lifecycle acceptance']
         self.case('purchase.posting_source_order_quantity',source_order)
 
         def service():

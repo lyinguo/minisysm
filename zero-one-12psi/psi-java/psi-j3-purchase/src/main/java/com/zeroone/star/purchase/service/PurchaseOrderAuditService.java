@@ -23,15 +23,15 @@ public class PurchaseOrderAuditService {
     private int count(String sql,Object...args){return db.queryForObject(sql,Integer.class,args);}
     public Map<String,Object> document(String id){
         UserDTO actor=access.authorize("/purchase-order/detail");
-        List<Map<String,Object>> found=db.queryForList("SELECT b.*,s.name AS supplierName FROM bor b LEFT JOIN supplier s ON s.id=b.supplier WHERE b.id=?",id);
+        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.state AS SIGNED) AS source_state,s.name AS supplierName FROM bor b LEFT JOIN supplier s ON s.id=b.supplier WHERE b.id=?",id);
         if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
-        Map<String,Object> head=found.get(0);access.requireFrame(actor,text(head.get("frame")));
+        Map<String,Object> head=found.get(0);head.put("state",integer(head.remove("source_state")));access.requireFrame(actor,text(head.get("frame")));
         head.put("time",text(head.get("time")));head.put("arrival",text(head.get("arrival")));head.put("examine",integer(head.get("examine")));
         Map<String,Object> result=new LinkedHashMap<>();result.put("header",head);result.put("items",db.queryForList("SELECT i.*,g.name,g.number,g.spec,w.name AS warehouseName FROM bor_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));return result;
     }
     public Map<String,Object> status(String id){
         UserDTO actor=access.authorize("/purchase-order/audit");
-        List<Map<String,Object>> found=db.queryForList("SELECT id,frame,examine,state FROM bor WHERE id=?",id);
+        List<Map<String,Object>> found=db.queryForList("SELECT id,frame,CAST(examine AS SIGNED) AS examine,CAST(state AS SIGNED) AS state FROM bor WHERE id=?",id);
         if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
         Map<String,Object> head=found.get(0);access.requireFrame(actor,text(head.get("frame")));head.put("examine",integer(head.get("examine")));return head;
     }
