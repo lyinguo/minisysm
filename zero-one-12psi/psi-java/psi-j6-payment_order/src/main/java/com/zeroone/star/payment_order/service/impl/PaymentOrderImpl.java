@@ -32,6 +32,9 @@ import java.util.*;
 public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements PaymentOrderService {
 
     @Resource
+    private com.zeroone.star.payment_order.service.PaymentDraftValidation draftValidation;
+
+    @Resource
     private MsPaymentOrderMapper mp;
 
     @Autowired
@@ -58,28 +61,11 @@ public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements Pay
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String insertOmyWithInfo(OmyWithInfoAddDTO addDto) {
-        //1.校验单据编号唯一性
-        QueryWrapper<Omy> wrapper = new QueryWrapper<>();
-        wrapper.eq("number", addDto.getNumber());
-        Long count = baseMapper.selectCount(wrapper);
-        if (count > 0) {
-            throw new BusinessException("单据编号重复：" + addDto.getNumber());
-        }
-        if (addDto.getInfoList() == null || addDto.getInfoList().isEmpty()) {
-            throw new BusinessException("请至少填写一条结算账户明细");
-        }
-        // 计算总金额（所有info表里的money之和）
-        BigDecimal total = BigDecimal.ZERO;
-        for (OmyInfoAddDTO info : addDto.getInfoList()) {
-            if (info.getMoney() != null) {
-                total = total.add(info.getMoney());
-            }
-        }
-        if (total.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException("结算金额必须大于0");
-        }
+        com.zeroone.star.project.components.user.UserDTO actor=draftValidation.validate(addDto);
         Omy omy = mp.toOmy(addDto);
-        omy.setTotal(total);
+        omy.setFrame(actor.getFrameId());
+        omy.setUser(actor.getId());
+        omy.setTotal(addDto.getTotal());
         // 保存为未审核草稿；扣款/应付在审核时处理
         omy.setExamine(0);
         omy.setNucleus(0);
@@ -92,14 +78,8 @@ public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements Pay
             omyInfoMapper.insert(omyInfo);
         }
 
-        // 新增账单表记录（OmyBill），便于后续核销关联
-        OmyBill omyBill = new OmyBill();
-        omyBill.setPid(mainId);
-        omyBill.setType("付款单");
-        omyBill.setSource(addDto.getNumber());
-        omyBill.setTime(LocalDate.now());
-        omyBill.setMoney(BigDecimal.ZERO);
-        omyBillMapper.insert(omyBill);
+        // A free draft has no settlement allocation. Audit/verification writes actual links.
+        draftValidation.record(mainId,actor.getId(),omy.getNumber());
         return mainId;
     }
 

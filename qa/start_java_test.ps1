@@ -1,6 +1,6 @@
-param([ValidateSet('store','basic','sale','purchase')][string]$Service='store')
+param([ValidateSet('store','basic','sale','purchase','payment')][string]$Service='store')
 $ErrorActionPreference='Stop'
-$definition=@{store=@{Module='psi-j2-storemanagement';Port=18020};basic=@{Module='psi-j6-basic_Information';Port=18021};sale=@{Module='psi-sale';Port=18022};purchase=@{Module='psi-j3-purchase';Port=18023}}[$Service]
+$definition=@{store=@{Module='psi-j2-storemanagement';Port=18020};basic=@{Module='psi-j6-basic_Information';Port=18021};sale=@{Module='psi-sale';Port=18022};purchase=@{Module='psi-j3-purchase';Port=18023};payment=@{Module='psi-j6-payment_order';Port=18024}}[$Service]
 $statePath=Join-Path $PSScriptRoot '.state.json'
 $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 if ($state.database -notmatch '^psi_qa_[0-9a-f]{12}$') { throw 'Invalid QA database' }
