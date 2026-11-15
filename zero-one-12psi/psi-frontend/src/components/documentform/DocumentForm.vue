@@ -95,7 +95,8 @@
               readonly
               clearable
               style="width: 100%"
-              @focus="showPeopleDialog = true"
+              @mousedown.prevent
+              @click="showPeopleDialog = true"
               @clear="handleClearRelatedPerson"
             >
               <template #suffix>

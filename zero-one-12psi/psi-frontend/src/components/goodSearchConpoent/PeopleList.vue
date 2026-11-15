@@ -4,10 +4,12 @@
 <template>
   <div class="people-search-container">
     <GoodSearchForm v-model="searchForm" :config="searchConfig" @search="handleSearch" />
+    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon><el-button @click="loadPeople">重新加载人员</el-button></el-alert>
     
     <!-- 搜索结果列表 -->
     <div v-if="searchResults.length > 0" class="search-results">
       <el-table
+        v-loading="loading"
         :data="searchResults"
         stripe
         highlight-current-row
@@ -23,6 +25,7 @@
         <el-table-column prop="position" label="岗位" width="150" />
       </el-table>
     </div>
+    <el-pagination :current-page="page" :page-size="pageSize" :total="total" layout="prev, pager, next, total" @current-change="changePage" />
     
     <!-- 无搜索结果提示 -->
     <div v-if="hasSearched && searchResults.length === 0" class="no-results">
@@ -32,12 +35,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import GoodSearchForm from './GoodSearchForm.vue'
 import type { SearchFormData, GoodSearchConfig } from './type'
 import type { PersonnelListItem } from '@/apis/common/type'
-import { filterPersonnel } from './mockData'
+import { getPersonnelList } from '@/apis/advancedSettings/people'
 
 // 定义分页数据类型
 interface PaginationModel {
@@ -70,6 +73,13 @@ const searchResults = ref<PersonnelListItem[]>([])
  * 是否已搜索过
  */
 const hasSearched = ref(false)
+const loading = ref(false)
+const error = ref('')
+const page = ref(props.pagination?.pageIndex || 1)
+const pageSize = props.pagination?.pageSize || 20
+const total = ref(0)
+let applied: Record<string, any> = {}
+let sequence = 0
 
 /**
  * 搜索配置
@@ -141,38 +151,39 @@ const searchConfig = reactive<GoodSearchConfig>({
  * 处理搜索事件
  */
 function handleSearch(formData: SearchFormData) {
-  try {
-    hasSearched.value = true
-    
-    const searchParams: Record<string, any> = {
-      name: formData.peopleName, // 人员名称
-      number: formData.peopleCode, // 人员编号
-      gender: formData.gender, // 性别
-      tel: formData.contactPhone, // 联系电话
-      address: formData.contactAddress, // 联系地址
-      idCard: formData.idCard, // 身份证号
-      data: formData.remark // 备注信息
-    }
-
-    // 临时使用本地模拟数据
-    const results = filterPersonnel(searchParams)
-    searchResults.value = results || []
-
-    emit('search', {
-      ...searchParams,
-      pageIndex: props.pagination?.pageIndex || 1,
-      pageSize: props.pagination?.pageSize || 20
-    })
-
-    if (results.length === 0) {
-      ElMessage.warning('未找到匹配的人员')
-    }
-  } catch (error: any) {
-    console.error('搜索人员失败:', error)
-    ElMessage.error('搜索人员失败，请稍后重试')
-    searchResults.value = []
+  applied = {
+    name: formData.peopleName || undefined, number: formData.peopleCode || undefined,
+    sex: formData.gender === '男' ? '1' : formData.gender === '女' ? '0' : undefined,
+    tel: formData.contactPhone || undefined, add: formData.contactAddress || undefined,
+    card: formData.idCard || undefined, data: formData.remark || undefined
   }
+  page.value = 1
+  void loadPeople()
 }
+function changePage(value: number) { page.value = value; void loadPeople() }
+async function loadPeople() {
+  const request = ++sequence
+  loading.value = true; error.value = ''; hasSearched.value = true
+  try {
+    const result = await getPersonnelList({ pageIndex: page.value, pageSize, ...applied })
+    if (request !== sequence) return
+    if (result.code !== 10000 || !Array.isArray(result.data?.rows)) throw new Error(result.message || '人员列表读取失败')
+    searchResults.value = result.data.rows.filter(row => row.id && row.name).map(row => ({
+      id: String(row.id), name: row.name || '', employeeNo: row.number || '', deptId: row.frame,
+      gender: Number(row.sex) === 1 ? '男' : Number(row.sex) === 0 ? '女' : '', phone: row.tel,
+      address: row.add, idCard: row.card, remark: row.data
+    }))
+    total.value = Number(result.data.total) || 0
+  } catch (error: any) {
+    if (request !== sequence) return
+    console.error('搜索人员失败:', error)
+    searchResults.value = []; total.value = 0
+    // Keep the error visible; a failed query must never emit a selected person.
+    setError(error)
+  } finally { if (request === sequence) loading.value = false }
+}
+function setError(cause: unknown) { error.value = cause instanceof Error ? cause.message : '搜索人员失败，请重试' }
+onMounted(() => { void loadPeople() })
 
 /**
  * 处理表格行点击事件（选择人员）
@@ -192,6 +203,7 @@ defineExpose({
   getFormData: () => searchForm.value,
   resetSearch: () => {
     searchForm.value = {}
+    handleSearch(searchForm.value)
   },
   triggerSearch: () => {
     handleSearch(searchForm.value)

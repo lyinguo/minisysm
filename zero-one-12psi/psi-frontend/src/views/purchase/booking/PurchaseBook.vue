@@ -36,7 +36,7 @@
         <div class="action-buttons-container">
           <!-- 未审核状态：显示保存和刷新 -->
           <ButtonGroup v-if="!isAudited" align="right" gap="0px">
-            <BusinessButton action-type="save" @action="handleSave" />
+            <BusinessButton action-type="save" :loading="saving" :disabled="saving" @action="handleSave" />
             <BusinessButton action-type="refresh" @action="handleRefresh" />
             <el-button type="primary" @click="handleOpenReport"> 报表 </el-button>
           </ButtonGroup>
@@ -300,7 +300,7 @@
     </div>
 
     <!-- 底部表单 -->
-    <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" />
+    <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" />
 
   </div>
 </template>
@@ -342,10 +342,12 @@ import Price from '@/components/ag-Grid/Price.vue'
 import { nextTick } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import PurchaseSupplierPicker from './PurchaseSupplierPicker.vue'
+import { purchaseSelectionRows } from '@/utils/purchaseEntry'
 import { CommonAPI } from '@/apis/common/api'
 
 const supplierPickerRef = ref<{ openPicker: () => void } | null>(null)
 const supplierMissing = ref(false)
+const saving = ref(false)
 const warehouseOptions = ref<Array<{ id: string; name: string }>>([])
 const batchWarehouseId = ref<string | null>(null)
 
@@ -535,7 +537,7 @@ const totalSum = computed(() => {
   return tableData.value
     .filter((r) => r.productName)
     .reduce((sum, r) => sum + (Number(r.total) || 0), 0)
-    .toFixed(2)
+    .toFixed(4)
 })
 
 // 定义表格行数据类型
@@ -631,9 +633,11 @@ function recalculate(row: any) {
   const rate = parseFloat(row.taxRate) || 0
 
   // 计算金额、税额、总计
-  row.amount = +(price * qty).toFixed(2)
-  row.taxAmount = +((row.amount * rate) / 100).toFixed(2)
-  row.total = +(row.amount + row.taxAmount).toFixed(2)
+  const gross = +(price * qty).toFixed(4)
+  row.dsc = +(gross * Number(row.discount || 0) / 100).toFixed(4)
+  row.amount = +(gross - row.dsc).toFixed(4)
+  row.taxAmount = +((row.amount * rate) / 100).toFixed(4)
+  row.total = +(row.amount + row.taxAmount).toFixed(4)
 
   // 计算完后立即刷新状态栏
   updateStatusBar()
@@ -665,24 +669,10 @@ function handleTableProductConfirm(selected: any[]) {
     showProductPopup.value = false
     return
   }
-  const first = selected[0]
   const row = tableData.value[currentRowIndex.value]
-
-  // 适配你的商品结构字段名（如有不同自己改一下）
-  row.productName = first.name
-  row.productCode = first.code
-  row.spec = first.model || ''
-  row.attr = first.category || ''
-  row.unit = first.unit || ''
-  row.warehouse = row.warehouse || '' // 不覆盖已有仓库
-  row.price = first.purchasePrice ?? 0
-  row.quantity = first.quantity ?? 1
-  row.taxRate = row.taxRate ?? 13
-  // 保存商品ID（用于提交到后端）
-  row.key = first.id || first.key || ''
-  row.goodsId = first.id || first.key || ''
-
-  recalculate(row)
+  const added = purchaseSelectionRows(selected, row)
+  tableData.value.splice(currentRowIndex.value, 1, ...added)
+  added.forEach(recalculate)
   showProductPopup.value = false
 
   // 保证最后一行始终为空行
@@ -783,6 +773,10 @@ const currentRowIndex = ref<number | null>(null)
 
 // DocumentForm 引用
 const documentFormRef = ref<InstanceType<typeof DocumentForm> | null>(null)
+const documentNetAmount = computed(() => Number(tableData.value.filter(row => row.productName).reduce((sum, row) => sum + Number(row.amount || 0), 0).toFixed(4)))
+watch([totalSum, documentFormRef], () => {
+  if (documentFormRef.value?.formdata) documentFormRef.value.formdata.actualAmount = Number(totalSum.value)
+}, { immediate: true })
 
 // 供应商ID存储（当选择供应商时保存ID）
 const supplierId = ref<string | null>(null)
@@ -1465,12 +1459,15 @@ const handleProductConfirm = (selectedProducts: any[]) => {
  * 保存按钮处理函数
  */
 async function handleSave() {
+  if (saving.value) return
   if (!supplierId.value) {
     supplierMissing.value = true
     persistDraft()
     supplierPickerRef.value?.openPicker()
     return
   }
+  saving.value = true
+  try {
   console.log('保存数据')
   console.log('头部表单数据:', headerForm)
 
@@ -1520,88 +1517,14 @@ async function handleSave() {
 
   // 辅助函数：将 ID 转换为字符串类型
   const convertToStringId = (id: any, fieldName: string = 'ID'): string => {
-    if (id === null || id === undefined) {
-      throw new Error(`${fieldName}值不能为空`)
-    }
-    if (typeof id === 'number') {
-      if (id === 0) {
-        throw new Error(`${fieldName}值不能为0`)
-      }
-      return String(id)
-    }
-    if (typeof id === 'string') {
-      if (id.trim() === '') {
-        throw new Error(`${fieldName}值不能为空字符串`)
-      }
-      // 验证是否为有效的数字字符串
-      const num = Number(id)
-      if (!isNaN(num) && num !== 0) {
-        return String(id).trim()
-      }
-      // 如果字符串不是纯数字，可能是仓库编号等，提示用户
-      throw new Error(`${fieldName}值格式错误: "${id}"。请确保选择的是有效的${fieldName}，而不是编号或名称`)
-    }
-    if (id && typeof id === 'object') {
-      const numId = id.id || id.key
-      if (numId) {
-        const num = Number(numId)
-        if (!isNaN(num) && num !== 0) {
-          return String(numId)
-        }
-      }
-    }
-    throw new Error(`无效的${fieldName}值: ${id}`)
+    const raw = id && typeof id === 'object' ? id.id ?? id.key : id
+    if (typeof raw === 'number' && (!Number.isSafeInteger(raw) || raw <= 0)) throw new Error(`${fieldName}请使用完整的字符串标识`)
+    const value = typeof raw === 'string' ? raw.trim() : typeof raw === 'number' ? String(raw) : ''
+    if (!value || value === '0') throw new Error(`请选择有效的${fieldName}`)
+    return value
   }
 
-  // 辅助函数：将 ID 转换为数字类型（用于 warehouse 等需要数字类型的字段）
-  const convertToNumberId = (id: any, fieldName: string = 'ID'): number => {
-    if (id === null || id === undefined) {
-      throw new Error(`${fieldName}值不能为空`)
-    }
-    let numId: number | null = null
-    
-    if (typeof id === 'number') {
-      if (id === 0) {
-        throw new Error(`${fieldName}值不能为0`)
-      }
-      numId = id
-    } else if (typeof id === 'string') {
-      if (id.trim() === '') {
-        throw new Error(`${fieldName}值不能为空字符串`)
-      }
-      const num = Number(id.trim())
-      if (isNaN(num) || num === 0) {
-        throw new Error(`${fieldName}值格式错误: "${id}"。请确保选择的是有效的${fieldName}，而不是编号或名称`)
-      }
-      numId = num
-    } else if (id && typeof id === 'object') {
-      const objId = id.id || id.key
-      if (objId) {
-        const num = Number(objId)
-        if (!isNaN(num) && num !== 0) {
-          numId = num
-        }
-      }
-    }
-    
-    if (numId === null) {
-      throw new Error(`无效的${fieldName}值: ${id}`)
-    }
-    
-    // 检查是否超出 Integer 范围（-2147483648 到 2147483647）
-    const MAX_INTEGER = 2147483647
-    const MIN_INTEGER = -2147483648
-    if (numId > MAX_INTEGER || numId < MIN_INTEGER) {
-      throw new Error(
-        `${fieldName}值 ${numId} 超出了后端可处理的范围（-2147483648 到 2147483647）。` +
-        `这可能是数据问题，请选择其他${fieldName}或联系系统管理员。`
-      )
-    }
-    
-    return numId
-  }
-
-  // 转换表格数据为后端需要的格式
+  // 关联资料使用完整字符串标识，不能按整数范围转换。
   const purchaseOrderInfoDTOList = validTableData.map((row: any, index: number) => {
     // 根据实际使用的表格类型，字段名可能不同
     // el-table 使用: productName, productCode, spec, attr, unit, warehouse, price, quantity, taxRate, amount, taxAmount, total, remark
@@ -1661,7 +1584,6 @@ async function handleSave() {
     total: Number(documentFormData.documentCost) || 0
   }
 
-  try {
     // 调用后端接口
     const response = await PurchaseOrderAPI.addPurchaseOrder(requestData)
     
@@ -1689,12 +1611,12 @@ async function handleSave() {
           documentNumber: headerForm.documentNumber
         },
         tableData: validTableData,
-        isAudited: true
+        isAudited: false
       })
 
-      // 保存成功后，设置为已审核状态
-      isAudited.value = true
-      ElMessage.success(`保存成功，已保存 ${validTableData.length} 条数据`)
+      // 新增接口保存的是草稿，不能把保存当作审核。
+      isAudited.value = false
+      ElMessage.success(`采购订单草稿已保存，共 ${validTableData.length} 条明细；尚未审核`)
     } else {
       // 打印错误响应详情
       console.error('采购订单保存失败:', {
@@ -1711,13 +1633,14 @@ async function handleSave() {
       error: error,
       message: error?.message,
       response: error?.response,
-      responseData: error?.response?.data,
-      requestData: requestData
+      responseData: error?.response?.data
     })
     
     // 如果错误中有响应数据，优先显示响应中的错误信息
     const errorMessage = error?.response?.data?.message || error?.message || '保存失败，请稍后重试'
     ElMessage.error(errorMessage)
+  } finally {
+    saving.value = false
   }
 }
 

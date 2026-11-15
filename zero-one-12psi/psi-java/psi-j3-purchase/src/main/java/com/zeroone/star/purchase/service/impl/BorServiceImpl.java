@@ -85,6 +85,8 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     private IBorInfoService borInfoService;
     @Resource
     private UserHolder userHolder;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseOrderDraftService orderDrafts;
 
     /**
      * 新增采购订单
@@ -93,32 +95,7 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
      */
     @Transactional
     public JsonVO<String> addPurchaseOrder(PurchaseOrderAddDTO purchaseOrderAddDTO) {
-        BorDO bor = BeanUtil.copyProperties(purchaseOrderAddDTO, BorDO.class);
-
-        List<PurchaseOrderInfoDTO> borInfoDTOList = purchaseOrderAddDTO.getPurchaseOrderInfoDTOList();
-
-        // 1、将bor插入数据库中，并返回生成的id
-        bor.setExamine(0);      // 设置审核状态为未审核
-        bor.setState(0);        // 设置入库状态为未入库
-        try {
-            bor.setUser(userHolder.getCurrentUser().getId());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        save(bor);
-
-        String id = bor.getId();
-
-        // 2、将borInfo插入到数据库中
-        List<BorInfoDO> borInfoList = new ArrayList<>();
-        for (PurchaseOrderInfoDTO borInfoDTO : borInfoDTOList) {
-            BorInfoDO borInfo = BeanUtil.copyProperties(borInfoDTO, BorInfoDO.class);
-            borInfo.setPid(id);    // 设置所属id
-            borInfoList.add(borInfo);
-        }
-        borInfoService.saveBatch(borInfoList);
-
-        return JsonVO.success(id);
+        return JsonVO.success(orderDrafts.create(purchaseOrderAddDTO));
     }
 
     /**
