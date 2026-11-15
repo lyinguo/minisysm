@@ -11,7 +11,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import com.zeroone.star.project.constant.RedisConstant;
 import java.util.*;
 
-/** Current identity and organization scope. Function-level grants have a separate pending gate. */
+/** Live account/role grants and organization scope; dynamic detail paths use the legacy info resource. */
 @Service
 @org.springframework.context.annotation.Import(com.zeroone.star.project.config.redis.RedisConfig.class)
 public class PurchaseDocumentAccess {
@@ -53,5 +53,21 @@ public class PurchaseDocumentAccess {
     public void requireFrame(UserDTO actor,String selected) {
         String allowed=frame(actor);
         if(allowed!=null && !allowed.equals(selected)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"不能操作其他组织的采购单");
+    }
+    public void requireDocuments(List<String> ids,String resource) {
+        UserDTO actor=authorize(resource);
+        if(ids==null || ids.isEmpty() || ids.size()>200 || new HashSet<>(ids).size()!=ids.size() || ids.stream().anyMatch(id->id==null || id.trim().isEmpty()))
+            throw new IllegalArgumentException("请选择1到200张不同的采购单");
+        for(String id:ids) {
+            List<String> frames=db.queryForList("SELECT frame FROM buy WHERE id=?",String.class,id);
+            if(frames.size()!=1) throw new IllegalArgumentException("采购单不存在");
+            requireFrame(actor,frames.get(0));
+        }
+    }
+    public void requireLine(String id,String resource) {
+        UserDTO actor=authorize(resource);
+        List<String> frames=db.queryForList("SELECT b.frame FROM buy_info i JOIN buy b ON b.id=i.pid WHERE i.id=?",String.class,id);
+        if(frames.size()!=1) throw new IllegalArgumentException("采购明细不存在");
+        requireFrame(actor,frames.get(0));
     }
 }

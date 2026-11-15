@@ -732,7 +732,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      */
     @Override
     public PageDTO<PurchaseNoteListDTO> listPurchaseNote(PurchaseNoteQuery query){
-        String allowedFrame=purchaseAccess.frame(purchaseAccess.current());
+        String allowedFrame=purchaseAccess.frame(purchaseAccess.authorize("/purchase-note/list"));
         //创建分页对象
         Page<BuyVO> page = new Page<>(Math.max(1, query.getPageIndex()), Math.max(1, Math.min(200, query.getPageSize())));
 

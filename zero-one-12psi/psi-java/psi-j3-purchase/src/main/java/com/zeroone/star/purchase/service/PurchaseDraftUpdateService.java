@@ -29,7 +29,7 @@ public class PurchaseDraftUpdateService {
     }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String,Object> detail(String id) {
-        UserDTO actor=access.current();
+        UserDTO actor=access.authorize("/purchase-note/info");
         List<Map<String,Object>> found=db.queryForList("SELECT b.*,DATE_FORMAT(b.time,'%Y-%m-%d %H:%i:%s') AS time_text FROM buy b WHERE id=?",id);
         if(found.size()!=1) throw new IllegalArgumentException("采购单不存在");
         Map<String,Object> header=found.get(0);
@@ -67,7 +67,7 @@ public class PurchaseDraftUpdateService {
     @Transactional(rollbackFor=Exception.class)
     public void update(RevisePurchaseDTO request) {
         if(request==null || request.getId()==null || request.getId().trim().isEmpty()) throw new IllegalArgumentException("采购单ID不能为空");
-        UserDTO actor=access.current();
+        UserDTO actor=access.authorize("/purchase-note/revise");
         db.update("INSERT INTO psi_document_write_lock(scope) VALUES('buy') ON DUPLICATE KEY UPDATE scope='buy'");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='buy' FOR UPDATE",String.class);
         List<Map<String,Object>> found=db.queryForList("SELECT b.*,DATE_FORMAT(b.time,'%Y-%m-%d %H:%i:%s') AS time_text FROM buy b WHERE id=? FOR UPDATE",request.getId());

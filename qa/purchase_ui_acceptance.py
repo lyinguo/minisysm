@@ -8,6 +8,7 @@ import io
 import zipfile
 from decimal import Decimal
 from purchase_revision_acceptance import PurchaseRevisionSuite
+from resource_fixture import qa_resource_grants,authority
 from acceptance import QA,read_state,sql,literal
 
 
@@ -47,38 +48,41 @@ class PurchaseUiSuite(PurchaseRevisionSuite):
                 'INSERT INTO supplier(id,name,py,number,frame,`user`,category) VALUES('+','.join(literal(v) for v in [supplier,'QA Branch Supplier','qa','QS'+supplier[:16],foreign,self.actor,'0'])+');')
             foreign_id,foreign_user,_=self.new_user(frame=foreign)
             own_id,own_user,_=self.new_user()
-            admin=self.token
-            try:
-                self.token=self.login(foreign_user)
-                body=self.body();body['purchaseNoteBuyDTO']['supplier']=supplier
-                body['purchaseNoteInfoDTOS'][0].update(warehouse=warehouse,tax=13,discount=0,batch='',mfd=None,serial='[]')
-                identifier=self.create(body)
-                assert self.document(identifier)['header']['frame']==foreign
-                self.token=admin
-                edit=self.revision(identifier);edit['supplier']=supplier;edit['details'][0]['warehouse']=warehouse
-                own_token=self.login(own_user)
-                self.token=own_token
-                assert self.request('GET','/purchase-note/document/'+identifier,service='purchase').get('code')==403
-                listing=self.request('GET','/purchase-note/list?number='+body['purchaseNoteBuyDTO']['number'],service='purchase')
-                assert listing.get('code')==10000 and isinstance(listing.get('data'),dict)
-                assert not listing['data'].get('rows') and listing['data'].get('total')==0
-                assert self.revise(edit).get('code')==403
-                own=self.draft()
-                assert self.document(own)['header']['frame']==self.state['frame_id']
-                # Only this newly created QA account moves organizations; the same signed token is reused.
-                self.token=admin
-                self.success('PUT','/user/mod-user',dict(id=own_id,frame=foreign))
-                self.token=own_token
-                assert self.request('GET','/purchase-note/document/'+own,service='purchase').get('code')==403
-                assert self.document(identifier)['header']['frame']==foreign
-                self.token=admin
-                assert self.revise(edit).get('code')==10000
-                after=self.document(identifier)
-                assert after['header']['frame']==foreign and after['header']['user']==foreign_id
-                assert Decimal(str(after['items'][0]['nums']))==3
-            finally:
-                self.token=admin
-            return ['Actual non-admin OAuth users create/read in their own organizations; foreign list/read/write denied', 'Moving only a new QA user changes data scope with its existing token; actual administrator can read/edit another organization without moving ownership', 'Function-level grants are a separate pending gate']
+            keyword=sql(self.state,"SELECT COALESCE(keyword,'') FROM role WHERE id="+literal(self.state['role_id'])+';')
+            resources=['/purchase-note/'+path for path in ['add','list','info','revise']]
+            with qa_resource_grants(self.state,resources,[authority(self.state['role_id'],keyword)]):
+                admin=self.token
+                try:
+                    self.token=self.login(foreign_user)
+                    body=self.body();body['purchaseNoteBuyDTO']['supplier']=supplier
+                    body['purchaseNoteInfoDTOS'][0].update(warehouse=warehouse,tax=13,discount=0,batch='',mfd=None,serial='[]')
+                    identifier=self.create(body)
+                    assert self.document(identifier)['header']['frame']==foreign
+                    self.token=admin
+                    edit=self.revision(identifier);edit['supplier']=supplier;edit['details'][0]['warehouse']=warehouse
+                    own_token=self.login(own_user)
+                    self.token=own_token
+                    assert self.request('GET','/purchase-note/document/'+identifier,service='purchase').get('code')==403
+                    listing=self.request('GET','/purchase-note/list?number='+body['purchaseNoteBuyDTO']['number'],service='purchase')
+                    assert listing.get('code')==10000 and isinstance(listing.get('data'),dict)
+                    assert not listing['data'].get('rows') and listing['data'].get('total')==0
+                    assert self.revise(edit).get('code')==403
+                    own=self.draft()
+                    assert self.document(own)['header']['frame']==self.state['frame_id']
+                    # Only this newly created QA account moves organizations; the same signed token is reused.
+                    self.token=admin
+                    self.success('PUT','/user/mod-user',dict(id=own_id,frame=foreign))
+                    self.token=own_token
+                    assert self.request('GET','/purchase-note/document/'+own,service='purchase').get('code')==403
+                    assert self.document(identifier)['header']['frame']==foreign
+                    self.token=admin
+                    assert self.revise(edit).get('code')==10000
+                    after=self.document(identifier)
+                    assert after['header']['frame']==foreign and after['header']['user']==foreign_id
+                    assert Decimal(str(after['items'][0]['nums']))==3
+                finally:
+                    self.token=admin
+            return ['Actual non-admin OAuth users create/read in their own organizations; foreign list/read/write denied', 'Moving only a new QA user changes data scope with its existing token; actual administrator can read/edit another organization without moving ownership', 'Explicit temporary QA resource grants applied and restored; full role-management grant refresh remains pending']
         self.case('purchase.ui_actual_organization_data_scopes',scope)
 
         def export():

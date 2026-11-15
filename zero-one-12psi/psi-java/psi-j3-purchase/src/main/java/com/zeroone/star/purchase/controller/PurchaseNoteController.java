@@ -53,6 +53,8 @@ import java.util.List;
 public class PurchaseNoteController implements PurchaseNoteApis {
     @Resource
     private com.zeroone.star.purchase.service.PurchaseDraftUpdateService draftUpdates;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseDocumentAccess access;
     @GetMapping("/document/{id}")
     @ApiOperation("获取完整采购单及编辑版本")
     public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id) {
@@ -93,6 +95,7 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     @ApiOperation("导入数据")
     @PostMapping("/import")
     public JsonVO<String> importPurchaseNote(MultipartFile excelFile) {
+        access.authorize("/purchase-note/import");
         log.info("开始导入采购单数据");
         // 校验是否是excel文件
         // 是
@@ -109,9 +112,10 @@ public class PurchaseNoteController implements PurchaseNoteApis {
      * author: 小阳
      */
     @ApiOperation("导出简易报表")
-    @GetMapping(value = "/export/simple", produces = "application/octet-stream")
+    @GetMapping(value = "/export/simple")
     public ResponseEntity<byte[]> exportPurchaseNoteSimpleReport(
             @RequestParam("ids") List< String> ids) {
+        access.requireDocuments(ids,"/purchase-note/export/simple");
         log.info("开始导出采购单simple报表,ids = {}",ids);
 
         // 在括号里面创造输出流，jvm会自动关闭流
@@ -158,6 +162,7 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     @ApiOperation("导出详细报表")
     @GetMapping("/export/detail")
     public ResponseEntity<byte[]> exportPurchaseNoteDetailReport(@RequestParam("ids")List<String> ids) {
+        access.requireDocuments(ids,"/purchase-note/export/detail");
         log.info("开始导出采购单detail报表,ids = {}",ids);
         // TODO 参数校验，只能传数字。
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()){
@@ -206,6 +211,7 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     @ApiOperation("获取生成采购退货单数据")
     @GetMapping("/getBuildBre")
     public JsonVO<PurchaseNoteBuildDTO> getBuildBre( @ApiParam(value = "采购单ID", required = true, example = "PUR20251103001") String id) {
+        access.requireDocuments(java.util.Collections.singletonList(id),"/purchase-note/getBuildBre");
         try {
             PurchaseNoteBuildDTO result = purchaseNoteService.getBuildBreData(id);
             return JsonVO.success(result);

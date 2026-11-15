@@ -19,6 +19,8 @@ import java.util.List;
  */
 @Service
 public class BuyInfoServiceImpl extends ServiceImpl<BuyInfoMapper, BuyInfoDO> implements IBuyInfoService {
+    @Autowired
+    private com.zeroone.star.purchase.service.PurchaseDocumentAccess access;
 
     /**
      * 批量查询采购单详情
@@ -39,6 +41,7 @@ public class BuyInfoServiceImpl extends ServiceImpl<BuyInfoMapper, BuyInfoDO> im
      */
     @Override
     public PurchaseNoteInfoDTO getPurchaseNoteInfo(String id) {
+        access.requireLine(id,"/purchase-note/info");
         // 根据id查询采购单详情
         // baseMapper对应BuyInfoMapper
         PurchaseNoteInfoDTO purchaseNoteInfoDTO = baseMapper.getPurchaseNoteInfoDetail(id);
