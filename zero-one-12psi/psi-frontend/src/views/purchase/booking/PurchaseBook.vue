@@ -2,33 +2,11 @@
   <div class="page-container">
     <!-- 商品表格区域 -->
     <div class="table-section">
+      <PurchaseSupplierPicker ref="supplierPickerRef" :supplier-id="supplierId" :supplier-name="headerForm.supplier" :invalid="supplierMissing" :disabled="isAudited" @select="handleSupplierChoice" @clear="handleClearSupplier" @manage="manageSuppliers" />
       <!-- 表单和按钮行 -->
       <div class="header-row">
         <!-- 左侧表单字段 -->
         <div class="header-form">
-          <!-- 供应商 -->
-          <div class="form-item">
-            <label class="form-label">供应商</label>
-            <el-select
-              v-model="supplierId"
-              filterable
-              clearable
-              placeholder="请选择供应商"
-              class="supplier-input"
-              style="width: 220px"
-              :loading="supplierLoading"
-              @change="handleSupplierSelectChange"
-              @clear="handleClearSupplier"
-            >
-              <el-option
-                v-for="item in supplierOptions"
-                :key="item.id"
-                :label="`${item.name}${item.code ? ' (' + item.code + ')' : ''}`"
-                :value="item.id"
-              />
-            </el-select>
-          </div>
-
           <!-- 单据日期 -->
           <div class="form-item">
             <label class="form-label">单据日期</label>
@@ -363,32 +341,13 @@ import Price from '@/components/ag-Grid/Price.vue'
 
 import { nextTick } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
-import { SupplierAPI } from '@/apis/basicdata/supplier'
+import PurchaseSupplierPicker from './PurchaseSupplierPicker.vue'
 import { CommonAPI } from '@/apis/common/api'
 
-const supplierOptions = ref<Array<{ id: string; name: string; code: string }>>([])
-const supplierLoading = ref(false)
+const supplierPickerRef = ref<{ openPicker: () => void } | null>(null)
+const supplierMissing = ref(false)
 const warehouseOptions = ref<Array<{ id: string; name: string }>>([])
 const batchWarehouseId = ref<string | null>(null)
-
-async function loadSupplierOptions() {
-  supplierLoading.value = true
-  try {
-    const result = await SupplierAPI.getSupplierList({ pageIndex: 1, pageSize: 500 })
-    const rows = result?.data?.rows || []
-    supplierOptions.value = rows.map((row: any) => ({
-      id: String(row.id ?? ''),
-      name: row.name || '',
-      code: row.number || row.code || ''
-    })).filter((item) => item.id)
-  } catch (error) {
-    console.error('加载供应商失败:', error)
-    supplierOptions.value = []
-    ElMessage.error(error instanceof Error ? error.message : '加载供应商失败')
-  } finally {
-    supplierLoading.value = false
-  }
-}
 
 async function loadWarehouseOptions() {
   try {
@@ -401,13 +360,15 @@ async function loadWarehouseOptions() {
   }
 }
 
-function handleSupplierSelectChange(id: string | null) {
-  const found = supplierOptions.value.find((item) => item.id === id)
-  headerForm.supplier = found?.name || ''
-  form.supplier = found?.name || null
-  supplierId.value = id || null
+function handleSupplierChoice(item: { id: string; name: string; code: string }) {
+  headerForm.supplier = item.name
+  form.supplier = item.name
+  supplierId.value = item.id
+  supplierMissing.value = false
   persistDraft()
 }
+
+function manageSuppliers() { persistDraft(); void router.push('/supplier-manage') }
 
 function handleClearSupplier() {
   headerForm.supplier = ''
@@ -1504,6 +1465,12 @@ const handleProductConfirm = (selectedProducts: any[]) => {
  * 保存按钮处理函数
  */
 async function handleSave() {
+  if (!supplierId.value) {
+    supplierMissing.value = true
+    persistDraft()
+    supplierPickerRef.value?.openPicker()
+    return
+  }
   console.log('保存数据')
   console.log('头部表单数据:', headerForm)
 
@@ -1536,12 +1503,6 @@ async function handleSave() {
   }
 
   // 验证必填字段
-  if (!supplierId.value) {
-    persistDraft()
-    ElMessage.warning('请选择供应商')
-    return
-  }
-
   if (!documentFormData.relatedPerson) {
     ElMessage.warning('请选择关联人员')
     return
@@ -2037,8 +1998,12 @@ async function handleGeneratePurchaseOrder() {
   console.log('🏁 [handleGeneratePurchaseOrder] 执行完成')
 }
 
+// Restore synchronously: workspace tab changes can remount the page before
+// asynchronous reference queries finish. Never persist a blank interim draft.
+restoreDraftFromStore()
+
 // 在组件挂载后的操作
-onMounted(async () => {
+onMounted(() => {
   // 设置 context 的 componentParent 为当前实例
   if (instance) {
     grid.context.componentParent = {
@@ -2047,9 +2012,8 @@ onMounted(async () => {
     }
   }
 
-  await Promise.all([loadSupplierOptions(), loadWarehouseOptions()])
-  restoreDraftFromStore()
   syncTableDataToStore()
+  void loadWarehouseOptions()
 })
 
 onBeforeUnmount(() => {
@@ -2149,6 +2113,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   margin-bottom: 15px;
   gap: 20px;
+  flex-wrap: wrap;
 }
 
 /* 左侧表单字段 */
@@ -2157,6 +2122,8 @@ onBeforeUnmount(() => {
   gap: 16px;
   align-items: flex-start;
   flex: 1;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 /* 单个表单项 */
