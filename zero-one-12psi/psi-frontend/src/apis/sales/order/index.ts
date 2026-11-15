@@ -14,6 +14,9 @@ import type {
  */
 export class SaleOrderApi {
   private http = useHttp()
+  async getDocument(id: string): Promise<JsonVO<import('./type').SaleDocumentDetail>> {
+    return this.http.get('/sale/form/document/' + encodeURIComponent(id))
+  }
 
   /**
    * 新增销售单

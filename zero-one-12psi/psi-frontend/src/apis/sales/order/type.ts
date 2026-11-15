@@ -60,6 +60,7 @@ export interface SaleDetailItem {
  * 销售单数据对象
  */
 export interface SaleDTO {
+  version?: string
   /** 主键ID */
   id?: string
   /** 所属组织 */
@@ -69,7 +70,7 @@ export interface SaleDTO {
   /** 客户名称 */
   customerName?: string
   /** 单据时间 */
-  time?: string
+  time?: string | number
   /** 单据编号 */
   number?: string
   /** 单据金额 */
@@ -110,6 +111,12 @@ export interface SaleDTO {
 
   /** 销售详情单 */
   items?: SaleDetailItem[]
+}
+
+export interface SaleDocumentDetail {
+  version: string
+  header: Record<string, any>
+  items: Record<string, any>[]
 }
 
 /**

@@ -2,10 +2,10 @@
   <section ref="rootRef" class="root-container">
     <!-- 单据表单 -->
     <div class="form-section">
-      <el-form ref="formRef" :model="formdata" :rules="rules" v-bind="formattr">
+      <el-form ref="formRef" :model="formdata" :rules="effectiveRules" :disabled="disabled" v-bind="formattr">
         <LineFeed tag=".el-form-item" :rule="3">
           <!-- 单据金额（只读样式近似禁用） -->
-          <el-form-item v-if="visibleFields.has('documentCost')" label="单据金额" prop="documentCost" :rules="[{ required: true, message: '请输入单据金额', trigger: 'blur' }]">
+          <el-form-item v-if="visibleFields.has('documentCost')" label="单据金额" prop="documentCost" :rules="optionalFields.includes('documentCost') ? [] : [{ required: true, message: '请输入单据金额', trigger: 'blur' }]">
             <el-input
               v-model="formdata.documentCost"
               placeholder="自动计算的单据金额"
@@ -17,7 +17,7 @@
           </el-form-item>
 
           <!-- 单据成本（只读样式近似禁用） -->
-          <el-form-item v-if="visibleFields.has('documentBaseCost')" label="单据成本" prop="documentBaseCost" :rules="[{ required: true, message: '请输入单据成本', trigger: 'blur' }]">
+          <el-form-item v-if="visibleFields.has('documentBaseCost')" label="单据成本" prop="documentBaseCost" :rules="optionalFields.includes('documentBaseCost') ? [] : [{ required: true, message: '请输入单据成本', trigger: 'blur' }]">
             <el-input
               v-model="formdata.documentBaseCost"
               placeholder="自动计算的单据成本"
@@ -29,7 +29,7 @@
           </el-form-item>
 
           <!-- 单据类型 -->
-          <el-form-item v-if="visibleFields.has('documentType')" label="单据类型" prop="documentType" :rules="[{ required: true, message: '请选择单据类型', trigger: 'change' }]">
+          <el-form-item v-if="visibleFields.has('documentType')" label="单据类型" prop="documentType" :rules="optionalFields.includes('documentType') ? [] : [{ required: true, message: '请选择单据类型', trigger: 'change' }]">
             <el-select v-model="formdata.documentType" placeholder="请选择单据类型" clearable style="width: 100%">
               <el-option
                 v-for="option in documentTypeOptions"
@@ -41,9 +41,10 @@
           </el-form-item>
 
           <!-- 实际金额（带复制图标） -->
-          <el-form-item v-if="visibleFields.has('actualAmount')" label="实际金额" prop="actualAmount" :rules="[{ required: true, message: '请输入实际金额', trigger: 'blur' }]">
+          <el-form-item v-if="visibleFields.has('actualAmount')" label="实际金额" prop="actualAmount" :rules="optionalFields.includes('actualAmount') ? [] : [{ required: true, message: '请输入实际金额', trigger: 'blur' }]">
             <el-input
               v-model="formdata.actualAmount"
+              :readonly="computedAmounts"
               placeholder="请输入实际金额"
               type="text"
               style="width: 100%"
@@ -56,7 +57,7 @@
           </el-form-item>
 
           <!-- 实付金额 -->
-          <el-form-item v-if="visibleFields.has('paidAmount')" label="实付金额" prop="paidAmount" :rules="[{ required: true, message: '请输入实付金额', trigger: 'blur' }]">
+          <el-form-item v-if="visibleFields.has('paidAmount')" label="实付金额" prop="paidAmount" :rules="optionalFields.includes('paidAmount') ? [] : [{ required: true, message: '请输入实付金额', trigger: 'blur' }]">
             <el-input
               v-model="formdata.paidAmount"
               placeholder="请输入实付金额"
@@ -66,7 +67,7 @@
           </el-form-item>
 
           <!-- 实收金额 -->
-          <el-form-item v-if="visibleFields.has('receivedAmount')" label="实收金额" prop="receivedAmount" :rules="[{ required: true, message: '请输入实收金额', trigger: 'blur' }]">
+          <el-form-item v-if="visibleFields.has('receivedAmount')" label="实收金额" prop="receivedAmount" :rules="optionalFields.includes('receivedAmount') ? [] : [{ required: true, message: '请输入实收金额', trigger: 'blur' }]">
             <el-input
               v-model="formdata.receivedAmount"
               placeholder="请输入实收金额"
@@ -76,7 +77,7 @@
           </el-form-item>
 
           <!-- 单据费用 -->
-          <el-form-item v-if="visibleFields.has('documentFee')" label="单据费用" prop="documentFee" :rules="[{ required: true, message: '请输入单据费用', trigger: 'blur' }]">
+          <el-form-item v-if="visibleFields.has('documentFee')" label="单据费用" prop="documentFee" :rules="optionalFields.includes('documentFee') ? [] : [{ required: true, message: '请输入单据费用', trigger: 'blur' }]">
             <el-input
               v-model="formdata.documentFee"
               placeholder="请输入单据费用"
@@ -86,7 +87,7 @@
           </el-form-item>
 
           <!-- 关联人员 -->
-          <el-form-item v-if="visibleFields.has('relatedPerson')" label="关联人员" prop="relatedPerson" :rules="[{ required: true, message: '请选择关联人员', trigger: 'change' }]">
+          <el-form-item v-if="visibleFields.has('relatedPerson')" label="关联人员" prop="relatedPerson" :rules="optionalFields.includes('relatedPerson') ? [] : [{ required: true, message: '请选择关联人员', trigger: 'change' }]">
             <el-input
               :model-value="formdata.relatedPersonName || ''"
               placeholder="请选择关联人员"
@@ -125,7 +126,7 @@
           </el-form-item>
 
           <!-- 结算账户 -->
-          <el-form-item v-if="visibleFields.has('settlementAccount')" label="结算账户" prop="settlementAccount" :rules="[{ required: true, message: '请选择结算账户', trigger: 'change' }]">
+          <el-form-item v-if="visibleFields.has('settlementAccount')" label="结算账户" prop="settlementAccount" :rules="optionalFields.includes('settlementAccount') ? [] : [{ required: true, message: '请选择结算账户', trigger: 'change' }]">
             <el-input
               :model-value="formdata.settlementAccountName || ''"
               placeholder="请选择结算账户"
@@ -164,7 +165,7 @@
           </el-form-item>
 
           <!-- 到货日期 -->
-          <el-form-item v-if="visibleFields.has('arrivalDate')" label="到货日期" prop="arrivalDate" :rules="[{ required: true, message: '请选择到货日期', trigger: 'change' }]">
+          <el-form-item v-if="visibleFields.has('arrivalDate')" label="到货日期" prop="arrivalDate" :rules="optionalFields.includes('arrivalDate') ? [] : [{ required: true, message: '请选择到货日期', trigger: 'change' }]">
             <el-date-picker
               v-model="formdata.arrivalDate"
               type="date"
@@ -174,7 +175,7 @@
           </el-form-item>
 
           <!-- 物流信息 -->
-          <el-form-item v-if="visibleFields.has('logistics')" label="物流信息" prop="logistics" :rules="[{ required: true, message: '请完善物流信息', trigger: 'change' }]">
+          <el-form-item v-if="visibleFields.has('logistics')" label="物流信息" prop="logistics" :rules="optionalFields.includes('logistics') ? [] : [{ required: true, message: '请完善物流信息', trigger: 'change' }]">
             <Logistics v-model="formdata.logistics" :more="supplierMore" />
           </el-form-item>
 
@@ -257,6 +258,10 @@ interface FormData extends Record<string, any> {
 
 // 动态可见字段
 const props = defineProps({
+  disabled: { type: Boolean, default: false },
+  optionalFields: { type: Array as PropType<string[]>, default: () => [] },
+  computedAmounts: { type: Boolean, default: false },
+  amountPrecision: { type: Number, default: 2 },
   amount: { type: Number, default: undefined },
   fields: {
     type: Array as PropType<string[]>,
@@ -344,6 +349,8 @@ const rules = reactive({
   settlementAccount: [{ required: true, message: '请选择结算账户', trigger: 'change' }]
 })
 
+const effectiveRules = computed(() => Object.fromEntries(Object.entries(rules).map(([field, value]) => [field, props.optionalFields.includes(field) ? [] : value])))
+
 // 上传配置
 const uploadAction = '/api/upload'
 
@@ -390,8 +397,9 @@ watch(documentAmountTotal, (total) => {
     formdata.documentBaseCost = undefined
     return
   }
-  formdata.documentCost = Number(total.toFixed(2))
-  formdata.documentBaseCost = Number(total.toFixed(2))
+  const precision = Math.max(0, Math.min(4, props.amountPrecision))
+  formdata.documentCost = Number(total.toFixed(precision))
+  formdata.documentBaseCost = Number(total.toFixed(precision))
 }, { immediate: true })
 
 // 与供应商信息联动：根据关联人员或供应商信息构建 more 数据

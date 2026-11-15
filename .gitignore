@@ -49,4 +49,5 @@ reference-project/
 *.sql
 !database/schema.sql
 !database/migrations/20261114_master_integrity.sql
+!database/migrations/20261115_sale_rate_precision.sql
 !**/src/test/resources/warehouse-schema.sql

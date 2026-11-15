@@ -81,6 +81,7 @@ def bootstrap():
         schema_path = ROOT / '.publication/database/schema.sql'
     schema = schema_path.read_text(encoding='utf-8')
     sql(state, schema)
+    sql(state, (ROOT / 'database/migrations/20261115_sale_rate_precision.sql').read_text(encoding='utf-8'))
     integrity.install(state['container'], state['database'])
     sql(state, "INSERT INTO frame(id,pid,name,sort,data) VALUES(" + literal(state['frame_id']) + ",'0','QA Organization',0,'');")
     sql(state, "INSERT INTO role(id,name,data,root,auth,keyword) VALUES(" + literal(state['role_id']) + ",'QA Role','','{}','{}','');")

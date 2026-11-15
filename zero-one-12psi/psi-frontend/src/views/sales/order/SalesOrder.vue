@@ -94,7 +94,7 @@
         <div class="action-buttons-container">
           <!-- 未审核状态：显示保存和刷新 -->
           <ButtonGroup v-if="!isAudited" align="right" gap="0px">
-            <BusinessButton action-type="save" @action="handleSave" />
+            <BusinessButton action-type="save" custom-text="保存草稿" :loading="saving" :disabled="saving" @action="handleSave" />
             <BusinessButton action-type="refresh" @action="handleRefresh" />
           </ButtonGroup>
 
@@ -205,7 +205,7 @@
                 <Warehouse @confirm="handleWarehouseConfirm" />
                 <template #reference>
                   <el-button type="text" size="small">
-                    {{ scope.row.warehouse || '选择仓库' }}
+                    {{ scope.row.warehouseName || scope.row.warehouse || '选择仓库' }}
                   </el-button>
                 </template>
               </el-popover>
@@ -340,7 +340,7 @@
 
     <!-- 底部表单 -->
     <div ref="documentFormSectionRef" class="document-form-section">
-      <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" />
+      <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.receivedAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
     </div>
 
     <!-- 生成单据弹窗 -->
@@ -423,7 +423,8 @@ function toggleRowPopover(index: number) {
 function handleWarehouseConfirm(selected: any) {
   if (!selected || currentWarehouseIndex.value === null) return
   const row = tableData.value[currentWarehouseIndex.value]
-  row.warehouse = selected.name || selected.warehouseName || ''
+  row.warehouse = String(selected.warehouseId || selected.id || '')
+  row.warehouseName = selected.warehouseName || selected.name || ''
   rowPopoverVisible.value[currentWarehouseIndex.value] = false
   ElMessage.success(`已选择仓库：${row.warehouse}`)
 }
@@ -433,7 +434,7 @@ function handleBatchWarehouseSelect(selected: any) {
   if (!selected) return
   const selectedName = selected.name || selected.warehouseName || ''
   tableData.value.forEach((r) => {
-    if (r.productName) r.warehouse = selectedName
+    if (r.productName) { r.warehouse = String(selected.warehouseId || selected.id || ''); r.warehouseName = selectedName }
   })
   batchWarehouseVisible.value = false
   ElMessage.success(`已批量设置仓库：${selectedName}`)
@@ -576,8 +577,8 @@ function handleWarehouseChange(row: any) {
 
 // 页面加载时获取数据
 type SalesLine = {
-  goodsId?: string; productName: string; productCode: string; spec: string; attr: string;
-  unit: string; warehouse: string; price: number | string; quantity: number | string;
+  id?: string; goodsId?: string; productName: string; productCode: string; spec: string; attr: string;
+  unit: string; warehouse: string; warehouseName?: string; price: number | string; quantity: number | string;
   amount: number | string; taxRate: number | string; taxAmount: number | string;
   total: number | string; remark: string
 }
@@ -687,10 +688,10 @@ function handleTableProductConfirm(selected: any[]) {
   row.productCode = first.code
   row.goodsId = first.id ? String(first.id) : ''
   row.spec = first.model || ''
-  row.attr = first.category || ''
+  row.attr = first.selectedAttr || ''
   row.unit = first.unit || ''
   row.warehouse = row.warehouse || '' // 不覆盖已有仓库
-  row.price = first.purchasePrice ?? 0
+  row.price = first.salePrice ?? first.sell ?? 0
   row.quantity = first.quantity ?? 1
   row.taxRate = row.taxRate ?? 13
 
@@ -758,7 +759,7 @@ interface ExtendedColDef extends ColDef {
 const purchaseOrderFields = [
   'documentCost', // 单据金额
   'actualAmount', // 实际金额
-  'paidAmount', // 实付金额
+  'receivedAmount', // 实收金额
   'documentFee', // 单据费用
   'settlementAccount', // 结算账户
   'relatedPerson', // 关联人员
@@ -803,6 +804,14 @@ const showProductPopup = ref(false)
 const currentRowIndex = ref<number | null>(null)
 
 // 审核状态管理
+const documentNetAmount = computed(() => tableData.value.reduce((sum, row) => sum + Number(row.amount || 0), 0))
+watch(totalSum, value => {
+  const form = documentFormRef.value?.formdata
+  if (form) form.actualAmount = Number(value)
+})
+const saving = ref(false)
+const savedId = ref('')
+const savedVersion = ref('')
 const isAudited = ref(false)
 
 // 核对状态管理
@@ -1452,8 +1461,8 @@ function prepareDocumentFormBeforeSave() {
   if (formdata.documentFee == null || String(formdata.documentFee).trim() === '') {
     formdata.documentFee = 0
   }
-  if (formdata.paidAmount == null || String(formdata.paidAmount).trim() === '') {
-    formdata.paidAmount = 0
+  if (formdata.receivedAmount == null || String(formdata.receivedAmount).trim() === '') {
+    formdata.receivedAmount = 0
   }
 }
 
@@ -1461,6 +1470,9 @@ function prepareDocumentFormBeforeSave() {
  * 保存按钮处理函数
  */
 async function handleSave() {
+  if (saving.value) return
+  saving.value = true
+  try {
   const headerResult = await validateFormWithFocus(
     headerFormRef.value,
     headerFormSectionRef.value
@@ -1501,14 +1513,17 @@ async function handleSave() {
   }
 
   try {
+    const files = documentFormData.documentAttachment || []
+    if (files.some(file => !file.url || (file.status && file.status !== 'success'))) throw new Error('附件尚未上传成功，请重试或移除失败附件')
     const saleData: SaleDTO = {
+      id: savedId.value || undefined, version: savedVersion.value || undefined,
       frame: headerForm.frame,
       customer: customerId.value || String(form.supplier || headerForm.customer),
       time: formatOrderDateTime(headerForm.documentDate),
       number: headerForm.documentNumber,
       total: Number(documentFormData.documentCost) || parseFloat(totalSum.value) || 0,
       actual: Number(documentFormData.actualAmount) || parseFloat(totalSum.value) || 0,
-      money: Number(documentFormData.paidAmount) || 0,
+      money: Number(documentFormData.receivedAmount) || 0,
       cost: Number(documentFormData.documentFee) || 0,
       account: documentFormData.settlementAccount || '',
       people: documentFormData.relatedPerson || '',
@@ -1516,7 +1531,7 @@ async function handleSave() {
         typeof documentFormData.logistics === 'string'
           ? documentFormData.logistics
           : documentFormData.logistics?.number || documentFormData.logistics?.name || '',
-      file: documentFormData.documentAttachment?.[0]?.url || '',
+      file: JSON.stringify(files.map(file => ({ name: file.name, url: file.url }))),
       data: documentFormData.remarks || '',
       user: userStore.getUser?.id || userStore.getUser?.username || 'system',
       examine: false,
@@ -1525,7 +1540,7 @@ async function handleSave() {
       cse: 0,
       invoice: 0,
       items: validTableData.map((item) => ({
-        pid: '',
+        id: item.id, pid: savedId.value || '',
         goods: item.goodsId || item.productCode,
         goodsName: item.productName,
         goodsCode: item.productCode,
@@ -1536,17 +1551,20 @@ async function handleSave() {
         price: Number(item.price) || 0,
         nums: Number(item.quantity) || 0,
         total: Number(item.amount) || 0,
-        tax: Number(item.taxRate) || 0,
+        tax: (Number(item.taxRate) || 0) / 100,
         tat: Number(item.taxAmount) || 0,
         tpt: Number(item.total) || 0,
         data: item.remark
       }))
     }
 
-    const response = await saleOrderApi.addSale(saleData)
+    const response = savedId.value ? await saleOrderApi.updateSale(saleData) : await saleOrderApi.addSale(saleData)
 
     if (response.code === 10000) {
-      isAudited.value = true
+      savedId.value = String(response.data?.id || savedId.value)
+      savedVersion.value = response.data?.version || savedVersion.value
+      isAudited.value = Boolean(response.data?.examine)
+      validTableData.forEach((row, index) => { row.id = response.data?.items?.[index]?.id })
 
       purchaseStore.savePurchaseOrderData({
         headerForm: {
@@ -1555,11 +1573,11 @@ async function handleSave() {
           documentNumber: headerForm.documentNumber
         },
         tableData: validTableData,
-        isAudited: true,
+        isAudited: isAudited.value,
         isChecked: isChecked.value
       })
 
-      ElMessage.success(`保存成功，已保存 ${validTableData.length} 条数据`)
+      ElMessage.success(`销售草稿已保存。核对或审核请进入“查询已保存单据”。`)
     } else {
       ElMessage.error(response.message || '保存失败')
     }
@@ -1567,6 +1585,8 @@ async function handleSave() {
     console.error('保存失败:', error)
     ElMessage.error(extractApiErrorMessage(error, '保存失败，请重试'))
   }
+
+  } finally { saving.value = false }
 }
 
 /**

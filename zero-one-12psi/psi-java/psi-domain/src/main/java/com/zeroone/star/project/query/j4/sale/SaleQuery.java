@@ -22,6 +22,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @ApiModel("销售单查询参数")
 public class SaleQuery extends PageQuery {
+    @ApiModelProperty(hidden = true)
+    private String authorizedFrame;
 
     @ApiModelProperty(value = "商品名称")
     private String goodsName;

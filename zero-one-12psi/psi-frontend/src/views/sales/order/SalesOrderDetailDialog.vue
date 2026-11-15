@@ -7,11 +7,14 @@
     title="单据详情"
   >
     <el-alert v-if="orgTreeError" :title="orgTreeError" type="error" :closable="false" show-icon><el-button link @click="loadOrgOptions">重新加载组织</el-button></el-alert>
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" show-icon><el-button link @click="loadDocument">重新加载单据</el-button></el-alert>
+    <el-alert v-if="isApproved || isChecked" :title="isApproved ? '已审核单据不能直接修改，请先按业务规则反审核。' : '已核对单据不能直接修改，请先反核对。'" type="info" :closable="false" />
     <!-- 顶部工具栏 -->
     <div ref="headerFormSectionRef" class="toolbar">
       <div class="left">
         <el-form
           ref="headerFormRef"
+          :disabled="loading || saving || isApproved || isChecked"
           :model="header"
           :rules="headerFormRules"
           class="header-form"
@@ -114,7 +117,7 @@
 
         <!-- 未审核时：显示 保存 + 审核（隐藏“生成”） -->
         <template v-else>
-          <el-button type="primary" @click="save">保存</el-button>
+          <el-button type="primary" :loading="saving" :disabled="loading || !!loadError || isApproved || isChecked" @click="save">保存修改</el-button>
           <el-button class="ml8" @click="toggleApprove">审核</el-button>
         </template>
         <!-- ✅ 无论是否审核，都显示这个“核对 / 反核对” -->
@@ -131,7 +134,7 @@
     <div class="main">
       <!-- 表格部分 -->
       <div class="table-wrap">
-        <el-table :data="tableData" border highlight-current-row style="width: 100%">
+        <el-table v-loading="loading" :data="tableData" border highlight-current-row style="width: 100%">
           <!-- 第一列：设置按钮 + 序号 -->
           <el-table-column label="设置" width="70" align="center">
             <template #header>
@@ -225,7 +228,7 @@
                 <Warehouse @confirm="handleWarehouseConfirm" />
                 <template #reference>
                   <el-button type="text" size="small">
-                    {{ scope.row.warehouse || '选择仓库' }}
+                    {{ scope.row.warehouseName || scope.row.warehouse || '选择仓库' }}
                   </el-button>
                 </template>
               </el-popover>
@@ -236,7 +239,7 @@
           <el-table-column label="单价" align="center">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!loading && !saving && !isApproved && !isChecked"
                 class="editable-cell"
                 @input="onEditableInput(row, 'price', $event)"
                 @blur="onEditableBlur(row, 'price', $event)"
@@ -250,7 +253,7 @@
           <el-table-column label="数量" align="center">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!loading && !saving && !isApproved && !isChecked"
                 class="editable-cell"
                 @input="onEditableInput(row, 'quantity', $event)"
                 @blur="onEditableBlur(row, 'quantity', $event)"
@@ -283,7 +286,7 @@
             <!-- 单行编辑 -->
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!loading && !saving && !isApproved && !isChecked"
                 class="editable-cell"
                 @input="onEditableInput(row, 'taxRate', $event)"
                 @blur="onEditableBlur(row, 'taxRate', $event)"
@@ -311,7 +314,7 @@
           <el-table-column label="备注信息" align="center">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!loading && !saving && !isApproved && !isChecked"
                 class="editable-cell"
                 @input="onEditableInput(row, 'remark', $event)"
                 @blur="onEditableBlur(row, 'remark', $event)"
@@ -366,14 +369,14 @@
 
       <!-- 底部表单 -->
       <div ref="documentFormSectionRef" class="document-form-section">
-        <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" />
+        <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.receivedAmount) || 0) > 0 ? [] : ['settlementAccount'])]" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" :disabled="loading || saving || isApproved || isChecked" />
       </div>
     </div>
 
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="innerVisible = false">关闭</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button type="primary" :loading="saving" :disabled="loading || !!loadError || isApproved || isChecked" @click="save">保存修改</el-button>
       </div>
     </template>
   </el-dialog>
@@ -397,7 +400,69 @@ import { requiredText, extractApiErrorMessage, validateFormWithFocus } from '@/u
 
 // 导入销售单API
 import { saleOrderApi } from '@/apis/sales/order'
-import type { SaleDTO, SaleDetailItem } from '@/apis/sales/order/type'
+import type { SaleDocumentDetail, SaleDTO, SaleDetailItem } from '@/apis/sales/order/type'
+
+import { saleEditorRows, saleEditorPayload } from '@/utils/saleDraft'
+const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
+const currentDocument = ref<SaleDocumentDetail | null>(null)
+let documentSequence = 0
+const loadedSnapshot = ref('')
+function editorSnapshot() {
+  const form = documentFormRef.value?.formdata
+  return JSON.stringify([header, customerId.value, tableData.value, form])
+}
+const hasUnsavedChanges = computed(() => !!loadedSnapshot.value && editorSnapshot() !== loadedSnapshot.value)
+async function loadDocument() {
+  const sequence = ++documentSequence
+  loadedSnapshot.value = ''
+  currentDocument.value = null
+  loadError.value = ''
+  tableData.value = []
+  if (!props.record?.id) { loadError.value = '请从已保存的销售单列表打开详情'; return }
+  loading.value = true
+  try {
+    const response = await saleOrderApi.getDocument(String(props.record.id))
+    if (sequence !== documentSequence || !props.visible) return
+    if (response.code !== 10000 || !response.data) throw new Error(response.message || '销售单读取失败')
+    currentDocument.value = response.data
+    const source = response.data.header
+    header.frame = String(source.frame || '')
+    customerId.value = String(source.customer || '')
+    customerModel.value = { name: source.customerName || source.customer || '' }
+    header.customerName = customerModel.value.name
+    header.documentDate = String(source.time || '').slice(0, 10)
+    header.documentNumber = String(source.number || '')
+    tableData.value = [...saleEditorRows(response.data), { productName: '', productCode: '', goodsId: '', spec: '', attr: '', unit: '', warehouse: '', price: '', quantity: '', discount: 1, amount: '', taxRate: '', taxAmount: '', total: '', remark: '' }]
+    rowPopoverVisible.value = tableData.value.map(() => false)
+    isApproved.value = Number(source.examine) === 1
+    isChecked.value = Number(source.check) === 1
+    await nextTick()
+    const form = documentFormRef.value?.formdata
+    if (form) {
+      let logistics: any = source.logistics || ''
+      try { logistics = JSON.parse(logistics) } catch { /* Legacy plain tracking number. */ }
+      let files: any[] = []
+      if (source.file) {
+        try { const value = JSON.parse(source.file); files = Array.isArray(value) ? value : [] }
+        catch { files = String(source.file).split(',').filter(Boolean).map(url => ({ url, name: url.split('/').pop() })) }
+      }
+      Object.assign(form, {
+        documentCost: Number(source.total || 0), actualAmount: Number(source.actual || 0),
+        receivedAmount: Number(source.money || 0), documentFee: Number(source.cost || 0),
+        relatedPerson: source.people || '', relatedPersonName: source.peopleName || '',
+        settlementAccount: source.account || '', settlementAccountName: source.accountName || '',
+        logistics: typeof logistics === 'object' && logistics ? logistics : { key: 'auto', name: '自动识别', number: String(logistics || '') },
+        documentAttachment: files.map(file => ({ ...file, status: 'success' })), remarks: source.data || ''
+      })
+    }
+    await nextTick()
+    loadedSnapshot.value = editorSnapshot()
+  } catch (error) {
+    if (sequence === documentSequence) loadError.value = extractApiErrorMessage(error, '销售单读取失败，请重试')
+  } finally { if (sequence === documentSequence) loading.value = false }
+}
 
 // 新增：核对状态
 const isChecked = ref(false)
@@ -417,17 +482,21 @@ function toggleRowPopover(index: number) {
 
 // 核对 / 反核对
 async function toggleCheck() {
+  if (loading.value || saving.value || loadError.value) return
+  const target = !isChecked.value
+  if (target && hasUnsavedChanges.value && !(await persistDraft(false))) return
   try {
     if (!props.record?.id) {
       ElMessage.warning('请先保存单据')
       return
     }
 
-    const response = await saleOrderApi.checkSales([props.record.id], !isChecked.value)
+    const response = await saleOrderApi.checkSales([props.record.id], target)
 
     if (response.code === 10000) {
-      isChecked.value = !isChecked.value
-      ElMessage.success(isChecked.value ? '核对单据成功' : '反核对成功')
+      await loadDocument()
+      emit('changed')
+      ElMessage.success(target ? '核对单据成功' : '反核对成功')
     } else {
       ElMessage.error(response.message || '操作失败')
     }
@@ -441,7 +510,8 @@ async function toggleCheck() {
 function handleWarehouseConfirm(selected: any) {
   if (!selected || currentWarehouseIndex.value === null) return
   const row = tableData.value[currentWarehouseIndex.value]
-  row.warehouse = selected.name || selected.warehouseName || ''
+  row.warehouse = String(selected.warehouseId || selected.id || '')
+  row.warehouseName = selected.warehouseName || selected.name || ''
   rowPopoverVisible.value[currentWarehouseIndex.value] = false
   ElMessage.success(`已选择仓库：${row.warehouse}`)
 }
@@ -451,7 +521,7 @@ function handleBatchWarehouseSelect(selected: any) {
   if (!selected) return
   const selectedName = selected.name || selected.warehouseName || ''
   tableData.value.forEach((r) => {
-    if (r.productName) r.warehouse = selectedName
+    if (r.productName) { r.warehouse = String(selected.warehouseId || selected.id || ''); r.warehouseName = selectedName }
   })
   batchWarehouseVisible.value = false
   ElMessage.success(`已批量设置仓库：${selectedName}`)
@@ -460,21 +530,25 @@ function handleBatchWarehouseSelect(selected: any) {
 const router = useRouter()
 
 /* 审核状态 */
-const isApproved = ref(true)
+const isApproved = ref(false)
 
 // 审核/反审核
 const toggleApprove = async () => {
+  if (loading.value || saving.value || loadError.value) return
+  const target = !isApproved.value
+  if (target && !isChecked.value) { ElMessage.warning('请先保存并核对单据，再执行审核'); return }
   try {
     if (!props.record?.id) {
       ElMessage.warning('请先保存单据')
       return
     }
 
-    const response = await saleOrderApi.examineSales([props.record.id], !isApproved.value)
+    const response = await saleOrderApi.examineSales([props.record.id], target)
 
     if (response.code === 10000) {
-      isApproved.value = !isApproved.value
-      ElMessage.success(isApproved.value ? '审核成功' : '反审核成功')
+      await loadDocument()
+      emit('changed')
+      ElMessage.success(target ? '审核成功' : '反审核成功')
     } else {
       ElMessage.error(response.message || '操作失败')
     }
@@ -635,39 +709,7 @@ onMounted(async () => {
   }
 })
 // ① 先定义表格数据
-const tableData = ref([
-  {
-    goodsId: '',
-    productName: '九九',
-    productCode: '2233535',
-    spec: '',
-    attr: '',
-    unit: '件',
-    warehouse: '',
-    price: 199,
-    quantity: 1,
-    amount: 199,
-    taxRate: 13,
-    taxAmount: 25.87,
-    total: 224.87,
-    remark: ''
-  },
-  {
-    productName: '',
-    productCode: '',
-    spec: '',
-    attr: '',
-    unit: '',
-    warehouse: '',
-    price: '',
-    quantity: '',
-    amount: '',
-    taxRate: '',
-    taxAmount: '',
-    total: '',
-    remark: ''
-  }
-])
+const tableData = ref<Record<string, any>[]>([])
 
 // ② 然后根据表格的行数，初始化一模一样长度的弹层可见性数组
 const rowPopoverVisible = ref<boolean[]>(tableData.value.map(() => false))
@@ -729,13 +771,14 @@ function applyTaxBatch() {
 // ====== 金额/税额/合计 计算 ======
 function recalculate(row: any) {
   const price = parseFloat(row.price) || 0
+  const discount = Number(row.discount) || 1
   const qty = parseFloat(row.quantity) || 0
   const rate = parseFloat(row.taxRate) || 0
 
   // 计算金额、税额、总计
-  row.amount = +(price * qty).toFixed(2)
-  row.taxAmount = +((row.amount * rate) / 100).toFixed(2)
-  row.total = +(row.amount + row.taxAmount).toFixed(2)
+  row.amount = +(price * qty * discount).toFixed(4)
+  row.taxAmount = +((row.amount * rate) / 100).toFixed(4)
+  row.total = +(row.amount + row.taxAmount).toFixed(4)
 
   // 计算完后立即刷新状态栏
   updateStatusBar()
@@ -756,44 +799,21 @@ function handleTableProductConfirm(selected: any[]) {
     showProductPopup.value = false
     return
   }
-  const first = selected[0]
-  const row = tableData.value[currentRowIndex.value]
-
-  // 适配你的商品结构字段名（如有不同自己改一下）
-  row.productName = first.name
-  row.productCode = first.code
-  row.spec = first.model || ''
-  row.attr = first.category || ''
-  row.unit = first.unit || ''
-  row.warehouse = row.warehouse || '' // 不覆盖已有仓库
-  row.price = first.purchasePrice ?? 0
-  row.quantity = first.quantity ?? 1
-  row.taxRate = row.taxRate ?? 13
-
-  recalculate(row)
+  const position = currentRowIndex.value
+  const warehouse = tableData.value[position]?.warehouse || ''
+  const rows = selected.map(product => {
+    const row = { goodsId: String(product.id || ''), productName: product.name || '', productCode: product.code || '',
+      spec: product.model || '', attr: product.selectedAttr || '', unit: product.unit || '', warehouse,
+      price: product.salePrice ?? product.sell ?? 0, quantity: product.quantity ?? 1, discount: 1,
+      taxRate: product.taxRate ?? 13, amount: 0, taxAmount: 0, total: 0, remark: '' }
+    recalculate(row)
+    return row
+  })
+  tableData.value.splice(position, 1, ...rows)
+  if (tableData.value[tableData.value.length - 1]?.productName) tableData.value.push({ productName: '', goodsId: '', warehouse: '', price: '', quantity: '', taxRate: '', remark: '' })
+  rowPopoverVisible.value = tableData.value.map(() => false)
   showProductPopup.value = false
 
-  // 保证最后一行始终为空行
-  const last = tableData.value[tableData.value.length - 1]
-  if (last && last.productName) {
-    tableData.value.push({
-      productName: '',
-      productCode: '',
-      spec: '',
-      attr: '',
-      unit: '',
-      warehouse: '',
-      price: '',
-      quantity: '',
-      amount: '',
-      taxRate: '',
-      taxAmount: '',
-      total: '',
-      remark: ''
-    })
-    // 👇 新增的这一行，也要有一个对应的"弹层是否显示"的位置
-    rowPopoverVisible.value.push(false)
-  }
 }
 // 点击"操作"按钮
 function openProductPopup(index: number) {
@@ -833,7 +853,7 @@ interface Props {
   record?: any
 }
 const props = defineProps<Props>()
-const emit = defineEmits(['update:visible', 'save'])
+const emit = defineEmits(['update:visible', 'save', 'changed'])
 
 /* v-model:visible */
 const innerVisible = computed({
@@ -858,16 +878,10 @@ async function loadOrgOptions() {
 const userStore = useUserStore()
 
 const orgTreeProps = { value: 'id', label: 'name', children: 'children' }
-const orgTreeOptions = computed(() => [
-  {
-    id: '0',
-    name: '默认组织',
-    children: commonStore.orgTree.length ? commonStore.orgTree : []
-  }
-])
+const orgTreeOptions = computed(() => commonStore.orgTree)
 
 const header = reactive({
-  frame: '0',
+  frame: '',
   documentDate: '',
   documentNumber: '',
   customerName: ''
@@ -892,45 +906,10 @@ watch(
   }
 )
 
-// 监听对话框打开，初始化数据
-watch(
-  () => props.visible,
-  (newVal) => {
-    if (newVal) {
-      void loadOrgOptions()
-      // 对话框打开时，如果有 record，加载数据
-      if (props.record) {
-        customerId.value = String(props.record.customerId || '')
-        // 确保 customerModel 始终有值
-        if (!customerModel.value) {
-          customerModel.value = { name: '' }
-        }
-        // 加载记录数据（如果需要）
-        if (props.record.customer) {
-          customerModel.value.name = props.record.customer || ''
-          header.customerName = props.record.customer || ''
-        }
-        if (props.record.frame) {
-          header.frame = String(props.record.frame)
-        }
-        if (props.record.billTime) {
-          header.documentDate = props.record.billTime || ''
-        }
-        if (props.record.billNo) {
-          header.documentNumber = props.record.billNo || ''
-        }
-      } else {
-        // 新建时，确保所有数据都有默认值
-        customerModel.value = customerModel.value || { name: '' }
-        header.frame = header.frame || '0'
-        header.customerName = customerModel.value.name || ''
-        header.documentDate = header.documentDate || ''
-        header.documentNumber = header.documentNumber || ''
-      }
-    }
-  },
-  { immediate: true }
-)
+watch(() => props.visible, value => {
+  if (value) { void loadOrgOptions(); void loadDocument() }
+  else { documentSequence++; loading.value = false }
+}, { immediate: true })
 
 // 客户选择对话框
 const showCustomerDialog = ref(false)
@@ -968,14 +947,14 @@ const totalSum = computed(() => {
     // 累加每一行的价税合计
     .reduce((acc, r) => acc + (Number(r.total) || 0), 0)
 
-  return (sum || 0).toFixed(2)
+  return (sum || 0).toFixed(4)
 })
 
 /* 底部表单 */
 const footer = reactive({
-  documentCost: '16.95',
-  actualAmount: '1',
-  relatedPerson: 'NTJK_test_DD001',
+  documentCost: '0',
+  actualAmount: '0',
+  relatedPerson: '',
   arrivalDate: '',
   logistics: '',
   remark: ''
@@ -1001,106 +980,30 @@ function prepareDocumentFormBeforeSave() {
 }
 
 /* 保存 */
-const save = async () => {
-  const headerResult = await validateFormWithFocus(
-    headerFormRef.value,
-    headerFormSectionRef.value
-  )
-  if (!headerResult.valid) {
-    ElMessage.warning(headerResult.message || '请完善表头必填项')
-    return
-  }
-
-  prepareDocumentFormBeforeSave()
-
-  const documentResult = await documentFormRef.value?.validateAndFocus()
-  if (!documentResult?.valid) {
-    documentFormSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    ElMessage.warning(documentResult?.message || '请完善单据信息必填项')
-    return
-  }
-
-  const documentFormData = documentFormRef.value?.formdata
-  if (!documentFormData) {
-    ElMessage.error('无法获取底部表单数据')
-    return
-  }
-
-  const validRows = tableData.value.filter((item) => item.productName)
-  if (validRows.length === 0) {
-    ElMessage.warning('请至少添加一条商品数据')
-    return
-  }
-
+watch(totalSum, value => {
+  const form = documentFormRef.value?.formdata
+  if (form) form.actualAmount = Number(value)
+})
+const documentNetAmount = computed(() => tableData.value.reduce((sum, line) => sum + Number(line.amount || 0), 0))
+const save = () => persistDraft(true)
+async function persistDraft(closeAfter: boolean): Promise<boolean> {
+  if (saving.value || loading.value || !currentDocument.value || isApproved.value || isChecked.value) return false
+  saving.value = true
   try {
-    const orderId = props.record?.id || ''
-    const saleData: SaleDTO = {
-      id: orderId || undefined,
-      frame: header.frame,
-      customer: customerId.value || customerModel.value.name,
-      time: formatOrderDateTime(header.documentDate),
-      number: header.documentNumber,
-      total: Number(documentFormData.documentCost) || parseFloat(totalSum.value) || 0,
-      actual: Number(documentFormData.actualAmount) || parseFloat(totalSum.value) || 0,
-      money: Number(documentFormData.receivedAmount) || 0,
-      cost: Number(documentFormData.documentFee) || 0,
-      account: documentFormData.settlementAccount || '',
-      people: documentFormData.relatedPerson || '',
-      logistics:
-        typeof documentFormData.logistics === 'string'
-          ? documentFormData.logistics
-          : documentFormData.logistics?.number || documentFormData.logistics?.name || '',
-      file: documentFormData.documentAttachment?.[0]?.url || '',
-      data: documentFormData.remarks || '',
-      user: userStore.getUser?.id || userStore.getUser?.username || 'system',
-      examine: isApproved.value,
-      check: isChecked.value,
-      nucleus: 0,
-      cse: 0,
-      invoice: 0,
-      items: validRows.map((item) => ({
-        pid: orderId,
-        goods: item.goodsId || item.productCode,
-        goodsName: item.productName,
-        goodsCode: item.productCode,
-        spec: item.spec,
-        attr: item.attr,
-        unit: item.unit,
-        warehouse: item.warehouse,
-        price: typeof item.price === 'string' ? parseFloat(item.price) || 0 : (item.price || 0),
-        nums: typeof item.quantity === 'string' ? parseFloat(item.quantity) || 0 : (item.quantity || 0),
-        total: typeof item.amount === 'string' ? parseFloat(item.amount) || 0 : (item.amount || 0),
-        tax: typeof item.taxRate === 'string' ? parseFloat(item.taxRate) || 0 : (item.taxRate || 0),
-        tat: typeof item.taxAmount === 'string' ? parseFloat(item.taxAmount) || 0 : (item.taxAmount || 0),
-        tpt: typeof item.total === 'string' ? parseFloat(item.total) || 0 : (item.total || 0),
-        data: item.remark
-      }))
-    }
-
-    let response
-    if (saleData.id) {
-      response = await saleOrderApi.updateSale(saleData)
-    } else {
-      response = await saleOrderApi.addSale(saleData)
-    }
-
-    if (response.code === 10000) {
-      emit('save', {
-        header,
-        customer: customerModel.value,
-        tableData: tableData.value,
-        footer,
-        isApproved: isApproved.value
-      })
-      ElMessage.success('保存成功')
-      innerVisible.value = false
-    } else {
-      ElMessage.error(response.message || '保存失败')
-    }
-  } catch (error) {
-    console.error('保存失败:', error)
-    ElMessage.error(extractApiErrorMessage(error, '保存失败，请重试'))
-  }
+    if (!(await validateFormWithFocus(headerFormRef.value)).valid) return false
+    const form = documentFormRef.value?.formdata
+    if (!form) throw new Error('单据表单尚未加载，请重试')
+    const payload = saleEditorPayload(currentDocument.value, header, customerId.value, tableData.value, form)
+    const response = await saleOrderApi.updateSale(payload)
+    if (response.code !== 10000) throw new Error(response.message || '销售单修改失败')
+    await loadDocument()
+    if (loadError.value) { ElMessage.warning('修改已保存，但重新读取失败，请重试加载'); return false }
+    ElMessage.success('销售单修改已保存')
+    if (closeAfter) { emit('save', { id: props.record?.id }); innerVisible.value = false }
+    else emit('changed')
+    return true
+  } catch (error) { ElMessage.error(extractApiErrorMessage(error, '修改失败，请重试')); return false }
+  finally { saving.value = false }
 }
 
 </script>

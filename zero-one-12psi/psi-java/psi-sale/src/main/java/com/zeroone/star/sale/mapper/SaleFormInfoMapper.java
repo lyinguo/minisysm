@@ -20,6 +20,7 @@ public interface SaleFormInfoMapper extends BaseMapper<SaleFormInfo> {
             "SELECT sfi.* FROM sell_info sfi " +
             "JOIN sell sf ON sfi.pid = sf.id " +
             "<where>" +
+            "   <if test='frame != null'>AND sf.frame=#{frame}</if>" +
             "   <if test='customer != null and customer != \"\"'>" +
             "       AND sf.customer = #{customer}" +
             "   </if>" +
@@ -33,5 +34,6 @@ public interface SaleFormInfoMapper extends BaseMapper<SaleFormInfo> {
             "</script>")
     List<SaleDetailDTO> selectSaleDetailByCondition(@Param("customer") String customer,
                                                     @Param("time") LocalDateTime time,
-                                                    @Param("number") String number);
+                                                    @Param("number") String number,
+                                                    @Param("frame") String frame);
 }

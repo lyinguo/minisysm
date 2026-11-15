@@ -13,6 +13,7 @@
         (SELECT u.name FROM `user` u WHERE u.id=sell.`user`) AS user_name
         FROM `sell`
         <where>
+            <if test="query.authorizedFrame != null">AND frame=#{query.authorizedFrame}</if>
             <if test="query.goodsName != null and query.goodsName != ''">
                 AND EXISTS (
                 SELECT 1 FROM sell_info sfi JOIN goods g ON g.id=sfi.goods

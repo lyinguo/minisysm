@@ -16,6 +16,8 @@ import java.util.List;
 @NoArgsConstructor
 @ApiModel("销售单数据对象")
 public class SaleDTO {
+    @ApiModelProperty(value = "读取详情时返回的并发版本，修改时必须回传")
+    private String version;
     @ApiModelProperty(value = "主键ID", example = "1")
     private String id;
 

@@ -480,6 +480,7 @@
       v-model:visible="detailVisible"
       :record="currentRow"
       @save="handleDetailSave"
+        @changed="loadSaleList"
     />
   </div>
 </template>

@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
  * @version 1.0.0
  */
 @Configuration
+@org.springframework.context.annotation.Import(com.zeroone.star.project.config.redis.RedisConfig.class)
 @ComponentScan({
         "com.zeroone.star.project.components.fastdfs",
         "com.zeroone.star.project.components.easyexcel",

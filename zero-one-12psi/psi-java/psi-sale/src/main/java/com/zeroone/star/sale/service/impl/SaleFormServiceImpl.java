@@ -37,6 +37,11 @@ import java.util.stream.Collectors;
 public class SaleFormServiceImpl implements SaleFormService {
 
     @Resource
+    private com.zeroone.star.sale.service.SaleDraftService saleDrafts;
+    @Resource
+    private com.zeroone.star.sale.service.SaleDocumentAccess saleAccess;
+
+    @Resource
     private SaleFormMapper saleFormMapper;
 
     @Resource
@@ -50,6 +55,7 @@ public class SaleFormServiceImpl implements SaleFormService {
 
     @Override
     public JsonVO<PageDTO<SaleListDTO>> getSaleList(SaleQuery query) {
+        query.setAuthorizedFrame(saleAccess.frame(saleAccess.authorize("/sale/form/getSaleList")));
         try {
             // 防止非法分页参数
             long pageIndex = query.getPageIndex() < 1 ? 1 : query.getPageIndex();
@@ -69,6 +75,7 @@ public class SaleFormServiceImpl implements SaleFormService {
 
     @Override
     public JsonVO<List<SaleDetailDTO>> getSaleDetail(String customer, LocalDateTime time, String number) {
+        String allowedFrame = saleAccess.frame(saleAccess.authorize("/sale/form/getSaleDetail"));
         try {
             // 参数校验：至少需要一个查询条件
             if ((customer == null || customer.trim().isEmpty()) &&
@@ -78,7 +85,7 @@ public class SaleFormServiceImpl implements SaleFormService {
             }
 
             // 根据条件查询销售单详情
-            List<SaleDetailDTO> saleDetails = saleFormInfoMapper.selectSaleDetailByCondition(customer, time, number);
+            List<SaleDetailDTO> saleDetails = saleFormInfoMapper.selectSaleDetailByCondition(customer, time, number, allowedFrame);
             if (saleDetails == null || saleDetails.isEmpty()) {
                 return JsonVO.create(null, ResultStatus.FAIL.getCode(), "未找到对应的销售单详情");
             }
@@ -128,28 +135,7 @@ public class SaleFormServiceImpl implements SaleFormService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public void addSale(SaleDTO saleDTO) {
-        ///为销售单 生成id 使用雪花算法
-        String saleId = IdUtil.getSnowflake().nextIdStr();
-
-        SaleDO sale = new SaleDO();
-        BeanUtils.copyProperties(saleDTO, sale);
-        sale.setId(saleId);
-        saleDTO.setId(saleId);
-        /// 遍历销售单详情 赋值所属ID
-        List<SaleInfoDO> details = saleDTO.getItems().stream().map(item -> {
-            SaleInfoDO saleInfo = new SaleInfoDO();
-            BeanUtils.copyProperties(item, saleInfo);
-            saleInfo.setPid(saleId);
-            saleInfo.setId(IdUtil.getSnowflake().nextIdStr());
-            return saleInfo;
-        }).collect(Collectors.toList());
-
-        /// 计算折扣率,金额,税额,价税合计等
-        calculateTotal(sale,details);
-        /// 插入sell表
-        saleMapper.insert(sale);
-        /// 插入sell_info详情表
-        saleInfoMapper.insertBatch(details);
+        saleDrafts.save(saleDTO, false);
     }
 
     /**
@@ -160,37 +146,7 @@ public class SaleFormServiceImpl implements SaleFormService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateSale(SaleDTO saleDTO) {
-        /// 先获取销售单id 判断在数据库中是否存在
-        String saleId = saleDTO.getId();
-        SaleDO existing = saleMapper.selectById(saleId);
-        if(existing == null){
-            throw new IllegalArgumentException("id:" + saleId + ",销售单不存在");
-        }
-        /// 销售单存在的话 判断是否已审核 已审核不能修改
-        if(Boolean.TRUE.equals(existing.getExamine())){
-            throw new IllegalArgumentException("id:" + saleId + ",销售单已审核,不能修改");
-        }
-        /// 未审核 进行修改
-        SaleDO sale = new SaleDO();
-        BeanUtils.copyProperties(saleDTO, sale);
-        sale.setId(saleId);
-        /// 拷贝一份销售单详情,并设置Pid,得到一个销售单详情的集合
-        List<SaleInfoDO> details = saleDTO.getItems().stream().map(item -> {
-            SaleInfoDO saleInfo = new SaleInfoDO();
-            BeanUtils.copyProperties(item, saleInfo);
-            /// 设置pid为销售单id
-            saleInfo.setPid(saleId);
-            saleInfo.setId(IdUtil.getSnowflake().nextIdStr());
-            return saleInfo;
-        }).collect(Collectors.toList());
-        /// 重新计算折扣率,金额,税额,价税合计等
-        calculateTotal(sale, details);
-
-        /// 更新主表
-        saleMapper.updateById(sale);
-        /// 批量删除旧详情并插入新销售单详情
-        saleInfoMapper.deleteBatchByPid(saleId);
-        saleInfoMapper.insertBatch(details);
+        saleDrafts.save(saleDTO, true);
     }
 
     /**
@@ -202,8 +158,12 @@ public class SaleFormServiceImpl implements SaleFormService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public int batchDeleteSales(List<String> ids) {
+        com.zeroone.star.project.components.user.UserDTO actor = saleAccess.authorize("/sale/form/deleteSales");
+        if (ids == null || ids.isEmpty() || ids.size() > 200 || new HashSet<>(ids).size() != ids.size()) throw new IllegalArgumentException("请选择1到200张不同单据");
+        saleDrafts.lockWrites();
         /// 先查询到ids列表中的所有销售单
         List<SaleDO> sales = saleMapper.selectBatchIds(ids);
+        for (SaleDO current : sales) saleAccess.requireFrame(actor, current.getFrame());
         /// 把每一个销售单的详情id存入一个Map中
         Map<String,SaleDO> saleMap = new HashMap<>();
         for (SaleDO sale : sales) {
@@ -236,10 +196,15 @@ public class SaleFormServiceImpl implements SaleFormService {
      * @return 核对/反核对个数
      */
 
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public Integer checkSales(List<String> ids, boolean check) {
+        com.zeroone.star.project.components.user.UserDTO actor = saleAccess.authorize("/sale/form/check");
+        if (ids == null || ids.isEmpty() || ids.size() > 200 || new HashSet<>(ids).size() != ids.size()) throw new IllegalArgumentException("请选择1到200张不同单据");
+        saleDrafts.lockWrites();
         /// 先获取到ids列表中所有销售单
         List<SaleDO> sales = saleMapper.selectBatchIds(ids);
+        for (SaleDO current : sales) saleAccess.requireFrame(actor, current.getFrame());
         /// 把每一个销售单的详情id存入一个Map中
         Map<String,SaleDO> saleMap = new HashMap<>();
         for (SaleDO sale : sales) {
@@ -289,10 +254,15 @@ public class SaleFormServiceImpl implements SaleFormService {
      * @return 审核/反审核个数
      */
 
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public Integer examineSales(List<String> ids, boolean examine) {
+        com.zeroone.star.project.components.user.UserDTO actor = saleAccess.authorize("/sale/form/examine");
+        if (ids == null || ids.isEmpty() || ids.size() > 200 || new HashSet<>(ids).size() != ids.size()) throw new IllegalArgumentException("请选择1到200张不同单据");
+        saleDrafts.lockWrites();
         /// 先获取到ids列表中所有销售单
         List<SaleDO> sales = saleMapper.selectBatchIds(ids);
+        for (SaleDO current : sales) saleAccess.requireFrame(actor, current.getFrame());
         /// 把每一个销售单的详情id存入一个Map中
         Map<String,SaleDO> saleMap = new HashMap<>();
         for (SaleDO sale : sales) {
@@ -345,51 +315,4 @@ public class SaleFormServiceImpl implements SaleFormService {
      * @param details 销售单详情
      */
 
-    private void calculateTotal(SaleDO sale, List<SaleInfoDO> details){
-        BigDecimal saleTotal = BigDecimal.ZERO;
-        BigDecimal saleActual = BigDecimal.ZERO;
-
-        details.forEach(detail -> {
-
-            /// 增加空值检查
-            if(detail.getPrice() == null || detail.getNums() == null || detail.getTax() == null) {
-                throw new IllegalArgumentException("销售明细数据不完整");
-            }
-
-            ///如果说折扣率不为空
-            if(detail.getDiscount().compareTo(BigDecimal.ZERO) != 0){
-                /// 折扣额 = 单价 * 数量 * (1-折扣率/100)
-                BigDecimal dsc = detail.getPrice().multiply(detail.getNums())
-                        .multiply(BigDecimal.ONE.subtract(detail.getDiscount().divide(BigDecimal.valueOf(100),4, RoundingMode.HALF_UP)))
-                        .setScale(2, RoundingMode.HALF_UP);
-                detail.setDsc(dsc);
-                /// 金额 = 单价 * 数量 - 折扣额
-                BigDecimal total = detail.getPrice()
-                        .multiply(detail.getNums()).subtract(dsc).setScale(2, RoundingMode.HALF_UP);
-                detail.setTotal(total);
-            }else{
-                /// 折扣率为0
-                detail.setDsc(BigDecimal.ZERO);
-                BigDecimal total = detail.getPrice()
-                        .multiply(detail.getNums()).setScale(2, RoundingMode.HALF_UP);
-                detail.setTotal(total);
-            }
-            /// 税额 = 金额 * 税率
-            BigDecimal tat = detail.getTotal().multiply(detail.getTax()).setScale(2, RoundingMode.HALF_UP);
-            detail.setTat(tat);
-            /// 价税合计 = 税额 + 金额
-            BigDecimal tpt = detail.getTotal().add(tat).setScale(2, RoundingMode.HALF_UP);
-            detail.setTpt(tpt);
-        });
-
-        /// 计算主表总金额,实际金额,实收金额
-        for (SaleInfoDO detail : details) {
-            saleTotal = saleTotal.add(detail.getTotal());
-            saleActual = saleActual.add(detail.getTpt());
-        }
-
-        sale.setTotal(saleTotal);
-        sale.setActual(saleActual);
-        sale.setMoney(saleActual);/// 默认实收金额与实际金额相同
-    }
 }

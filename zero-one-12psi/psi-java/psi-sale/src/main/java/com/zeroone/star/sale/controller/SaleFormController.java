@@ -54,6 +54,14 @@ public class SaleFormController implements SaleFormApis {
 
     @Resource
     private SaleFormService saleFormService;
+    @Resource
+    private com.zeroone.star.sale.service.SaleDraftService saleDrafts;
+
+    @GetMapping("/document/{id}")
+    @ApiOperation("按ID读取完整销售单及并发版本")
+    public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id) {
+        return JsonVO.success(saleDrafts.detail(id));
+    }
 
     @Resource
     private SaleFormPortService SaleFormPortService;
@@ -87,64 +95,9 @@ public class SaleFormController implements SaleFormApis {
      * 校验销售单数据
      * */
 
-    private void validateSaleDTO(SaleDTO saleDTO, boolean isUpdate){
-        if(saleDTO == null){
-            throw new IllegalArgumentException("销售单数据不能为空");
-        }
-        /// 修改销售单时,先对id进行判空
-        if(saleDTO.getId() == null && isUpdate){
-            throw new IllegalArgumentException("修改销售单时,销售单id不能为空");
-        }
-        if(saleDTO.getFrame()==null){
-            throw new IllegalArgumentException("所属组织不能为空");
-        }
-        if(saleDTO.getCustomer()==null){
-            throw new IllegalArgumentException("客户不能为空");
-        }
-        if(saleDTO.getTime()==null){
-            throw new IllegalArgumentException("单据时间不能为空");
-        }
-        if(saleDTO.getNumber()==null){
-            throw new IllegalArgumentException("单据编号不能为空");
-        }
-        if(saleDTO.getCost()==null){
-            throw new IllegalArgumentException("单据费用不能为空");
-        }
-        if(saleDTO.getExamine()==null){
-            throw new IllegalArgumentException("审核状态不能为空");
-        }
-        if(saleDTO.getNucleus()==null){
-            throw new IllegalArgumentException("核销状态不能为空");
-        }
-        if(saleDTO.getCse()==null){
-            throw new IllegalArgumentException("费用状态不能为空");
-        }
-        if(saleDTO.getInvoice()==null){
-            throw new IllegalArgumentException("发票状态不能为空");
-        }
-        if(saleDTO.getCheck()==null){
-            throw new IllegalArgumentException("核对状态不能为空");
-        }
-        if(saleDTO.getUser()==null){
-            throw new IllegalArgumentException("制单人不能为空");
-        }
-        if(saleDTO.getItems()==null || saleDTO.getItems().isEmpty()){
-            throw new IllegalArgumentException("销售单详情不能为空");
-        }
-        for (SaleInfoDTO item : saleDTO.getItems()) {
-            if(item.getGoods()==null){
-                throw new IllegalArgumentException("销售单详情所属商品不能为空");
-            }
-            if(item.getUnit()==null){
-                throw new IllegalArgumentException("销售单详情单位不能为空");
-            }
-            if(item.getPrice()==null){
-                throw new IllegalArgumentException("销售单详情单价不能为空");
-            }
-            if(item.getNums()==null){
-                throw new IllegalArgumentException("销售单详情数量不能为空");
-            }
-        }
+    private void validateSaleDTO(SaleDTO dto, boolean update) {
+        if (dto == null) throw new IllegalArgumentException("销售单数据不能为空");
+        if (update && (dto.getId() == null || dto.getId().trim().isEmpty())) throw new IllegalArgumentException("销售单ID不能为空");
     }
     @GetMapping(value = "/export-simple")
     @ApiOperation(value = "导出销售单简单报表")
