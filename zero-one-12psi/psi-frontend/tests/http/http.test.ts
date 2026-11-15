@@ -1,76 +1,79 @@
 import { expect, describe, it, beforeAll, afterAll } from 'vitest'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { withSetup } from '../test-apis-settings'
 import { useHttp, HttpClient } from '@/plugins/http'
 import type { PageDTO } from '@/apis/type'
 import type { Article } from './type'
 
-/**
- * 演示二次封装Axios使用
- * 测试指令 npm run test:unit http
- */
+/** Real loopback transport checks; no external demo service or business database. */
 describe('http', () => {
   let app: any
   let http: HttpClient
-  beforeAll(() => {
+  let server: Server
+  let previousBase: string | undefined
+  const requests: Array<{ method: string; path: string; body: any }> = []
+  const article: Article = { id:'1',title:'测试标题',keywords:'测试',summary:'测试摘要',content:'测试内容',date:'2026-11-16' }
+  beforeAll(async () => {
+    server = createServer((request, response) => {
+      response.setHeader('Access-Control-Allow-Origin', '*')
+      response.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+      response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+      response.setHeader('Content-Type', 'application/json')
+      response.setHeader('Connection', 'close')
+      if (request.method === 'OPTIONS') { response.writeHead(204);response.end();return }
+      let text = ''
+      request.on('data', chunk => { text += chunk.toString() })
+      request.on('end', () => {
+        const path = request.url || '/'
+        const body = text ? JSON.parse(text) : null
+        requests.push({method:request.method || '',path,body})
+        const url = new URL(path, 'http://localhost')
+        if (url.pathname !== '/article' && url.pathname !== '/article/233') {response.writeHead(404);response.end('{}');return}
+        const data = request.method === 'GET' ? {rows:[article],total:1,pageIndex:Number(url.searchParams.get('pageIndex')),pageSize:Number(url.searchParams.get('pageSize'))}
+          : request.method === 'DELETE' ? {...article,id:'233'} : {...article,...body}
+        response.end(JSON.stringify({code:10000,data}))
+      })
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
     app = withSetup(() => (http = useHttp()))[1]
+    previousBase = http.getInstance().defaults.baseURL
+    http.getInstance().defaults.baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
   })
-  afterAll(() => {
+  afterAll(async () => {
+    http.getInstance().defaults.baseURL = previousBase
     app.unmount()
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   })
-  // 测试get请求
   it('getSync', async () => {
-    http
-      .get<PageDTO<Article>>('/article', {
-        pageIndex: 1,
-        pageSize: 2
-      })
-      .then((data) => {
-        expect(data.code).toBe(10000)
-        console.log(data.data?.rows)
-      })
-      .catch((error) => {
-        expect(1).toBe(0)
-        console.error(error)
-      })
-    //[x] [TEST_CODE]保证异步请求执行完成前测试案例不会结束
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await http.get<PageDTO<Article>>('/article',{pageIndex:1,pageSize:2}).then(data => {
+      expect(data.code).toBe(10000)
+      expect(data.data?.rows?.[0]?.title).toBe(article.title)
+    })
+    expect(requests.at(-1)?.method).toBe('GET')
   })
-  // 测试get请求
   it('getAsync', async () => {
-    const data = await http.get<PageDTO<Article>>('/article', {
-      pageIndex: 1,
-      pageSize: 2
-    })
+    const data = await http.get<PageDTO<Article>>('/article',{pageIndex:1,pageSize:2})
     expect(data.code).toBe(10000)
-    console.log(data.data?.rows)
+    expect(data.data?.rows?.[0]?.id).toBe('1')
+    expect(requests.at(-1)?.path).toContain('pageSize=2')
   })
-  // 测试post请求
   it('post', async () => {
-    const data = await http.post<Article>('/article', {
-      title: '测试标题',
-      keywords: '测试',
-      summary: '测试摘要',
-      content: '测试内容'
-    })
+    const data = await http.post<Article>('/article',article)
     expect(data.code).toBe(10000)
-    console.log(data.data)
+    expect(data.data?.content).toBe(article.content)
+    expect(requests.at(-1)).toMatchObject({method:'POST',path:'/article',body:article})
   })
-  // 测试put请求
   it('put', async () => {
-    const data = await http.put<Article>('/article', {
-      id: '1',
-      title: '测试标题',
-      keywords: '测试',
-      summary: '测试摘要',
-      content: '测试内容'
-    })
+    const data = await http.put<Article>('/article',{...article,title:'修改标题'})
     expect(data.code).toBe(10000)
-    console.log(data.data)
+    expect(data.data?.title).toBe('修改标题')
+    expect(requests.at(-1)).toMatchObject({method:'PUT',path:'/article',body:{id:'1',title:'修改标题'}})
   })
-  // 测试delete请求
   it('delete', async () => {
     const data = await http.delete<Article>('/article/233')
     expect(data.code).toBe(10000)
-    console.log(data.data)
+    expect(data.data?.id).toBe('233')
+    expect(requests.at(-1)).toMatchObject({method:'DELETE',path:'/article/233'})
   })
 })

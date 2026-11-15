@@ -273,38 +273,13 @@ const handleSelectionChange = (rows: RowData[]) => {
   selected.value = rows
 }
 
-// 获取选中的订单ID数组
-const selectedOrderIds = computed(() => {
-  return selected.value.map(row => {
-    // 优先使用 id 字段，如果没有则使用 orderNo（单据编号）
-    return (row as any).id || row.orderNo || ''
-  }).filter(id => id !== '')
-})
-
-// 导出简单报表的处理函数
-const handleExportSimpleReport = async (orderId: string | number) => {
-  console.log('🔍 [父组件] handleExportSimpleReport 被调用，orderId:', orderId)
-  try {
-    const result = await PurchaseOrderAPI.exportSimpleReport(orderId)
-    console.log('🔍 [父组件] API 调用成功，result:', result)
-    return result
-  } catch (error: any) {
-    console.error('导出简单报表失败:', error)
-    throw error
-  }
+// Keep invalid selections visible to validation; document numbers are never IDs.
+const selectedOrderIds = computed(() => selected.value.map(row => String(row.id ?? '').trim()))
+const handleExportSimpleReport = async (_orderId: string | number) => {
+  return PurchaseOrderAPI.exportSimpleReport(selectedOrderIds.value.join(','))
 }
-
-// 导出详细报表的处理函数
 const handleExportDetailReport = async (ids: (string | number)[]) => {
-  console.log('🔍 [父组件] handleExportDetailReport 被调用，ids:', ids)
-  try {
-    const result = await PurchaseOrderAPI.exportDetailReport(ids)
-    console.log('🔍 [父组件] API 调用成功，result:', result)
-    return result
-  } catch (error: any) {
-    console.error('导出详细报表失败:', error)
-    throw error
-  }
+  return PurchaseOrderAPI.exportDetailReport(ids)
 }
 
 const sortKey = ref<string>('')

@@ -94,20 +94,7 @@ public class PurchaseOrderController implements PurchaseOrderApis {
     @PostMapping("/export/detail")
     @Override
     public JsonVO<String> exportPurchaseOrderDetailReport(@RequestBody List<String> ids) {
-        try{
-            // 调用服务层获取Excel文件的字节数组
-            byte [] data = purchaseOrderReportService.exportPurchaseOrderReport(ids);
-
-            // 将byte[] 编码为Base64字符串
-            String base64Data = Base64.getEncoder().encodeToString(data);
-
-            // 返回包含Base64字符串的JsonVO
-            // 客户端解码Base64并触发文件下载
-            return JsonVO.success(base64Data);
-        } catch (Exception e){
-            log.error("导出采购订单报表失败:", e);
-            return JsonVO.fail("导出Excel失败" + e.getMessage());
-        }
+        return JsonVO.success(Base64.getEncoder().encodeToString(purchaseOrderReportService.exportPurchaseOrderReport(ids)));
     }
 
 
@@ -186,9 +173,8 @@ public class PurchaseOrderController implements PurchaseOrderApis {
     @Override
     public ResponseEntity<byte[]> exportBor(@RequestParam("pid") @NotBlank(message = "采购订单ID列表不能为空") String pid) {
         // 拆分参数，过滤空值和去空格
-        List<String> ids = Arrays.stream(pid.split(","))
+        List<String> ids = Arrays.stream(pid.split(",", -1))
                 .map(String::trim)
-                .filter(s -> !s.isEmpty())
                 .collect(Collectors.toList());
         return borService.exportBor(ids);
     }

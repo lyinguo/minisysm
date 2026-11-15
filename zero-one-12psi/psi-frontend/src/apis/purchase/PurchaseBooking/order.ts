@@ -991,85 +991,27 @@ export class PurchaseOrderAPI {
    * @param pid 订单ID，字符串类型，必须
    * @returns 响应数据，文件流，包含 data 和 headers
    */
-  static async exportSimpleReport(
-    pid: string | number
-  ): Promise<any> {
-    try {
-      // 参数验证：pid 必须提供且不能为空
-      if (pid === undefined || pid === null || pid === '') {
-        throw new Error('订单ID不能为空')
-      }
-
-      // 将 ID 转换为字符串（接口要求 string 类型）
-      const pidStr = String(pid)
-
-      // 使用 getFile 方法发送 GET 请求下载文件
-      // getFile 方法会将 params 作为 query 参数传递，符合接口要求
-      const result = await this.http.getFile(
-        `${currBaseUrl}/export-bor`,
-        { pid: pidStr },
-        {
-          responseType: 'blob', // 响应类型为 blob（文件流）
-          showLoading: true
-        }
-      )
-
-      // 返回完整的响应对象，包含 data（文件流）和 headers（响应头）
-      return result
-    } catch (error: any) {
-      console.error('❌ [导出简单报表] 导出失败:', error)
-      if (error.response) {
-        console.error('响应数据:', error.response.data)
-        console.error('响应状态:', error.response.status)
-      }
-      throw error
-    }
+  private static exportIds(ids: (string | number)[]): string[] {
+    const values = ids.map(id => String(id ?? '').trim())
+    if (!values.length || values.length > 200 || values.some(id => !id || id === '0') || new Set(values).size !== values.length) throw new Error('请选择1到200张不同且有效的采购订单')
+    return values
   }
 
-  /**
-   * 导出详细报表
-   * @param ids 订单ID数组（string[]）
-   * @returns 文件下载响应
-   */
-  static async exportDetailReport(
-    ids: (string | number)[]
-  ): Promise<any> {
-    try {
-      // 参数验证：ids 必须提供且不能为空数组
-      if (!ids || ids.length === 0) {
-        throw new Error('订单ID列表不能为空')
-      }
-
-      // 将 ID 数组转换为字符串数组（接口要求 string[] 类型）
-      const idsStr = ids.map(id => String(id))
-
-      // 使用 POST 请求下载文件，需要直接调用 instance.request
-      // 因为 getFile 只支持 GET 请求，而导出详细报表接口是 POST
-      const result = await (this.http as any).instance.request({
-        method: 'post',
-        url: `${currBaseUrl}/export/detail`,
-        data: idsStr, // POST 请求体数据
-        responseType: 'blob', // 响应类型为 blob（文件流）
-        showLoading: true, // 显示加载提示
-        headers: {
-          'Content-Type': 'application/json;charset=UTF-8'
-        }
-      })
-
-      // 返回完整的响应对象，包含 data（文件流）和 headers（响应头）
-      return {
-        data: result.data,
-        headers: result.headers
-      }
-    } catch (error: any) {
-      console.error('❌ [导出详细报表] 导出失败:', error)
-      if (error.response) {
-        console.error('响应数据:', error.response.data)
-        console.error('响应状态:', error.response.status)
-      }
-      throw error
-    }
+  static async exportSimpleReport(pid: string | number): Promise<any> {
+    const ids = this.exportIds(String(pid ?? '').split(','))
+    const result = await this.http.getFile(`${currBaseUrl}/export-bor`, {pid: ids.join(',')}, {responseType:'blob',showLoading:true})
+    if (result instanceof Blob) return {data:result,headers:{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename=purchase-orders.xlsx'}}
+    if (!(result?.data instanceof Blob)) throw new Error(result?.data?.message || '导出失败，未返回Excel文件')
+    return result
   }
 
+  static async exportDetailReport(ids: (string | number)[]): Promise<any> {
+    const result = await this.http.post<string>(`${currBaseUrl}/export/detail`, this.exportIds(ids), {upType:DataUpType.json,showLoading:true})
+    if (result.code !== 10000 || typeof result.data !== 'string') throw new Error(result.message || '导出失败，未返回Excel文件')
+    let binary: string
+    try { binary = atob(result.data) } catch { throw new Error('导出文件格式无效，请重试') }
+    if (!binary.startsWith('PK')) throw new Error('导出文件格式无效，请重试')
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0))
+    return {data:new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),headers:{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename=purchase-order-details.xlsx'}}
+  }
 }
-

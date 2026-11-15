@@ -95,6 +95,8 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     private com.zeroone.star.purchase.service.PurchaseOrderDeleteService orderDeletes;
     @Resource
     private com.zeroone.star.purchase.service.PurchaseOrderImportService orderImports;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseOrderExportService orderExports;
 
     /**
      * 新增采购订单
@@ -287,119 +289,9 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
      */
     @Override
     public ResponseEntity<byte[]> exportBor(List<String> ids) {
-        try {
-            // 1. 准备数据
-            List<BorDO> borDOS = borMapper.selectBatchIds(ids);
-            if (borDOS == null || borDOS.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body("未找到对应的采购订单数据".getBytes());
-            }
-
-            // 2. 定义表头
-            List<List<String>> headList = Arrays.asList(
-                    Collections.singletonList("所属组织"),
-                    Collections.singletonList("供应商"),
-                    Collections.singletonList("单据时间"),
-                    Collections.singletonList("单据编号"),
-                    Collections.singletonList("单据金额"),
-                    Collections.singletonList("实际金额"),
-                    Collections.singletonList("到货日期"),
-                    Collections.singletonList("审核状态"),
-                    Collections.singletonList("入库状态"),
-                    Collections.singletonList("关联人员"),
-                    Collections.singletonList("制单人"),
-                    Collections.singletonList("备注信息")
-            );
-
-            // 3. 创建日期格式化器
-            DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-            // 4. 转换为二维行数据
-            List<List<Object>> rowList = new ArrayList<>();
-            for (BorDO bor : borDOS) {
-                // 入库状态转换（Integer类型：0-3）
-                Integer state = bor.getState();
-                String stateDesc = "";
-                if (state != null) {
-                    switch (state) {
-                        case 0: stateDesc = "未入库"; break;
-                        case 1: stateDesc = "部分入库"; break;
-                        case 2: stateDesc = "已入库"; break;
-                        case 3: stateDesc = "关闭"; break;
-                        default: stateDesc = "未知";
-                    }
-                }
-                
-                // 审核状态转换
-                String examineDesc = "";
-                if (bor.getExamine() != null) {
-                    examineDesc = bor.getExamine()==1? "已审核" : "未审核";
-                }
-                
-                rowList.add(Arrays.asList(
-                        bor.getFrame() != null ? bor.getFrame() : "",
-                        bor.getSupplier() != null ? bor.getSupplier() : "",
-                        bor.getTime() != null ? bor.getTime().format(dateTimeFormatter) : "",
-                        bor.getNumber() != null ? bor.getNumber() : "",
-                        bor.getTotal() != null ? bor.getTotal().setScale(2, BigDecimal.ROUND_HALF_UP).toPlainString() : "",
-                        bor.getActual() != null ? bor.getActual().setScale(2, BigDecimal.ROUND_HALF_UP).toPlainString() : "",
-                        bor.getArrival() != null ? bor.getArrival().format(dateTimeFormatter) : "",
-                        examineDesc,
-                        stateDesc,
-                        bor.getPeople() != null ? bor.getPeople() : "",
-                        bor.getUser() != null ? bor.getUser() : "",
-                        bor.getData() != null ? bor.getData() : ""
-                ));
-            }
-
-            // 5. 计算统计信息
-            int totalCount = borDOS.size();
-            BigDecimal totalAmount = borDOS.stream()
-                    .map(BorDO::getTotal)
-                    .filter(Objects::nonNull)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal totalActual = borDOS.stream()
-                    .map(BorDO::getActual)
-                    .filter(Objects::nonNull)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            // 6. 添加统计行（不合并列）
-            List<Object> statsRow = new ArrayList<>();
-            statsRow.add("总数:" + totalCount);
-            statsRow.add("总单据金额:" + totalAmount.setScale(2, BigDecimal.ROUND_HALF_UP).toPlainString());
-            statsRow.add("总实际金额:" + totalActual.setScale(2, BigDecimal.ROUND_HALF_UP).toPlainString());
-            // 第4-12列：空字符串
-            for (int i = 3; i < headList.size(); i++) {
-                statsRow.add("");
-            }
-            rowList.add(statsRow);
-
-            // 7. 导出为 Excel
-            try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                EasyExcel.write(out)
-                        .head(headList)
-                        .sheet("采购订单列表")
-                        .doWrite(rowList);
-
-                byte[] bytes = out.toByteArray();
-
-                String filename = "采购订单列表-" + DateTime.now().toString("yyyyMMddHHmmss") + ".xlsx";
-
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentDisposition(ContentDisposition.builder("attachment")
-                        .filename(filename, StandardCharsets.UTF_8)
-                        .build());
-                headers.setContentType(MediaType.parseMediaType(
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
-                headers.setContentLength(bytes.length);
-                headers.setCacheControl("no-cache, no-store, must-revalidate");
-
-                return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
-            }
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(("导出失败：" + e.getMessage()).getBytes());
-        }
+        return ResponseEntity.ok().header("Content-Disposition","attachment; filename=purchase-orders.xlsx")
+                .header("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .header("Cache-Control","no-store").body(orderExports.simple(ids));
     }
 
     /**
