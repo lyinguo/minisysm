@@ -35,7 +35,7 @@ const routes: RouteRecordRaw[] = [
     path: 'purchase-order-report',
     name: 'PurchaseOrderReport',
     meta: {
-      label: '采购订单报表',
+      label: '采购单报表',
       icon: 'mdi:file-chart'
     },
     component: () => import('@/views/purchase/order/PurchaseOrderForm.vue')

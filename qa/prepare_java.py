@@ -26,6 +26,9 @@ def main():
     if replaced != 1:
         raise RuntimeError('Unrecognized database URL; refusing to start')
     datasource['url'] = jdbc
+    # Some modules bind spring.datasource.druid directly; root-only overrides
+    # would leave their embedded datasource pointed at the normal database.
+    datasource['druid'] = {key: datasource[key] for key in ['url', 'username', 'password', 'driver-class-name'] if key in datasource}
     configuration['spring']['redis'] = {'host': '127.0.0.1', 'port': 18379, 'database': 0}
     configuration['server'] = {'port': 18002}
     configuration['spring']['application'] = {'name': 'QA-OAUTH2'}

@@ -4,13 +4,7 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <!-- 左上角搜索组件 -->
-        <GoodSearchForm
-          :model-value="searchModel"
-          @update:model-value="(val) => Object.assign(searchModel, val)"
-          class="mr-8"
-          @search="onGoodSearch"
-          ref="goodSearchRef"
-        />
+        <DocumentListSearch kind="sale" @search="onGoodSearch" />
       </div>
       <div class="toolbar-right">
         <div class="btn-join">
@@ -48,12 +42,17 @@
     </div>
 
     <!-- 表格 + 固定横向滚动条 + 状态栏 -->
+    <el-alert v-if="queryError" :title="queryError" type="error" :closable="false" show-icon><el-button link @click="loadSaleList">重新加载</el-button></el-alert>
     <div class="table-section">
       <!-- 表格滚动容器 -->
       <div ref="tableWrapper" class="table-wrapper">
         <el-table
           ref="tableRef"
           :data="pagedData"
+          v-loading="listLoading"
+          show-overflow-tooltip
+          max-height="540"
+          empty-text="没有符合条件的销售单，可调整条件或点击重置"
           border
           style="width: 100%"
           :header-cell-style="{ background: '#fafafa' }"
@@ -454,29 +453,24 @@
         </el-table>
       </div>
 
-      <!-- 中：我们的自定义横向拖动条 -->
-      <div ref="xScroll" class="x-scroll">
-        <div ref="xInner" class="x-scroll-inner"></div>
-      </div>
-
       <!-- 底部状态栏 -->
       <div class="status-bar">
         <div class="status-left">
           <el-pagination
             background
             layout="prev, pager, next, sizes, jumper, total"
-            :total="tableData.length"
+            :total="serverTotal"
             v-model:current-page="currentPage"
             v-model:page-size="pageSize"
             :page-sizes="[10, 20, 30, 50, 100]"
           />
         </div>
         <div class="status-right">
-          <span>总单据金额：{{ totalBillAmount.toLocaleString() }}</span>
-          <span class="ml-24">总实际金额：{{ totalRealAmount.toLocaleString() }}</span>
-          <span class="ml-24">总单据收款：{{ totalReceipt.toLocaleString() }}</span>
-          <span class="ml-24">总核销金额：{{ totalWriteoff.toLocaleString() }}</span>
-          <span class="ml-24">总单据费用：{{ totalFee.toLocaleString() }}</span>
+          <span>本页单据金额：{{ totalBillAmount.toLocaleString() }}</span>
+          <span class="ml-24">本页实际金额：{{ totalRealAmount.toLocaleString() }}</span>
+          <span class="ml-24">本页单据收款：{{ totalReceipt.toLocaleString() }}</span>
+          <span class="ml-24">本页核销金额：{{ totalWriteoff.toLocaleString() }}</span>
+          <span class="ml-24">本页单据费用：{{ totalFee.toLocaleString() }}</span>
         </div>
       </div>
     </div>
@@ -491,12 +485,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, type Ref } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import SalesOrderDetailDialog from './SalesOrderDetailDialog.vue'
 
-import GoodSearchForm from '@/components/goodSearchConpoent/GoodSearchForm.vue'
+import DocumentListSearch from '@/components/trade/DocumentListSearch.vue'
+import { extractErrorMessage } from '@/apis/utils/jsonResponse'
 import OperationButtons from '@/components/operationbuttons/OperationButtons.vue'
 
 // 导入销售单API
@@ -529,6 +524,8 @@ interface RowData {
   id: string
   org: string
   customer: string
+  customerId?: string
+  frame?: string
   billTime: string
   billNo: string
   billAmount: number
@@ -549,43 +546,61 @@ interface RowData {
   invoiceDetails?: InvoiceDetail[]
 }
 
-/* 示例数据：你可以等接接口以后直接替换 */
+/* 当前页只展示服务器实际返回的单据。 */
 const tableData = ref<RowData[]>([])
+const serverTotal = ref(0)
+const listLoading = ref(false)
+const queryError = ref('')
+let querySequence = 0
 
 // 从后端加载销售单列表
 async function loadSaleList() {
+  const sequence = ++querySequence
+  listLoading.value = true
+  queryError.value = ''
   try {
     const params: SaleQueryParams = {
       pageIndex: currentPage.value,
       pageSize: pageSize.value,
-      customer: searchModel.customer || undefined,
-      number: searchModel.number || undefined,
-      startTime: searchModel.startTime || undefined,
-      endTime: searchModel.endTime || undefined
+      customer: appliedSearch.value.customer || undefined,
+      number: appliedSearch.value.number || undefined,
+      startTime: appliedSearch.value.startTime ? appliedSearch.value.startTime + 'T00:00:00' : undefined,
+      endTime: appliedSearch.value.endTime ? appliedSearch.value.endTime + 'T23:59:59.999999' : undefined,
+      goodsName: appliedSearch.value.goods || undefined, people: appliedSearch.value.people || undefined,
+      user: appliedSearch.value.user || undefined, data: appliedSearch.value.data || undefined,
+      examine: appliedSearch.value.examine
+
     }
 
     const response = await saleOrderApi.getSaleList(params)
 
-    if (response.code === 10000 && response.data?.rows) {
+    if (sequence !== querySequence) return false
+    if (response.code === 10000 && response.data) {
+      serverTotal.value = Number(response.data.total || 0)
+      const lastPage = Math.max(1, Math.ceil(serverTotal.value / pageSize.value))
+      if (currentPage.value > lastPage) { currentPage.value = lastPage; return false }
+      selected.value = []
+      tableRef.value?.clearSelection?.()
       // 转换后端数据为前端表格格式
-      tableData.value = response.data.rows.map((item) => ({
+      tableData.value = (response.data.rows || []).map((item) => ({
         id: item.id,
-        org: item.frame,
-        customer: item.customer,
-        billTime: item.time,
+        org: item.frameName || item.frame,
+        frame: item.frame, customerId: item.customer,
+        customer: item.customerName || item.customer,
+        billTime: item.time?.replace('T', ' '),
         billNo: item.number,
         billAmount: item.total,
         realAmount: item.actual,
         receiptAmount: item.money,
         writeoffAmount: 0, // 需要从其他接口获取
         feeAmount: item.cost,
-        relatedPerson: item.people,
-        auditStatus: item.examine === 1 ? '已审核' : '未审核',
+        relatedPerson: item.peopleName || item.people,
+        auditStatus: Number(item.examine) === 1 ? '已审核' : '未审核',
         writeoffStatus: getWriteoffStatusText(item.nucleus),
         feeStatus: getFeeStatusText(item.cse),
         invoiceStatus: getInvoiceStatusText(item.invoice),
-        checkStatus: item.check === 1 ? '已核对' : '未核对',
-        maker: item.user,
+        checkStatus: Number(item.check) === 1 ? '已核对' : '未核对',
+        maker: item.userName || item.user,
         remark: item.data,
         writeoffDetails: [],
         feeDetails: [],
@@ -594,15 +609,18 @@ async function loadSaleList() {
 
       // 更新原始数据
       originalAllData.value = JSON.parse(JSON.stringify(tableData.value))
-    } else {
-      ElMessage.error(response.message || '获取数据失败')
+      return true
     }
+    throw new Error(response.message || '销售单加载失败')
   } catch (error) {
-    console.error('加载销售单列表失败:', error)
-    ElMessage.error('获取数据失败')
-    // 使用模拟数据
-    tableData.value = getMockData()
-    originalAllData.value = JSON.parse(JSON.stringify(tableData.value))
+    if (sequence !== querySequence) return false
+    tableData.value = []
+    serverTotal.value = 0
+    selected.value = []
+    queryError.value = extractErrorMessage(error)
+    return false
+  } finally {
+    if (sequence === querySequence) listLoading.value = false
   }
 }
 
@@ -638,64 +656,6 @@ function getInvoiceStatusText(status: number): string {
   return statusMap[status] || '未知'
 }
 
-// 模拟数据（备用）
-function getMockData(): RowData[] {
-  return [
-    {
-      id: 'mock-1',
-      org: '默认组织',
-      customer: '楚渝帅',
-      billTime: '2025-10-30',
-      billNo: 'XSD2510302238442',
-      billAmount: 720781,
-      realAmount: 702335.5,
-      receiptAmount: 675731.5,
-      writeoffAmount: 675430.5,
-      feeAmount: 0,
-      relatedPerson: '崔渝帅',
-      auditStatus: '已审核',
-      writeoffStatus: '已核销',
-      feeStatus: '无需结算',
-      invoiceStatus: '未开具',
-      checkStatus: '已核对',
-      maker: '管理员',
-      remark: '',
-      writeoffDetails: [
-        {
-          billType: '采购退货单',
-          billTime: '2025-10-30',
-          billNo: 'CGTHD2510302238442',
-          amount: 31
-        }
-      ]
-    },
-    {
-      id: 'mock-2',
-      org: '默认组织',
-      customer: 'jack',
-      billTime: '2025-10-30',
-      billNo: 'XSD251030111001',
-      billAmount: 98,
-      realAmount: 97,
-      receiptAmount: 97,
-      writeoffAmount: 0,
-      feeAmount: 0,
-      relatedPerson: 'jack',
-      auditStatus: '已审核',
-      writeoffStatus: '部分核销',
-      feeStatus: '无需结算',
-      invoiceStatus: '未开具',
-      checkStatus: '未核对',
-      maker: '管理员',
-      remark: '',
-      writeoffDetails: [
-        { billType: '销售收款单', billTime: '2025-10-29', billNo: 'SKD2510290001', amount: 50 },
-        { billType: '销售收款单', billTime: '2025-10-30', billNo: 'SKD2510300006', amount: 30 }
-      ]
-    }
-  ]
-}
-
 // 给 OperationButtons 用的列描述（不是表格必须按这个渲染）
 const columns = [
   { prop: 'org', label: '所属组织', width: 120 },
@@ -726,7 +686,7 @@ type SearchFormData = {
   [k: string]: any
 }
 const searchModel = reactive<SearchFormData>({})
-const goodSearchRef = ref<InstanceType<typeof GoodSearchForm> | null>(null)
+const appliedSearch = ref<SearchFormData>({})
 
 const originalAllData = ref<RowData[]>([])
 
@@ -761,25 +721,17 @@ const totalFee = computed(() => tableData.value.reduce((s, r) => s + (r.feeAmoun
 
 const currentPage = ref(1)
 const pageSize = ref(10)
-const pagedData = computed(() => {
-  const s = (currentPage.value - 1) * pageSize.value
-  return tableData.value.slice(s, s + pageSize.value)
+const pagedData = computed(() => tableData.value)
+watch(currentPage, () => { void loadSaleList() })
+watch(pageSize, () => {
+  if (currentPage.value !== 1) currentPage.value = 1
+  else void loadSaleList()
 })
-
-/* 搜索过滤（这里还是本地的） */
-const includes = (src?: string, kw?: string | null) =>
-  (src ?? '').toLowerCase().includes((kw ?? '').trim().toLowerCase())
-
 const onGoodSearch = (payload: SearchFormData) => {
-  const cond = payload ?? {}
-  const list = originalAllData.value.filter((row) => {
-    if (cond.customer && !includes(row.customer, cond.customer)) return false
-    if (cond.number && !includes(row.billNo, cond.number)) return false
-    // 时间区间你可以按需要再补
-    return true
-  })
-  tableData.value = list
-  currentPage.value = 1
+  appliedSearch.value = { ...payload }
+  Object.assign(searchModel, payload)
+  if (currentPage.value !== 1) currentPage.value = 1
+  else void loadSaleList()
 }
 
 /* 刷新 */
@@ -788,12 +740,11 @@ const onRefresh = async () => {
   if (refreshing.value) return
   refreshing.value = true
   try {
-    await loadSaleList()
-    currentPage.value = 1
-    goodSearchRef.value?.resetForm?.()
+    const loaded = await loadSaleList()
+    if (!loaded) return
     sortKey.value = ''
     sortOrder.value = ''
-    ElMessage.success('已刷新为默认排序')
+    ElMessage.success('已刷新，查询条件保持不变')
   } catch (error) {
     console.error('刷新失败:', error)
     ElMessage.error('刷新失败')
@@ -844,9 +795,9 @@ const openDetail = (row: RowData) => {
   currentRow.value = row
   detailVisible.value = true
 }
-const handleDetailSave = () => {
-  ElMessage.success('详情已保存（示例）')
+const handleDetailSave = async () => {
   detailVisible.value = false
+  await loadSaleList()
 }
 
 /* 删除 */
@@ -862,9 +813,7 @@ const onDelete = async (row: RowData) => {
     const response = await saleOrderApi.deleteSales([row.id])
 
     if (response.code === 10000) {
-      const i = tableData.value.findIndex((r) => r.billNo === row.billNo)
-      if (i > -1) tableData.value.splice(i, 1)
-      originalAllData.value = JSON.parse(JSON.stringify(tableData.value))
+      await loadSaleList()
       ElMessage.success('删除成功')
     } else {
       ElMessage.error(response.message || '删除失败')
@@ -890,10 +839,7 @@ const onBatchExamine = async (type: 0 | 1) => {
     const response = await saleOrderApi.examineSales(ids, type === 0)
 
     if (response.code === 10000) {
-      // 更新本地数据状态
-      selected.value.forEach((row) => {
-        row.auditStatus = type === 0 ? '已审核' : '未审核'
-      })
+      await loadSaleList()
 
       // 清空选中项
       selected.value = []
@@ -924,10 +870,7 @@ const onBatchCheck = async (type: 0 | 1) => {
     const response = await saleOrderApi.checkSales(ids, type === 0)
 
     if (response.code === 10000) {
-      // 更新本地数据状态
-      selected.value.forEach((row) => {
-        row.checkStatus = type === 0 ? '已核对' : '未核对'
-      })
+      await loadSaleList()
 
       // 清空选中项
       selected.value = []
@@ -966,11 +909,7 @@ const onBatchDelete = async () => {
     const response = await saleOrderApi.deleteSales(ids)
 
     if (response.code === 10000) {
-      // 从数据中删除
-      tableData.value = tableData.value.filter((r) => !ids.includes(r.id))
-
-      // 更新原始集合
-      originalAllData.value = JSON.parse(JSON.stringify(tableData.value))
+      await loadSaleList()
 
       // 清空选中项
       selected.value = []
@@ -990,61 +929,9 @@ const onBatchDelete = async () => {
   }
 }
 
-/* 固定横向滚动条联动 */
 const tableRef = ref()
-const bodyWrapper = ref<HTMLElement | null>(null)
-const headerWrapper = ref<HTMLElement | null>(null)
-const xScroll = ref<HTMLElement | null>(null)
-const xInner = ref<HTMLElement | null>(null)
-let ro: ResizeObserver | null = null
-
-const setWidths = () => {
-  if (!bodyWrapper.value || !xInner.value) return
-  xInner.value.style.width = bodyWrapper.value.scrollWidth + 'px'
-}
-const bodyScroll = () => {
-  if (!xScroll.value || !bodyWrapper.value) return
-  if (xScroll.value.scrollLeft !== bodyWrapper.value.scrollLeft) {
-    xScroll.value.scrollLeft = bodyWrapper.value.scrollLeft
-  }
-  if (headerWrapper.value) headerWrapper.value.scrollLeft = bodyWrapper.value.scrollLeft
-}
-const xScrollScroll = () => {
-  if (!xScroll.value || !bodyWrapper.value) return
-  if (bodyWrapper.value.scrollLeft !== xScroll.value.scrollLeft) {
-    bodyWrapper.value.scrollLeft = xScroll.value.scrollLeft
-    if (headerWrapper.value) headerWrapper.value.scrollLeft = xScroll.value.scrollLeft
-  }
-}
-
-onMounted(async () => {
-  // 初始化原始数据
-  await loadSaleList()
-
-  await nextTick()
-  const tableEl = (tableRef.value?.$el ?? null) as HTMLElement | null
-  bodyWrapper.value = tableEl?.querySelector('.el-table__body-wrapper') as HTMLElement | null
-  headerWrapper.value = tableEl?.querySelector('.el-table__header-wrapper') as HTMLElement | null
-
-  if (bodyWrapper.value) {
-    bodyWrapper.value.addEventListener('scroll', bodyScroll, { passive: true })
-  }
-  if (xScroll.value) {
-    xScroll.value.addEventListener('scroll', xScrollScroll, { passive: true })
-  }
-  setWidths()
-  if (bodyWrapper.value) {
-    ro = new ResizeObserver(() => setWidths())
-    ro.observe(bodyWrapper.value)
-  }
-})
-
-onBeforeUnmount(() => {
-  if (bodyWrapper.value) bodyWrapper.value.removeEventListener('scroll', bodyScroll)
-  if (xScroll.value) xScroll.value.removeEventListener('scroll', xScrollScroll)
-  if (ro && bodyWrapper.value) ro.unobserve(bodyWrapper.value)
-  ro = null
-})
+onMounted(() => { void loadSaleList() })
+onBeforeUnmount(() => { querySequence++ })
 
 /* 工具函数：数字加千分位 */
 const formatNumber = (n: number | undefined | null) => {
@@ -1057,7 +944,9 @@ const formatNumber = (n: number | undefined | null) => {
 .sales-order-form {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   background: #fff;
 }
 .toolbar {
@@ -1082,7 +971,7 @@ const formatNumber = (n: number | undefined | null) => {
   border-bottom: 1px solid #ebeef5;
 }
 .table-wrapper :deep(.el-table__body-wrapper) {
-  overflow-x: hidden !important;
+  overflow-x: auto !important;
 }
 .table-wrapper :deep(.el-table__header-wrapper) {
   overflow: hidden !important;
@@ -1260,4 +1149,13 @@ const formatNumber = (n: number | undefined | null) => {
 .mr-8 {
   margin-right: 8px;
 }
+</style>
+
+<style scoped>.toolbar{flex-wrap:wrap;align-items:flex-start!important}.toolbar-left{flex:1 1 100%;width:100%;min-width:0}.toolbar-right{margin-left:auto}.sales-order-form>.el-alert{margin:12px 0}</style>
+
+<style scoped>
+.table-section,.table-wrapper{min-width:0;max-width:100%}.table-wrapper{overflow:visible;padding-bottom:0}
+.status-bar{position:static;height:auto;min-height:52px;flex-wrap:wrap;gap:12px;padding:12px;max-width:100%}
+.status-left{max-width:100%;min-width:0}.status-left :deep(.el-pagination){padding-top:0;max-width:100%;flex-wrap:wrap}
+.status-right{display:flex;flex:1 1 100%;flex-wrap:wrap;gap:10px 20px;white-space:normal}.status-right>span{white-space:nowrap;margin-left:0}
 </style>

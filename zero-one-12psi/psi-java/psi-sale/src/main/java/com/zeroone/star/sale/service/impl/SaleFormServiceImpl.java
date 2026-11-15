@@ -53,7 +53,7 @@ public class SaleFormServiceImpl implements SaleFormService {
         try {
             // 防止非法分页参数
             long pageIndex = query.getPageIndex() < 1 ? 1 : query.getPageIndex();
-            long pageSize = query.getPageSize() < 1 ? 10 : query.getPageSize();
+            long pageSize = query.getPageSize() < 1 ? 10 : Math.min(200, query.getPageSize());
 
             Page<SaleListDTO> mpPage = new Page<>(pageIndex, pageSize);
             Page<SaleListDTO> resultPage = saleFormMapper.selectSaleList(mpPage, query);

@@ -45,7 +45,17 @@
             goods g ON bi.goods = g.id WHERE
             bi.pid = b.id          AND g.name LIKE CONCAT('%', #{query.name}, '%') )
         </if>
+        <if test="query.supplier != null and query.supplier.trim() != ''">
+            AND (b.supplier LIKE CONCAT('%', #{query.supplier}, '%') OR EXISTS (SELECT 1 FROM supplier s WHERE s.id=b.supplier AND (s.name LIKE CONCAT('%', #{query.supplier}, '%') OR s.number LIKE CONCAT('%', #{query.supplier}, '%'))))
+        </if>
+        <if test="query.people != null and query.people.trim() != ''">
+            AND (b.people LIKE CONCAT('%', #{query.people}, '%') OR EXISTS (SELECT 1 FROM people p WHERE p.id=b.people AND p.name LIKE CONCAT('%', #{query.people}, '%')))
+        </if>
+        <if test="query.noteUser != null and query.noteUser.trim() != ''">
+            AND (b.`user` LIKE CONCAT('%', #{query.noteUser}, '%') OR EXISTS (SELECT 1 FROM `user` u WHERE u.id=b.`user` AND (u.name LIKE CONCAT('%', #{query.noteUser}, '%') OR u.`user` LIKE CONCAT('%', #{query.noteUser}, '%'))))
+        </if>
     </where>
+        ORDER BY b.time DESC,b.id DESC
     </select>
 
 </mapper>

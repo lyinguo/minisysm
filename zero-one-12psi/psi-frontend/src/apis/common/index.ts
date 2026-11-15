@@ -25,8 +25,9 @@ import type {
  */
 export async function getOrgTree(): Promise<OrgTreeNode[]> {
   const http = useHttp()
-  const res = await http.get<OrgTreeNode[]>('/common/org-tree')
-  return res.data || []
+  const res = await http.get<OrgTreeNode[]>('/basic_information/frame/getFrame')
+  if (res.code !== 10000 || !Array.isArray(res.data)) throw new Error(res.message || '组织列表加载失败')
+  return res.data
 }
 
 /**

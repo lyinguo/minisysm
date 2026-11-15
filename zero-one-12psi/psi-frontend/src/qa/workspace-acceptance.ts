@@ -27,7 +27,7 @@ async function start() {
   const groups = [
     { text: '基础资料', paths: ['/product-manage', '/customer-manage', '/supplier-manage', '/warehouse-manage', '/fund-account'] },
     { text: '账号与组织', paths: ['/user-manage', '/user-role', '/organization-manage', '/staff-manage'] },
-    { text: '采购与销售', paths: ['/purchase-booking', '/purchase-order', '/purchase-return', '/sales-booking', '/sales-order', '/sales-return'] },
+    { text: '采购与销售', paths: ['/purchase-booking', '/purchase-order', '/purchase-order-report', '/purchase-return', '/sales-booking', '/sales-order', '/sales-order-report', '/sales-return'] },
     { text: '库存与资金', paths: ['/inventory-query', '/other-inbound', '/other-outbound', '/transfer-order', '/receipt-order', '/payment-order', '/writeoff-order'] },
     { text: '报表查询', paths: ['/report/purchase/summary', '/report/purchase/payment', '/report/sales/summary', '/report/sales/profit'] },
     { text: '系统配置', paths: ['/sysmanage/import', '/sysmanage/dictionary', '/sysmanage/menu', '/system/summary'] }

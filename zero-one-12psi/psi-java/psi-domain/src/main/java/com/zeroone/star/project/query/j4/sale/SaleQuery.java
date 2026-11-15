@@ -39,9 +39,11 @@ public class SaleQuery extends PageQuery {
     private String user;
 
     @ApiModelProperty(value = "开始时间")
+    @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime startTime;
 
     @ApiModelProperty(value = "结束时间")
+    @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME)
     private LocalDateTime endTime;
 
     @ApiModelProperty(value = "审核状态[0:未审核|1:已审核]")

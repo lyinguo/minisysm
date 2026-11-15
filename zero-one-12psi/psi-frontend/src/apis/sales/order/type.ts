@@ -116,6 +116,10 @@ export interface SaleDTO {
  * 销售单列表数据对象
  */
 export interface SaleListItem {
+  customerName?: string
+  frameName?: string
+  peopleName?: string
+  userName?: string
   /** 销售单id */
   id: string
   /** 所属组织 */

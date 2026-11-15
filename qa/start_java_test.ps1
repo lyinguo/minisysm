@@ -1,12 +1,15 @@
-param([ValidateSet('store','basic')][string]$Service='store')
+param([ValidateSet('store','basic','sale','purchase')][string]$Service='store')
 $ErrorActionPreference='Stop'
-$definition=@{store=@{Module='psi-j2-storemanagement';Port=18020};basic=@{Module='psi-j6-basic_Information';Port=18021}}[$Service]
+$definition=@{store=@{Module='psi-j2-storemanagement';Port=18020};basic=@{Module='psi-j6-basic_Information';Port=18021};sale=@{Module='psi-sale';Port=18022};purchase=@{Module='psi-j3-purchase';Port=18023}}[$Service]
 $statePath=Join-Path $PSScriptRoot '.state.json'
 $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 if ($state.database -notmatch '^psi_qa_[0-9a-f]{12}$') { throw 'Invalid QA database' }
 $runtime=Join-Path $PSScriptRoot 'runtime/java'
 $configuration=Get-Content -LiteralPath (Join-Path $runtime 'application.yaml') -Raw
 if ($configuration -notmatch ('jdbc:mysql://[^/\r\n]+/'+[regex]::Escape($state.database)+'(?:\?|[\s''"])')) { throw 'Private Java configuration must use the QA database' }
+$databaseUrls=[regex]::Matches($configuration,'jdbc:mysql://[^\s''"]+')
+if ($databaseUrls.Count -lt 2) {throw 'QA config must override both root and Druid datasources; regenerate private configuration'}
+foreach($databaseUrl in $databaseUrls) {if($databaseUrl.Value -notmatch ('/'+[regex]::Escape($state.database)+'(?:\?|$)')) {throw 'A Java datasource points outside the QA database'}}
 $previous=$state."${Service}_pid"
 if ($previous -and (Get-Process -Id $previous -ErrorAction SilentlyContinue)) { throw 'QA service already running; confirm identity before restarting' }
 $source=Join-Path $runtime ("$Service-project/target/"+$definition.Module+'-1.0.0-SNAPSHOT.jar')

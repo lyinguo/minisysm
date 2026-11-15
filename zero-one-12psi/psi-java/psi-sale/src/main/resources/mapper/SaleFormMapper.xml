@@ -6,26 +6,30 @@
         SELECT
         `id`, `source`, `frame`, `customer`, `time`, `number`, `total`, `actual`, `money`, `cost`,
         `account`, `people`, `logistics`, `file`, `data`, `more`, `examine`, `nucleus`, `cse`,
-        `invoice`, `check`, `user`
+        `invoice`, `check`, `user`,
+        (SELECT c.name FROM customer c WHERE c.id=sell.customer) AS customer_name,
+        (SELECT f.name FROM frame f WHERE f.id=sell.frame) AS frame_name,
+        (SELECT p.name FROM people p WHERE p.id=sell.people) AS people_name,
+        (SELECT u.name FROM `user` u WHERE u.id=sell.`user`) AS user_name
         FROM `sell`
         <where>
             <if test="query.goodsName != null and query.goodsName != ''">
                 AND EXISTS (
-                SELECT 1 FROM sell_info sfi
-                WHERE sfi.pid = sell.id AND sfi.goods LIKE CONCAT('%', #{query.goodsName}, '%')
+                SELECT 1 FROM sell_info sfi JOIN goods g ON g.id=sfi.goods
+                WHERE sfi.pid = sell.id AND g.name LIKE CONCAT('%', #{query.goodsName}, '%')
                 )
             </if>
             <if test="query.number != null and query.number != ''">
                 AND number LIKE CONCAT('%', #{query.number}, '%')
             </if>
             <if test="query.customer != null and query.customer != ''">
-                AND customer LIKE CONCAT('%', #{query.customer}, '%')
+                AND (customer LIKE CONCAT('%', #{query.customer}, '%') OR EXISTS (SELECT 1 FROM customer c WHERE c.id=sell.customer AND (c.name LIKE CONCAT('%', #{query.customer}, '%') OR c.number LIKE CONCAT('%', #{query.customer}, '%'))))
             </if>
             <if test="query.people != null and query.people != ''">
-                AND people LIKE CONCAT('%', #{query.people}, '%')
+                AND (people LIKE CONCAT('%', #{query.people}, '%') OR EXISTS (SELECT 1 FROM people p WHERE p.id=sell.people AND p.name LIKE CONCAT('%', #{query.people}, '%')))
             </if>
             <if test="query.user != null and query.user != ''">
-                AND user LIKE CONCAT('%', #{query.user}, '%')
+                AND (`user` LIKE CONCAT('%', #{query.user}, '%') OR EXISTS (SELECT 1 FROM `user` u WHERE u.id=sell.`user` AND (u.name LIKE CONCAT('%', #{query.user}, '%') OR u.`user` LIKE CONCAT('%', #{query.user}, '%'))))
             </if>
             <if test="query.startTime != null">
                 AND time >= #{query.startTime}
@@ -52,7 +56,7 @@
                 AND data LIKE CONCAT('%', #{query.data}, '%')
             </if>
         </where>
-        ORDER BY time DESC
+        ORDER BY time DESC, id DESC
     </select>
 
 </mapper>

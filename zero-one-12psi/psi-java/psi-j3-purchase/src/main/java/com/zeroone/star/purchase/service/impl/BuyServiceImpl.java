@@ -895,7 +895,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     @Override
     public PageDTO<PurchaseNoteListDTO> listPurchaseNote(PurchaseNoteQuery query){
         //创建分页对象
-        Page<BuyVO> page = new Page<>(query.getPageIndex(), query.getPageSize());
+        Page<BuyVO> page = new Page<>(Math.max(1, query.getPageIndex()), Math.max(1, Math.min(200, query.getPageSize())));
 
         //构建查询条件
         LambdaQueryWrapper<BuyDO> queryWrapper = new LambdaQueryWrapper<>();
@@ -911,17 +911,11 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
             queryWrapper.like(BuyDO::getData, query.getData());
         }
         //供应商名称
-        if (query.getSupplier() != null && !query.getSupplier().isEmpty()){
-            queryWrapper.like(BuyDO::getSupplier, query.getSupplier());
-        }
+        // Name/ID matching is performed with the referenced master in BuyMapper.xml.
         //制单人
-        if (query.getNoteUser() != null && !query.getNoteUser().isEmpty()){
-            queryWrapper.like(BuyDO::getUser, query.getNoteUser());
-        }
+        // Name/ID matching is performed with the referenced master in BuyMapper.xml.
         //关联人员
-        if (query.getPeople() != null && !query.getPeople().isEmpty()){
-            queryWrapper.like(BuyDO::getPeople, query.getPeople());
-        }
+        // Name/ID matching is performed with the referenced master in BuyMapper.xml.
 
         //审核状态
         if (query.getExamine() != null){
@@ -951,14 +945,21 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
         }
         //结束时间
         if (query.getEndTime() != null && !query.getEndTime().isEmpty()){
-            queryWrapper.le(BuyDO::getTime, query.getEndTime());
+            queryWrapper.lt(BuyDO::getTime, java.time.LocalDate.parse(query.getEndTime()).plusDays(1).atStartOfDay());
         }
 
         //执行分页查询
         Page<BuyVO> resultPage = this.baseMapper.selectPageWithProduct(page, queryWrapper, query);
 
         //转化你为PageDTO返回
-        return PageDTO.create(resultPage, PurchaseNoteListDTO.class);
+        return PageDTO.create(resultPage, source -> {
+            PurchaseNoteListDTO dto = new PurchaseNoteListDTO();
+            org.springframework.beans.BeanUtils.copyProperties(source, dto);
+            dto.setBuyMoney(source.getMoney());
+            dto.setCheckStatus(Boolean.TRUE.equals(source.getCheck()) ? 1 : 0);
+            dto.setNoteUser(source.getUser());
+            return dto;
+        });
     }
 
 }

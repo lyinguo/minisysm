@@ -114,7 +114,7 @@
         <el-date-picker
           v-model="formData.startTime"
           placeholder="单据开始日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -126,7 +126,7 @@
         <el-date-picker
           v-model="formData.endTime"
           placeholder="单据结束日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -138,7 +138,7 @@
         <el-date-picker
           v-model="formData.startArrival"
           placeholder="到货开始日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -150,7 +150,7 @@
         <el-date-picker
           v-model="formData.endArrival"
           placeholder="到货结束日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -250,7 +250,7 @@
             v-else-if="field.type === 'date'"
             v-model="formData[field.key]"
             :placeholder="field.label"
-            value-format="yyyy-MM-dd"
+            value-format="YYYY-MM-DD"
             type="date"
             :teleported="false"
             @visible-change="handleDatePickerVisibleChange"
@@ -420,7 +420,7 @@
         <el-date-picker
           v-model="formData.startTime"
           placeholder="单据开始日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -432,7 +432,7 @@
         <el-date-picker
           v-model="formData.endTime"
           placeholder="单据结束日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -444,7 +444,7 @@
         <el-date-picker
           v-model="formData.startArrival"
           placeholder="到货开始日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -456,7 +456,7 @@
         <el-date-picker
           v-model="formData.endArrival"
           placeholder="到货结束日期"
-          value-format="yyyy-MM-dd"
+          value-format="YYYY-MM-DD"
           type="date"
           :teleported="false"
           @visible-change="handleDatePickerVisibleChange"
@@ -562,7 +562,7 @@
             v-else-if="field.type === 'date'"
             v-model="formData[field.key]"
             :placeholder="field.label"
-            value-format="yyyy-MM-dd"
+            value-format="YYYY-MM-DD"
             type="date"
             :teleported="false"
             @visible-change="handleDatePickerVisibleChange"

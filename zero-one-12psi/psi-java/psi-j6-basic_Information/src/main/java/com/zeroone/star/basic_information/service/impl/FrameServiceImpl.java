@@ -26,28 +26,38 @@ public class FrameServiceImpl extends ServiceImpl<FrameMapper, Frame> implements
         // 转换为 DTO
         List<FrameDTO> allDTOs = ms.framesToFrameDtos(allFrame);
 
-        // 构建树形结构
-        return buildTree(allDTOs, null);
+        // Root organizations historically use NULL, an empty string or "0".
+        // Build from every persisted node without letting old cycles crash callers.
+        java.util.Set<String> ids = allDTOs.stream().map(FrameDTO::getId).collect(Collectors.toSet());
+        allDTOs.sort(Comparator.comparing(FrameDTO::getSort, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(FrameDTO::getId));
+        java.util.Set<String> visited = new java.util.HashSet<>();
+        List<FrameDTO> roots = new java.util.ArrayList<>();
+        for (FrameDTO node : allDTOs) {
+            String parent = node.getPid();
+            if (parent == null || parent.trim().isEmpty() || "0".equals(parent) || !ids.contains(parent)) {
+                FrameDTO root = attach(node, allDTOs, visited);
+                if (root != null) roots.add(root);
+            }
+        }
+        for (FrameDTO node : allDTOs) {
+            FrameDTO remainder = attach(node, allDTOs, visited);
+            if (remainder != null) roots.add(remainder);
+        }
+        return roots;
     }
 
-    /**
-     * 递归构建树形结构
-     * @param allNodes 所有节点列表
-     * @param parentId 父节点ID，根节点为null
-     * @return 构建好的子树
-     */
-    private List<FrameDTO> buildTree(List<FrameDTO> allNodes, String parentId) {
-        return allNodes.stream()
-                // 过滤出当前父节点的直接子节点
-                .filter(node -> Objects.equals(node.getPid(), parentId))
-                // 递归构建子树
-                .peek(node -> {
-                    List<FrameDTO> children = buildTree(allNodes, node.getId());
-                    node.setChildren(children);
-                    node.setHasChildren(!children.isEmpty());
-                })
-                // 按sort字段排序
-                .sorted(Comparator.comparing(FrameDTO::getSort))
-                .collect(Collectors.toList());
+    private FrameDTO attach(FrameDTO node, List<FrameDTO> all, java.util.Set<String> visited) {
+        if (!visited.add(node.getId())) return null;
+        List<FrameDTO> children = new java.util.ArrayList<>();
+        for (FrameDTO candidate : all) {
+            if (Objects.equals(candidate.getPid(), node.getId())) {
+                FrameDTO child = attach(candidate, all, visited);
+                if (child != null) children.add(child);
+            }
+        }
+        node.setChildren(children);
+        node.setHasChildren(!children.isEmpty());
+        return node;
     }
 }

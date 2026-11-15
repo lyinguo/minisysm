@@ -35,7 +35,7 @@
             <el-date-picker
               v-model="headerForm.documentDate"
               type="date"
-              placeholder="2025-10-26"
+              placeholder="选择单据日期"
               format="YYYY-MM-DD"
               value-format="YYYY-MM-DD"
               class="date-input"
@@ -331,6 +331,7 @@
 </template>
 
 <script setup lang="ts">
+import { tradeDocumentDefaults } from '@/utils/tradeDocumentDefaults'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import ButtonGroup from '@/components/mybutton/ButtonGroup.vue'
@@ -792,8 +793,7 @@ const purchaseOrderFields = [
 // 头部表单数据
 const headerForm = reactive({
   supplier: '郑州方之花医药科技有限公司',
-  documentDate: '2025-10-26',
-  documentNumber: 'CGD2510262244385'
+  ...tradeDocumentDefaults('purchase')
 })
 
 // 初始化 Pinia store

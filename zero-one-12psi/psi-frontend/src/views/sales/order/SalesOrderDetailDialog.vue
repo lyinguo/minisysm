@@ -6,6 +6,7 @@
     class="sb-detail-dialog"
     title="单据详情"
   >
+    <el-alert v-if="orgTreeError" :title="orgTreeError" type="error" :closable="false" show-icon><el-button link @click="loadOrgOptions">重新加载组织</el-button></el-alert>
     <!-- 顶部工具栏 -->
     <div ref="headerFormSectionRef" class="toolbar">
       <div class="left">
@@ -629,7 +630,6 @@ async function loadWarehouseList() {
 // 页面加载时获取仓库数据与组织树
 onMounted(async () => {
   loadWarehouseList()
-  await commonStore.loadOrgTree()
   if (!header.frame) {
     header.frame = '0'
   }
@@ -849,6 +849,12 @@ const headerFormSectionRef = ref<HTMLElement>()
 const documentFormRef = ref<InstanceType<typeof DocumentForm> | null>(null)
 const documentFormSectionRef = ref<HTMLElement>()
 const commonStore = useCommonStore()
+const orgTreeError = ref('')
+async function loadOrgOptions() {
+  orgTreeError.value = ''
+  try { await commonStore.loadOrgTree(true) }
+  catch (error) { orgTreeError.value = error instanceof Error ? error.message : '组织列表加载失败，请重试' }
+}
 const userStore = useUserStore()
 
 const orgTreeProps = { value: 'id', label: 'name', children: 'children' }
@@ -891,8 +897,10 @@ watch(
   () => props.visible,
   (newVal) => {
     if (newVal) {
+      void loadOrgOptions()
       // 对话框打开时，如果有 record，加载数据
       if (props.record) {
+        customerId.value = String(props.record.customerId || '')
         // 确保 customerModel 始终有值
         if (!customerModel.value) {
           customerModel.value = { name: '' }

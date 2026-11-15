@@ -1,5 +1,6 @@
 <template>
   <div class="page-container">
+    <el-alert v-if="orgTreeError" :title="orgTreeError" type="error" :closable="false" show-icon><el-button link @click="loadOrgOptions">重新加载组织</el-button></el-alert>
     <!-- 商品表格区域 -->
     <div class="table-section">
       <!-- 表单和按钮行 -->
@@ -359,6 +360,7 @@
 </template>
 
 <script setup lang="ts">
+import { tradeDocumentDefaults } from '@/utils/tradeDocumentDefaults'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import ButtonGroup from '@/components/mybutton/ButtonGroup.vue'
@@ -447,16 +449,16 @@ const headerFormSectionRef = ref<HTMLElement>()
 const documentFormRef = ref<InstanceType<typeof DocumentForm> | null>(null)
 const documentFormSectionRef = ref<HTMLElement>()
 const commonStore = useCommonStore()
+const orgTreeError = ref('')
+async function loadOrgOptions() {
+  orgTreeError.value = ''
+  try { await commonStore.loadOrgTree(true) }
+  catch (error) { orgTreeError.value = error instanceof Error ? error.message : '组织列表加载失败，请重试' }
+}
 const userStore = useUserStore()
 
 const orgTreeProps = { value: 'id', label: 'name', children: 'children' }
-const orgTreeOptions = computed(() => [
-  {
-    id: '0',
-    name: '默认组织',
-    children: commonStore.orgTree.length ? commonStore.orgTree : []
-  }
-])
+const orgTreeOptions = computed(() => commonStore.orgTree)
 
 // 处理客户搜索
 function handleCustomerSearch(params: any) {
@@ -573,39 +575,14 @@ function handleWarehouseChange(row: any) {
 // 从后端加载仓库列表
 
 // 页面加载时获取数据
-const tableData = ref([
-  {
-    goodsId: '',
-    productName: '九八',
-    productCode: '2233535',
-    spec: '',
-    attr: '',
-    unit: '件',
-    warehouse: '',
-    price: 199,
-    quantity: 1,
-    amount: 199,
-    taxRate: 13,
-    taxAmount: 25.87,
-    total: 224.87,
-    remark: ''
-  },
-  {
-    productName: '',
-    productCode: '',
-    spec: '',
-    attr: '',
-    unit: '',
-    warehouse: '',
-    price: '',
-    quantity: '',
-    amount: '',
-    taxRate: '',
-    taxAmount: '',
-    total: '',
-    remark: ''
-  }
-])
+type SalesLine = {
+  goodsId?: string; productName: string; productCode: string; spec: string; attr: string;
+  unit: string; warehouse: string; price: number | string; quantity: number | string;
+  amount: number | string; taxRate: number | string; taxAmount: number | string;
+  total: number | string; remark: string
+}
+const tableData = ref<SalesLine[]>([{ goodsId: '', productName: '', productCode: '', spec: '', attr: '',
+  unit: '', warehouse: '', price: '', quantity: '', amount: '', taxRate: '', taxAmount: '', total: '', remark: '' }])
 // ② 然后根据表格的行数，初始化一模一样长度的弹层可见性数组
 const rowPopoverVisible = ref<boolean[]>(tableData.value.map(() => false))
 
@@ -792,11 +769,10 @@ const purchaseOrderFields = [
 
 // 头部表单数据
 const headerForm = reactive({
-  frame: '0',
+  frame: '',
   customer: '',
   supplier: null as string | null,
-  documentDate: '2025-11-01',
-  documentNumber: 'XSDD2511012119410'
+  ...tradeDocumentDefaults('sale')
 })
 
 const headerFormRules: FormRules = {
@@ -1804,10 +1780,8 @@ function handleGeneratePurchaseReturn() {
 
 // 在组件挂载后的操作
 onMounted(async () => {
-  await commonStore.loadOrgTree()
-  if (!headerForm.frame) {
-    headerForm.frame = '0'
-  }
+  await loadOrgOptions()
+
 
   // 设置 context 的 componentParent 为当前实例
   if (instance) {
