@@ -7,6 +7,62 @@ from resource_fixture import qa_resource_grants
 from purchase_ui_acceptance import PurchaseUiSuite
 
 class ReceiveSuite(OrderAuditSuite):
+    def source_state_cases(self):
+        def corrupt(approval=1,state=0):
+            sql(self.state,'UPDATE bor SET examine='+str(approval)+',state='+str(state)+' WHERE id='+literal(self.source)+';')
+        def read():
+            self.setup();corrupt(2)
+            assert self.preview().get('code')!=10000,'Invalid approval2 allowed receiving preview'
+            assert self.receive(self.receive_body()).get('code')!=10000 and self.count_receipts()==0
+            assert self.request('GET','/purchase-order/document?id='+self.source,service='purchase')['data']['header']['examine']==2
+            assert self.request('GET','/purchase-order/status?id='+self.source,service='purchase')['data']['examine']==2
+            self.unchanged();return ['Approval2 is preserved numerically in actual document/status and rejected by preview and generation without new drafts']
+        self.case('booking.source_invalid_approval_preview',read)
+        def raw():
+            self.setup();corrupt(2)
+            assert self.request('POST','/purchase-note/add',self.direct_body(),service='purchase').get('code')!=10000,'Raw source add bypassed approval2'
+            assert self.count_receipts()==0;self.unchanged();return ['Direct purchase add cannot bypass malformed source approval']
+        self.case('booking.source_invalid_approval_raw_add',raw)
+        def posting():
+            self.setup();id=self.create_receipt(self.receive_body(1));assert self.check([id]).get('code')==10000;corrupt(2)
+            assert self.post([id]).get('code')!=10000,'Existing receipt posted against invalid approval2'
+            assert sql(self.state,'SELECT CAST(examine AS SIGNED) FROM buy WHERE id='+literal(id)+';')=='0'
+            assert sql(self.state,'SELECT COUNT(*) FROM psi_purchase_posting WHERE purchase_id='+literal(id)+';')=='0'
+            self.unchanged();return ['Existing checked receipt rejects approval2 at actual posting and leaves no stock/funds/posting marker']
+        self.case('booking.source_invalid_approval_posting',posting)
+        def unknown():
+            self.setup();corrupt(1,4)
+            assert self.preview().get('code')!=10000,'Unknown source state4 allowed preview'
+            assert self.receive(self.receive_body()).get('code')!=10000 and self.request('POST','/purchase-note/add',self.direct_body(),service='purchase').get('code')!=10000
+            assert self.count_receipts()==0;self.unchanged();return ['Unknown execution4 rejects preview/generated and raw source receiving rather than normalizing damaged state']
+        self.case('booking.source_unknown_execution_generation',unknown)
+        def post_unknown():
+            self.setup();id=self.create_receipt(self.receive_body(1));assert self.check([id]).get('code')==10000;corrupt(1,4)
+            assert self.post([id]).get('code')!=10000,'Existing receipt overwrote unknown source state4'
+            assert sql(self.state,'SELECT CAST(state AS SIGNED) FROM bor WHERE id='+literal(self.source)+';')=='4';self.unchanged()
+            return ['Unknown source execution state rejects existing-receipt posting and retains original enum and balances']
+        self.case('booking.source_unknown_execution_posting',post_unknown)
+        def reverse():
+            self.setup();id=self.create_receipt(self.receive_body(1));assert self.check([id]).get('code')==10000 and self.post([id]).get('code')==10000;corrupt(2,1)
+            assert self.post([id],0).get('code')!=10000,'Malformed source approval permitted reversal'
+            assert self.inventory()==1 and self.balance('supplier',self.supplier)==113 and self.balance('account',self.account)==100
+            assert sql(self.state,'SELECT handle FROM bor_info WHERE pid='+literal(self.source)+';')=='1.0000'
+            assert sql(self.state,'SELECT CAST(examine AS SIGNED) FROM buy WHERE id='+literal(id)+';')=='1'
+            corrupt(1,1);assert self.post([id],0).get('code')==10000;self.unchanged()
+            return ['Malformed source approval refuses reversal without changing actual posted stock/payable/quantity; restoring only QA source allows original reversal']
+        self.case('booking.source_invalid_approval_reverse',reverse)
+        def audit_approval():
+            self.setup();corrupt(2);before=self.records(self.source)
+            assert self.audit([self.source]).get('code')!=10000,'Approval2 falsely reported as already approved1'
+            assert self.state_of(self.source)=='2' and self.records(self.source)==before;self.unchanged()
+            return ['Order audit rejects malformed approval instead of false idempotent success or historical rewrite']
+        self.case('booking.source_invalid_order_audit_approval',audit_approval)
+        def audit_execution():
+            self.setup(False);corrupt(0,4);before=self.records(self.source)
+            assert self.audit([self.source],0).get('code')!=10000,'Unknown state skipped validation on idempotent reversal'
+            assert self.records(self.source)==before and self.state_of(self.source)=='0';self.unchanged()
+            return ['Even same-target order audit refuses unknown execution state before idempotent shortcut']
+        self.case('booking.source_invalid_order_audit_execution',audit_execution)
     def setup(self,approved=True,multi=False,discount=0):
         self.fixture();body=self.order_body();body['purchaseOrderInfoDTOList'][0]['discount']=discount
         if multi:body['purchaseOrderInfoDTOList'].append(dict(body['purchaseOrderInfoDTOList'][0]))
@@ -155,6 +211,7 @@ class ReceiveSuite(OrderAuditSuite):
             finally:sql(self.state,'UPDATE bor SET state=0 WHERE id='+literal(self.source)+';')
             return ['Actual closed-state3 fixture stays numeric in document/status, blocks preview/new generation and existing-draft posting; no stock or payable movement']
         self.case('booking.receive_closed_order_state_not_boolean',closed_source)
+        self.source_state_cases()
         self.write_report()
 
 def prepare_browser():
@@ -176,9 +233,11 @@ def verify_browser(stage):
     print('PASS browser generated real two-line source receipt '+sql(state,'SELECT number FROM buy WHERE id='+literal(id)+';')+'; stage='+stage+'; correct360/406.8, stock/payable/order quantities')
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['run','baseline','preview-race','prepare','verify-generated','verify-posted','verify-reversed'],nargs='?',default='run');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['run','baseline','source-state','preview-race','prepare','verify-generated','verify-posted','verify-reversed'],nargs='?',default='run');args=parser.parse_args()
     if args.action=='prepare':prepare_browser()
     elif args.action.startswith('verify-'):verify_browser(args.action.split('-')[1])
     elif args.action=='preview-race':
         suite=ReceiveSuite(read_state());suite.case('booking.receive_preview_current_after_lock_wait',suite.preview_race);suite.write_report()
+    elif args.action=='source-state':
+        suite=ReceiveSuite(read_state());suite.source_state_cases();suite.write_report()
     else:ReceiveSuite(read_state()).run(args.action=='baseline')

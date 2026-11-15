@@ -24,10 +24,11 @@ public class PurchaseOrderSources {
     private int integer(Object v){return v instanceof Boolean?((Boolean)v?1:0):v==null?0:((Number)v).intValue();}
     public void lock(){for(String scope:Arrays.asList("buy","bor")){db.update("INSERT INTO psi_document_write_lock(scope) VALUES(?) ON DUPLICATE KEY UPDATE scope=VALUES(scope)",scope);db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope=? FOR UPDATE",String.class,scope);}}
     public Map<String,Object> header(String id){
-        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.state AS SIGNED) AS source_state FROM bor b WHERE b.id=? FOR UPDATE",id);
+        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS source_approval,CAST(b.state AS SIGNED) AS source_state FROM bor b WHERE b.id=? FOR UPDATE",id);
         if(found.size()!=1)throw new IllegalArgumentException("来源采购订单不存在");
-        Map<String,Object> head=found.get(0);head.put("state",integer(head.remove("source_state")));access.requireFrame(access.current(),text(head.get("frame")));
-        if(integer(head.get("examine"))!=1 || integer(head.get("state"))==3)throw new IllegalArgumentException("来源采购订单未审核或已关闭");
+        Map<String,Object> head=found.get(0);access.requireFrame(access.current(),text(head.get("frame")));
+        if(integer(head.get("source_approval"))!=1 || head.get("source_state")==null || integer(head.get("source_state"))<0 || integer(head.get("source_state"))>2)throw new IllegalArgumentException("来源采购订单未审核、已关闭或状态异常");
+        head.put("state",integer(head.remove("source_state")));head.put("examine",integer(head.remove("source_approval")));
         List<String> names=db.queryForList("SELECT name FROM supplier WHERE id=?",String.class,head.get("supplier"));head.put("supplierName",names.isEmpty()?"":names.get(0));return head;
     }
     public List<Map<String,Object>> lines(String id){

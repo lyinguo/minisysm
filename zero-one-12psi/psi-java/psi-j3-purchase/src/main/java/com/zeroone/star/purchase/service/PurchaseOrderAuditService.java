@@ -23,10 +23,10 @@ public class PurchaseOrderAuditService {
     private int count(String sql,Object...args){return db.queryForObject(sql,Integer.class,args);}
     public Map<String,Object> document(String id){
         UserDTO actor=access.authorize("/purchase-order/detail");
-        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.state AS SIGNED) AS source_state,s.name AS supplierName FROM bor b LEFT JOIN supplier s ON s.id=b.supplier WHERE b.id=?",id);
+        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS source_approval,CAST(b.state AS SIGNED) AS source_state,s.name AS supplierName FROM bor b LEFT JOIN supplier s ON s.id=b.supplier WHERE b.id=?",id);
         if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
         Map<String,Object> head=found.get(0);head.put("state",integer(head.remove("source_state")));access.requireFrame(actor,text(head.get("frame")));
-        head.put("time",text(head.get("time")));head.put("arrival",text(head.get("arrival")));head.put("examine",integer(head.get("examine")));
+        head.put("time",text(head.get("time")));head.put("arrival",text(head.get("arrival")));head.put("examine",integer(head.remove("source_approval")));
         Map<String,Object> result=new LinkedHashMap<>();result.put("header",head);result.put("items",db.queryForList("SELECT i.*,g.name,g.number,g.spec,w.name AS warehouseName FROM bor_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));return result;
     }
     public Map<String,Object> status(String id){
@@ -91,9 +91,11 @@ public class PurchaseOrderAuditService {
         lock();
         List<String> ordered=new ArrayList<>(ids);Collections.sort(ordered);
         for(String id:ordered){
-            List<Map<String,Object>> found=db.queryForList("SELECT * FROM bor WHERE id=? FOR UPDATE",id);
+            List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS approval_state,CAST(b.state AS SIGNED) AS execution_state FROM bor b WHERE b.id=? FOR UPDATE",id);
             if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
             Map<String,Object> head=found.get(0);access.requireFrame(actor,text(head.get("frame")));
+            if(head.get("approval_state")==null || integer(head.get("approval_state"))<0 || integer(head.get("approval_state"))>1 || head.get("execution_state")==null || integer(head.get("execution_state"))<0 || integer(head.get("execution_state"))>3)throw new IllegalArgumentException("采购订单状态异常，请先核对原始业务记录");
+            head.put("examine",integer(head.remove("approval_state")));head.put("state",integer(head.remove("execution_state")));
             if(integer(head.get("examine"))==request.getType())continue;
             if(integer(head.get("state"))!=0)throw new IllegalArgumentException("已接收或关闭的订单不能审核或反审核");
             if(count("SELECT COUNT(*) FROM period WHERE date>=DATE(?)",head.get("time"))>0)throw new IllegalArgumentException("订单日期已结账，不能改变审核状态");

@@ -143,8 +143,9 @@ public class PurchasePostingService {
             if(lines.stream().anyMatch(row->!s(row.get("source")).isEmpty() && !"0".equals(s(row.get("source"))))) throw new IllegalArgumentException("商品明细关联了订单但单据来源为空");
             return;
         }
-        List<Map<String,Object>> orders=db.queryForList("SELECT b.*,CAST(b.state AS SIGNED) AS source_state FROM bor b WHERE b.id=? FOR UPDATE",source);
-        if(orders.size()!=1 || n(orders.get(0).get("examine"))!=1 || n(orders.get(0).get("source_state"))==3
+        List<Map<String,Object>> orders=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS source_approval,CAST(b.state AS SIGNED) AS source_state FROM bor b WHERE b.id=? FOR UPDATE",source);
+        if(orders.size()!=1 || n(orders.get(0).get("source_approval"))!=1
+                || orders.get(0).get("source_state")==null || n(orders.get(0).get("source_state"))<0 || n(orders.get(0).get("source_state"))>2
                 || !s(head.get("frame")).equals(s(orders.get(0).get("frame"))) || !s(head.get("supplier")).equals(s(orders.get(0).get("supplier"))))
             throw new IllegalArgumentException("来源订单不存在、未审核、已关闭或供应商组织不匹配");
         for(Map<String,Object> line:lines) {
