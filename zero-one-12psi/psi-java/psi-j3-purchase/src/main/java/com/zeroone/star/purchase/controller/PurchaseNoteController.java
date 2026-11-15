@@ -271,12 +271,7 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     })
     @PostMapping("/delete")
     public JsonVO<String> deletePurchase(@RequestBody List<String> ids) {
-        try {
-            String result = purchaseNoteService.deletePurchase(ids);
-            return JsonVO.success(result);
-        } catch (Exception e) {
-            return JsonVO.fail(e.getMessage());
-        }
+        return JsonVO.success(purchaseNoteService.deletePurchase(ids));
     }
 
     /**

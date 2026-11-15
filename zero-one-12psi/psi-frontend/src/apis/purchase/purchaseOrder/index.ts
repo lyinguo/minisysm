@@ -29,6 +29,9 @@ export class PurchaseNoteAPI {
   static audit(ids: string[], audited: boolean) {
     return this.http.post<string>(`${currBaseUrl}/audit`, { ids, type: audited ? 1 : 0 })
   }
+  static remove(ids: string[]) {
+    return this.http.post<string>(`${currBaseUrl}/delete`, ids)
+  }
   static exportSimpleReport(id: string | number) {
     return this.http.getFile(`${currBaseUrl}/export/simple`, { ids: String(id) }, { responseType: 'blob', showLoading: true })
   }

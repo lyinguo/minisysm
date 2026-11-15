@@ -735,9 +735,23 @@
     detailVisible.value = false
     void loadPurchaseList()
   }
-  // These old actions only changed memory. Their business implementations remain pending.
-  const onDelete = (_row: RowData) => ElMessage.warning('采购删除引用保护尚在验收，本次未删除单据')
-  const onBatchDelete = () => ElMessage.warning('采购批量删除尚在验收，本次未删除单据')
+  const deleting = ref(false)
+  const deletePurchases = async (ids: string[]) => {
+    if (deleting.value || refreshing.value) return
+    if (!ids.length) { ElMessage.warning('请先选择采购草稿'); return }
+    deleting.value = true
+    try {
+      await ElMessageBox.confirm(`将永久删除 ${ids.length} 张采购草稿，删除后无法恢复。已核对、已审核或存在关联记录的单据不能删除，任一不符合条件将整批取消。`, '删除采购草稿', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
+      const response = await PurchaseNoteAPI.remove(ids)
+      if (response.code !== 10000) throw new Error(response.message || '采购草稿删除失败')
+      await loadPurchaseList()
+      ElMessage.success('采购草稿已删除，操作历史已保留')
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') ElMessage.error(extractErrorMessage(error))
+    } finally { deleting.value = false }
+  }
+  const onDelete = (row: RowData) => deletePurchases(row.id ? [String(row.id)] : [])
+  const onBatchDelete = () => deletePurchases(selected.value.map(row => String(row.id || '')).filter(Boolean))
   const onBatchExamine = async (type: 0 | 1) => {
     if (checking.value || refreshing.value) return
     const ids = selected.value.map(row => String(row.id || '')).filter(Boolean)
