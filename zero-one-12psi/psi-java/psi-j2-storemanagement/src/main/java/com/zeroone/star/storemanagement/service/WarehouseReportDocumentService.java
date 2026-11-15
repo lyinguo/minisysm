@@ -60,6 +60,11 @@ public class WarehouseReportDocumentService {
         return DigestUtils.md5DigestAsHex((head.toString() + rows.toString()).getBytes(StandardCharsets.UTF_8));
     }
 
+    public String lockedVersion(String kind, String id) {
+        String t = table(kind);
+        return version(header(t, id, true), db.queryForList("SELECT * FROM `" + t + "_info` WHERE pid=? ORDER BY id FOR UPDATE", id));
+    }
+
     public Map<String, Object> detail(String kind, String id) {
         String t = table(kind);
         Map<String, Object> head = header(t, id, false);
@@ -108,8 +113,7 @@ public class WarehouseReportDocumentService {
         String number = str(edit.getHeader().get("number")).trim();
         if (number.isEmpty()) throw new IllegalArgumentException("单据编号不能为空");
         if (db.queryForObject("SELECT COUNT(*) FROM `" + t + "` WHERE number=? AND id<>?", Integer.class, number, id) > 0) throw new IllegalArgumentException("单据编号已存在");
-        Object time = edit.getHeader().get("time");
-        Timestamp date = Timestamp.valueOf(str(time).replace('T', ' ').substring(0, 19));
+        Timestamp date = documentTime(edit.getHeader().get("time"));
         db.update("UPDATE `" + t + "` SET number=?,time=?,data=?,total=? WHERE id=?", number, date, edit.getHeader().get("data"), total, id);
         log(t, id, actor, "修改单据");
         return detail(t, id);
@@ -288,7 +292,21 @@ public class WarehouseReportDocumentService {
     }
     private static String uid() { return IdUtil.fastSimpleUUID(); }
     private static String str(Object value) { return value == null ? "" : value.toString(); }
-    private static int num(Object value) { return value == null ? 0 : Integer.parseInt(value.toString()); }
+    private static Timestamp documentTime(Object value) {
+        if (value instanceof Number) return new Timestamp(((Number) value).longValue());
+        if (value instanceof Timestamp) return (Timestamp) value;
+        String text = str(value).trim().replace('T', ' ');
+        try {
+            if (text.length() == 10) text += " 00:00:00";
+            return Timestamp.valueOf(text);
+        } catch (IllegalArgumentException error) { throw new IllegalArgumentException("请选择有效单据日期"); }
+    }
+    private static int num(Object value) {
+        if (value == null) return 0;
+        if (value instanceof Boolean) return (Boolean) value ? 1 : 0;
+        if (value instanceof Number) return ((Number) value).intValue();
+        return Integer.parseInt(value.toString());
+    }
     private static BigDecimal decimal(Object value) { return new BigDecimal(str(value)).setScale(4, RoundingMode.HALF_UP); }
     private static BigDecimal positive(Object value) {
         BigDecimal result = decimal(value);

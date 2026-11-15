@@ -15,6 +15,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  */
 @EnableDiscoveryClient
 @SpringBootApplication
+@org.springframework.context.annotation.Import(com.zeroone.star.project.config.mybatis.MybatisPlusConfig.class)
 @EnableFeignClients
 @MapperScan("com.zeroone.star.basic_information.mapper")
 public class basic_informationApplication {

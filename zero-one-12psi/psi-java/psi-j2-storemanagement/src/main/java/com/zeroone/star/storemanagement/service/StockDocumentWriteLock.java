@@ -1,0 +1,24 @@
+package com.zeroone.star.storemanagement.service;
+
+import javax.annotation.PostConstruct;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import java.util.Arrays;
+
+/** Serialize document-number writes in the database; release follows transaction completion. */
+@Service
+public class StockDocumentWriteLock {
+    private final JdbcTemplate db;
+    public StockDocumentWriteLock(JdbcTemplate db) { this.db = db; }
+    @PostConstruct
+    public void initialize() {
+        db.execute("CREATE TABLE IF NOT EXISTS psi_document_write_lock (scope VARCHAR(40) NOT NULL PRIMARY KEY)");
+    }
+    public void lock(String kind) {
+        if (!Arrays.asList("entry", "extry", "swap").contains(kind) || !TransactionSynchronizationManager.isActualTransactionActive())
+            throw new IllegalStateException("单据写入必须位于事务中");
+        db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES (?)", kind);
+        db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope=? FOR UPDATE", String.class, kind);
+    }
+}

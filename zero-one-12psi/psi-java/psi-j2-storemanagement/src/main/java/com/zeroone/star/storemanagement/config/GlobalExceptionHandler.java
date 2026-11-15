@@ -27,6 +27,25 @@ import java.util.stream.StreamSupport;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(IllegalArgumentException.class)
+    public JsonVO<String> invalidBusinessInput(IllegalArgumentException error) {
+        return JsonVO.create(null, 9995, error.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public JsonVO<String> businessConflict(IllegalStateException error) {
+        return JsonVO.create(null, 9999, error.getMessage());
+    }
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public JsonVO<String> accessFailure(org.springframework.web.server.ResponseStatusException error) {
+        return JsonVO.create(null, error.getStatus().value(), error.getReason() == null ? "请求被拒绝" : error.getReason());
+    }
+
+    @ExceptionHandler({com.zeroone.star.project.components.jwt.exception.JwtInvalidException.class,
+            com.zeroone.star.project.components.jwt.exception.JwtExpiredException.class})
+    public JsonVO<String> invalidIdentity(Exception error) {
+        return JsonVO.create(null, 401, "登录已失效，请重新登录");
+    }
     /**
      * 系统通用异常处理
      * @param e 异常类型

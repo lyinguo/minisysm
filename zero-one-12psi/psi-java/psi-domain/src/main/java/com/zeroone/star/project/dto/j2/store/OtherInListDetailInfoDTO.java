@@ -38,6 +38,9 @@ public class OtherInListDetailInfoDTO{
     @ApiModelProperty(value = "批次号", example = "898")
     private String batch;
 
+    @ApiModelProperty(value = "序列号JSON数组，例如[\"SN001\"]")
+    private String serial;
+
     @ApiModelProperty(value = "生产日期", example = "2023-10-18")
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate mfd;

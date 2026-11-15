@@ -16,6 +16,11 @@ import lombok.EqualsAndHashCode;
 @Data
 @ApiModel("商品查询对象")
 public class GoodsQuery extends PageQuery {
+    @ApiModelProperty(value = "名称、编号或条码关键词")
+    private String keyword;
+
+    @ApiModelProperty(value = "规格型号")
+    private String spec;
 
     @ApiModelProperty(value = "商品名称（模糊查询）", example = "手机")
     private String name;

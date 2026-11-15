@@ -15,3 +15,9 @@
 验收状态为 `pending`（尚未执行）、`failed`（已复现失败）、`blocked`（依赖未满足）、`verified`（约定的业务断言全部通过）。仅跑通一个接口，不能将整个模块改为 verified。每次修复后需重跑失败场景和受到影响的业务链。
 
 具体功能和状态见 `ACCEPTANCE.md`。结果写入本地 `reports/`。本任务在所有约定功能通过实际业务验收前保持进行中，不以局部修复作为全系统交付。
+
+## 库存与商品选择专项
+
+已有隔离 C1、OAuth、MySQL 环境后，可用 `prepare_oauth_build.py --module psi-j2-storemanagement`／`--module psi-j6-basic_Information` 生成独立 Maven 工程，构建后用 `start_java_test.ps1 -Service store`／`basic` 启动。专用端口分别为 18020、18021；共享依赖须先从当前源码安装，不能混用旧 API 签名。
+
+运行 `python qa/warehouse_acceptance.py baseline`、`python qa/warehouse_acceptance.py lifecycle` 及 `python qa/product_selection_acceptance.py` 执行实际接口验收。商品／仓库测试夹具和新增账号仅存在于专用数据库；这些测试不代表完整权限、所有库存单据或浏览器保存流程已经通过。仓储新接口和安全修改目前仍以隔离环境验证为主，部署状态应单独核对。

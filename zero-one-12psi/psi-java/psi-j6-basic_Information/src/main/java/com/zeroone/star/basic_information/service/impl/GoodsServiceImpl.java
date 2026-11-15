@@ -63,6 +63,10 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         queryWrapper.eq(!StringUtils.isEmpty(query.getBrand()), "brand", query.getBrand());
         queryWrapper.eq(query.getType() != null, "type", query.getType());
         queryWrapper.eq(!StringUtils.isEmpty(query.getCode()), "code", query.getCode());
+        if (!StringUtils.isEmpty(query.getKeyword())) {
+            queryWrapper.and(criteria -> criteria.like("name", query.getKeyword()).or().like("number", query.getKeyword()).or().like("code", query.getKeyword()));
+        }
+        queryWrapper.like(!StringUtils.isEmpty(query.getSpec()), "spec", query.getSpec());
         queryWrapper.orderByDesc("id");
 
         // 分页查询
@@ -123,6 +127,10 @@ public class GoodsServiceImpl extends ServiceImpl<GoodsMapper, Goods> implements
         queryWrapper.eq(!StringUtils.isEmpty(query.getCategory()), "category", query.getCategory());
         queryWrapper.eq(!StringUtils.isEmpty(query.getBrand()), "brand", query.getBrand());
         queryWrapper.eq(query.getType() != null, "type", query.getType());
+        if (!StringUtils.isEmpty(query.getKeyword())) {
+            queryWrapper.and(criteria -> criteria.like("name", query.getKeyword()).or().like("number", query.getKeyword()).or().like("code", query.getKeyword()));
+        }
+        queryWrapper.like(!StringUtils.isEmpty(query.getSpec()), "spec", query.getSpec());
         queryWrapper.orderByDesc("id");
 
         // 分页查询

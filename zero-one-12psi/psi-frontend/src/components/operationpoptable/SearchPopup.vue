@@ -24,8 +24,8 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="商品类型">
-        <el-select v-model="form.type" placeholder="请选择类型" clearable>
+      <el-form-item label="规格型号">
+        <el-select v-model="form.type" placeholder="请选择规格型号" clearable>
           <el-option v-for="type in options.types" :key="type" :label="type" :value="type" />
         </el-select>
       </el-form-item>

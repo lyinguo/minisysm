@@ -7,10 +7,11 @@ import xml.etree.ElementTree as ET
 from acceptance import ROOT, QA
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--module', choices=['psi-oauth2', 'psi-j7-supportinfo'], default='psi-oauth2')
+parser.add_argument('--module', choices=['psi-oauth2', 'psi-j7-supportinfo', 'psi-j2-storemanagement', 'psi-j6-basic_Information'], default='psi-oauth2')
 arguments = parser.parse_args()
 source = ROOT / 'zero-one-12psi/psi-java' / arguments.module
-project = 'oauth-project' if arguments.module == 'psi-oauth2' else 'supportinfo-project'
+project = {'psi-oauth2': 'oauth-project', 'psi-j7-supportinfo': 'supportinfo-project',
+           'psi-j2-storemanagement': 'store-project', 'psi-j6-basic_Information': 'basic-project'}[arguments.module]
 destination = QA / 'runtime/java' / project
 destination.mkdir(parents=True, exist_ok=True)
 for item in (source / 'src').rglob('*'):

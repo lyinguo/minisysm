@@ -32,10 +32,10 @@
             #{item}
         </foreach>
     </select>
-    <insert id="insertByOne" useGeneratedKeys="true" keyProperty="id">
+    <insert id="insertByOne">
         INSERT INTO entry_info
-        (pid, goods, attr, unit, warehouse, batch, mfd, price, nums, total, data, serial)
-        VALUES (#{pid}, #{goods}, #{attr}, #{unit}, #{warehouse}, #{batch}, #{mfd}, #{price}, #{nums},
-                #{total}, #{data}, '1')
+        (id, pid, goods, attr, unit, warehouse, batch, mfd, price, nums, total, data, serial)
+        VALUES (#{id}, #{pid}, #{goods}, #{attr}, #{unit}, #{warehouse}, #{batch}, #{mfd}, #{price}, #{nums},
+                #{total}, #{data}, #{serial})
     </insert>
 </mapper>

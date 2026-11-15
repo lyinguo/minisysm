@@ -2,22 +2,16 @@ package com.zeroone.star.project.components.user;
 
 import cn.hutool.core.convert.Convert;
 import cn.hutool.json.JSONObject;
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSObject;
-import com.nimbusds.jose.JWSVerifier;
 import com.zeroone.star.project.components.jwt.JwtComponent;
 import com.zeroone.star.project.components.jwt.exception.JwtInvalidException;
-import com.zeroone.star.project.constant.RedisConstant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import org.yaml.snakeyaml.util.UriEncoder;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.ArrayList;
 
 /**
  * <p>
@@ -45,27 +39,13 @@ public class UserHolder {
             return null;
         }
         HttpServletRequest request = servletRequestAttributes.getRequest();
-        String userStr = request.getHeader("user");
-        // 不是通过网关过来的，那么执行解析验证JWT
-        if (userStr == null) {
-            //从token中解析用户信息并设置到Header中去
-            log.info("Authrization = "+ request.getHeader("Authorization"));
-            String realToken = request.getHeader("Authorization").replace("Bearer ", "");
-            userStr = jwtComponent.defaultRsaVerify(realToken);
-        } else {
-            userStr = UriEncoder.decode(userStr);
-        }
+        // A caller can forge a `user` header, including a privileged identity.
+        // Derive identity only from a signed, unexpired bearer credential.
+        String authorization = request.getHeader("Authorization");
+        if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7)
+                || authorization.substring(7).trim().isEmpty()) throw new JwtInvalidException("请先登录");
+        String userStr = jwtComponent.defaultRsaVerify(authorization.substring(7).trim());
         JSONObject userJsonObject = new JSONObject(userStr);
-
-        // HARD_CODE 在没有办法使用token时候可以修改这里的代码伪造用户信息，注意伪造用户代码不要提交到仓库中
-        /*userJsonObject = new JSONObject();
-        userJsonObject.putOnce("id", 1);
-        userJsonObject.putOnce("user_name", "王麻子");
-        ArrayList<Object> roles = new ArrayList<>();
-        roles.add("ROLE_ADMIN");
-        userJsonObject.putOnce("authorities", roles);
-        userJsonObject.putOnce("avatar","https://img95.699pic.com/photo/60112/3125.jpg_wh860.jpg")  ;
-        */
 
         // FIXME: 如果要扩展用户信息，需要修改这里的代码
         return UserDTO.builder()

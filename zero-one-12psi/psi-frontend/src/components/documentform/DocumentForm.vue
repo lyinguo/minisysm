@@ -257,6 +257,7 @@ interface FormData extends Record<string, any> {
 
 // 动态可见字段
 const props = defineProps({
+  amount: { type: Number, default: undefined },
   fields: {
     type: Array as PropType<string[]>,
     default: () => [
@@ -374,6 +375,7 @@ function copyTotalToActual() {
 const purchaseStore = usePurchaseStore()
 const { items: purchaseItems } = storeToRefs(purchaseStore)
 const documentAmountTotal = computed<number>(() => {
+  if (props.amount !== undefined) return props.amount
   return (purchaseItems.value as PurchaseItem[]).reduce((sum: number, item: PurchaseItem) => {
     const tpt = Number((item as PurchaseItem)?.tpt ?? 0)
     return sum + (Number.isFinite(tpt) ? tpt : 0)
@@ -383,7 +385,7 @@ const documentAmountTotal = computed<number>(() => {
 // 同步计算结果到表单模型，保持禁用输入框显示与表单数据一致
 watch(documentAmountTotal, (total) => {
   // 合计为 0 时保持空；有值时保留两位小数
-  if (!total) {
+  if (!total && props.amount === undefined) {
     formdata.documentCost = undefined
     formdata.documentBaseCost = undefined
     return

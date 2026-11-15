@@ -121,87 +121,46 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
     @Resource
     private WarehouseMapper warehouseMapper;
 
+    @Resource
+    private org.springframework.jdbc.core.JdbcTemplate stockDb;
+    @Resource
+    private com.zeroone.star.storemanagement.service.StockDocumentAccess stockAccess;
+    @Resource
+    private com.zeroone.star.storemanagement.service.StockDocumentWriteLock stockWriteLock;
+
+    @Resource
+    private com.zeroone.star.storemanagement.service.WarehouseReportDocumentService reportDocuments;
+
     //雪花算法
     private final Snowflake snowflake = IdUtil.getSnowflake();
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
 
     @Override
-    @Transactional
-    public void updateOtherInList(OtherInListDetailDTO otherInListDetailDTO) {
-        //1.判断入库单是否存在
-        Integer examine = otherInMapper.getExamineById(otherInListDetailDTO.getId());
-        if (examine == null) {
-            throw new RuntimeException("入库单不存在");
-        }
-        if (examine == 1) {
-            throw new RuntimeException("入库单已审核,无法修改");
-        }
-        //2.更新入库单
-        EntryDO entry = msEntryMapper.otherInListDetailDtoToEntry(otherInListDetailDTO);
-        otherInMapper.updateById(entry);
-
-
-        //3.获取入库单详情列表
-        List<OtherInListDetailInfoDTO> otherInListInfoDTOList = otherInListDetailDTO.getOtherInListDetailInfoDTOList();
-        //判断是否为空
-        if (otherInListInfoDTOList == null || otherInListInfoDTOList.isEmpty()) {
-            throw new RuntimeException("入库单详情列表不能为空");
-        }
-        //4.删除原先的入库单详情数据
-        otherInInfoMapper.deleteByPid(otherInListDetailDTO.getId());
-        //5.插入新的入库单详情数据
-        List<EntryInfoDO> entryInfoList = new ArrayList<>();
-        for (OtherInListDetailInfoDTO otherInListInfoDTO : otherInListInfoDTOList) {
-            EntryInfoDO entryInfo = new EntryInfoDO();
-            BeanUtils.copyProperties(otherInListInfoDTO, entryInfo);
-            entryInfo.setPid(otherInListDetailDTO.getId());
-            entryInfoList.add(entryInfo);
-            entryInfo.setId(snowflake.nextIdStr());
-        }
-        otherInInfoMapper.insertBatch(entryInfoList);
-
-
-        //6.获取单据花费列表
-        List<CostDTO> costDTOList = otherInListDetailDTO.getCostDTOList();
-        //7.删除原先的单据花费数据
-        costMapper.deleteBycls(otherInListDetailDTO.getId());
-        //8.插入新的花费单据数据
-        List<CostDO> costList = new ArrayList<>();
-        for (CostDTO costDTO : costDTOList) {
-            CostDO cost = new CostDO();
-            BeanUtils.copyProperties(costDTO, cost);
-            cost.setCls(otherInListDetailDTO.getId());
-            cost.setType("entry");
-            cost.setTime(entry.getTime());
-            cost.setSettle(BigDecimal.valueOf(0.0000));
-            cost.setState(0);
-            cost.setId(snowflake.nextIdStr());
-            costList.add(cost);
-        }
-        costMapper.insertBatch(costList);
-
-        //9.更新操作日志表和单据记录表
-        UserDTO userDTO = null;
-        try {
-            userDTO = userHolder.getCurrentUser();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        LogDO log = new LogDO();
-        log.setUser(userDTO.getUsername());
-        log.setTime(entry.getTime());
-        log.setInfo("更新其他入库单"+"["+otherInListDetailDTO.getNumber()+"]");
-        log.setId(snowflake.nextIdStr());
-        logMapper.insert(log);
-        RecordDO record = new RecordDO();
-        record.setUser(userDTO.getUsername());
-        record.setType("entry");
-        record.setSource(otherInListDetailDTO.getId());
-        record.setTime(entry.getTime());
-        record.setInfo("更新单据");
-        record.setId(snowflake.nextIdStr());
-        recordMapper.insert(record);
+    @Transactional(rollbackFor = Exception.class)
+    public void updateOtherInList(OtherInListDetailDTO dto) {
+        UserDTO actor = stockAccess.authorize("entry", "save");
+        if (dto == null || dto.getId() == null) throw new IllegalArgumentException("单据ID不能为空");
+        stockWriteLock.lock("entry");
+        List<Map<String, Object>> found = stockDb.queryForList("SELECT * FROM entry WHERE id=? FOR UPDATE", dto.getId());
+        if (found.size() != 1) throw new IllegalArgumentException("单据不存在");
+        Map<String, Object> original = found.get(0);
+        stockAccess.creationFrame(actor, String.valueOf(original.get("frame")));
+        if (Boolean.TRUE.equals(original.get("examine")) || "1".equals(String.valueOf(original.get("examine"))))
+            throw new IllegalStateException("已审核单据不能修改，请先反审核");
+        if (dto.getVersion() == null || !dto.getVersion().equals(reportDocuments.lockedVersion("entry", dto.getId())))
+            throw new IllegalStateException("单据已被其他操作修改，请重新打开详情");
+        if (stockDb.queryForObject("SELECT COUNT(*) FROM cost WHERE `class`=? AND type='entry' AND (settle<>0 OR state<>0)", Integer.class, dto.getId()) > 0)
+            throw new IllegalStateException("单据已有费用结算，不能重写费用明细");
+        prepareDraft(dto, actor, dto.getId());
+        EntryDO head = msEntryMapper.addDtoToEntry(dto);
+        head.setId(dto.getId());
+        head.setUser(String.valueOf(original.get("user")));
+        if (otherInMapper.updateById(head) != 1) throw new IllegalStateException("单据修改失败");
+        otherInInfoMapper.deleteByPid(dto.getId());
+        stockDb.update("DELETE FROM cost WHERE `class`=? AND type='entry'", dto.getId());
+        persistDetails(dto.getId(), dto);
+        persistOperation(dto.getId(), actor, "修改入库单");
     }
 
     @Override
@@ -463,44 +422,85 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
     }
 
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public JsonVO<String> saveOtherInList(OtherInListAddDTO dto) {
-        // 1.参数校验
-        if (validate(dto) != null) { // 没有返回错误信息即通过校验
-            return JsonVO.fail("参数不合法");
+        UserDTO actor = stockAccess.authorize("entry", "create");
+        prepareDraft(dto, actor, null);
+        EntryDO head = msEntryMapper.addDtoToEntry(dto);
+        String id = IdUtil.fastSimpleUUID();
+        head.setId(id);
+        if (otherInMapper.insert(head) != 1) throw new IllegalStateException("入库单保存失败");
+        persistDetails(id, dto);
+        persistOperation(id, actor, "新增入库单");
+        return JsonVO.success(id);
+    }
+
+    private void prepareDraft(OtherInListAddDTO dto, UserDTO actor, String excludedId) {
+        if (dto == null) throw new IllegalArgumentException("单据不能为空");
+        dto.setUser(actor.getId());
+        dto.setFrame(stockAccess.creationFrame(actor, dto.getFrame()));
+        String invalid = validate(dto);
+        if (invalid != null) throw new IllegalArgumentException(invalid);
+        if (dto.getExamine() != 0 || dto.getCheck() != 0)
+            throw new IllegalArgumentException("新单据必须先保存为未审核、未核对的草稿");
+        if (dto.getOtherInListDetailInfoDTOList() == null || dto.getOtherInListDetailInfoDTOList().isEmpty())
+            throw new IllegalArgumentException("入库单明细不能为空");
+        String number = dto.getNumber().trim();
+        if (number.codePointCount(0, number.length()) > 32) throw new IllegalArgumentException("单据编号最多32个字符");
+        stockWriteLock.lock("entry");
+        if (!stockDb.queryForList("SELECT id FROM entry WHERE number=? AND id<>? FOR UPDATE", number, excludedId == null ? "" : excludedId).isEmpty())
+            throw new IllegalArgumentException("单据编号已存在");
+        dto.setNumber(number);
+        BigDecimal total = BigDecimal.ZERO;
+        for (OtherInListDetailInfoDTO item : dto.getOtherInListDetailInfoDTOList()) {
+            if (item == null || item.getGoods() == null || item.getWarehouse() == null || item.getUnit() == null || item.getUnit().trim().isEmpty())
+                throw new IllegalArgumentException("明细中的商品、仓库和单位不能为空");
+            if (stockDb.queryForObject("SELECT COUNT(*) FROM goods WHERE id=?", Integer.class, item.getGoods()) != 1 ||
+                    stockDb.queryForObject("SELECT COUNT(*) FROM warehouse WHERE id=?", Integer.class, item.getWarehouse()) != 1)
+                throw new IllegalArgumentException("商品或仓库不存在");
+            if (item.getNums() == null || item.getNums().signum() <= 0 || item.getPrice() == null || item.getPrice().signum() < 0)
+                throw new IllegalArgumentException("数量必须大于零，单价不能为负数");
+            try {
+                item.setNums(item.getNums().setScale(4, java.math.RoundingMode.UNNECESSARY));
+                item.setPrice(item.getPrice().setScale(4, java.math.RoundingMode.UNNECESSARY));
+            } catch (ArithmeticException error) { throw new IllegalArgumentException("数量和单价最多保留4位小数"); }
+            BigDecimal amount = item.getNums().multiply(item.getPrice()).setScale(4, java.math.RoundingMode.HALF_UP);
+            if (item.getNums().precision() > 12 || item.getPrice().precision() > 12 || amount.precision() > 12)
+                throw new IllegalArgumentException("明细数量、单价或金额超过允许范围");
+            item.setTotal(amount);
+            total = total.add(amount);
         }
-        // 2.检查用户权限
-        if (!checkPermission()) {
-            return JsonVO.fail("用户无操作权限");
+        dto.setTotal(total);
+        List<CostDTO> fees = dto.getCostDTOList() == null ? Collections.emptyList() : dto.getCostDTOList();
+        BigDecimal feeTotal = BigDecimal.ZERO;
+        for (CostDTO fee : fees) {
+            if (fee == null || fee.getMoney() == null || fee.getMoney().signum() < 0 || fee.getIet() == null ||
+                    stockDb.queryForObject("SELECT COUNT(*) FROM iet WHERE id=?", Integer.class, fee.getIet()) != 1)
+                throw new IllegalArgumentException("费用金额或收支类别无效");
+            feeTotal = feeTotal.add(fee.getMoney());
         }
-        // 3.新增入库单
-        EntryDO entryDO = msEntryMapper.addDtoToEntry(dto);
-        otherInMapper.insert(entryDO);
+        if (feeTotal.compareTo(dto.getCost()) != 0) throw new IllegalArgumentException("费用总额与费用明细不一致");
+    }
 
-        String entryId = entryDO.getId();
-        System.out.println("生成的主表ID: " + entryId);
-
-        // 检查是否有详情数据
-        if (dto.getOtherInListDetailInfoDTOList() == null || dto.getOtherInListDetailInfoDTOList().isEmpty()) {
-            return JsonVO.fail("入库单详情不能为空");
+    private void persistDetails(String id, OtherInListAddDTO dto) {
+        List<CostDTO> fees = dto.getCostDTOList() == null ? Collections.emptyList() : dto.getCostDTOList();
+        for (OtherInListDetailInfoDTO item : dto.getOtherInListDetailInfoDTOList()) {
+            EntryInfoDO detail = msEntryMapper.addDetailDtoToEntryInfo(item);
+            detail.setId(IdUtil.fastSimpleUUID());
+            detail.setPid(id);
+            if (detail.getAttr() == null) detail.setAttr("");
+            if (detail.getSerial() == null) detail.setSerial("[]");
+            otherInInfoMapper.insertByOne(detail);
         }
-
-        // 遍历所有详情项并插入
-        for (OtherInListDetailInfoDTO detail : dto.getOtherInListDetailInfoDTOList()) {
-            EntryInfoDO entryInfoDO = msEntryMapper.addDetailDtoToEntryInfo(detail); // 使用详情DTO转换
-            entryInfoDO.setPid(entryId);
-
-            // 调试输出
-            System.out.println("插入详情: goods=" + entryInfoDO.getGoods() +
-                    ", nums=" + entryInfoDO.getNums() +
-                    ", price=" + entryInfoDO.getPrice());
-
-            otherInInfoMapper.insertByOne(entryInfoDO);
+        for (CostDTO fee : fees) {
+            stockDb.update("INSERT INTO cost(id,type,`class`,time,iet,money,data,settle,state) VALUES(?,'entry',?,?,?,?,?,0,0)",
+                IdUtil.fastSimpleUUID(), id, dto.getTime(), fee.getIet(), fee.getMoney(), fee.getData());
         }
+    }
 
-        // 4.记录操作日志
-        logOperation(String.valueOf(entryDO.getId()), "新增入库单");
-        return JsonVO.success("新增入库单成功");
+    private void persistOperation(String id, UserDTO actor, String action) {
+        stockDb.update("INSERT INTO `log`(id,time,`user`,info) VALUES(?,?,?,?)", IdUtil.fastSimpleUUID(), LocalDateTime.now(), actor.getId(), action + "[" + id + "]");
+        stockDb.update("INSERT INTO record(id,type,source,time,`user`,info) VALUES(?,'entry',?,?,?,?)", IdUtil.fastSimpleUUID(), id, LocalDateTime.now(), actor.getId(), action);
     }
 
     @Override

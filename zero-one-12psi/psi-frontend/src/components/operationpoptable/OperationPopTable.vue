@@ -1,15 +1,18 @@
 <template>
   <!-- 主弹窗 -->
-  <el-dialog v-model="visible" title="商品列表" width="40%" class="operation-pop-dialog">
+  <el-dialog v-model="visible" title="选择商品" width="92%" class="operation-pop-dialog" @closed="emit('close')">
+    <div class="product-search-row"><el-input v-model="keyword" placeholder="名称 / 编号 / 条码" clearable @keyup.enter="search" /><el-button type="primary" @click="search">查询商品</el-button><span>选择实际商品，数量可在开单前调整</span></div>
     <!-- 表格 -->
     <div class="table-container">
       <el-table
         ref="mainTable"
+        v-loading="loading"
         :data="filteredData"
         row-key="id"
         border
         style="width: 100%"
         @expand-change="handleExpandChange"
+        empty-text="没有找到商品，请调整搜索条件，或前往商品管理新增"
       >
         <!-- 展开行的子表格 -->
         <template #default-expand-row="{ row }">
@@ -56,15 +59,15 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="商品名称" width="150" fixed="left" />
-        <el-table-column prop="code" label="商品编号" />
-        <el-table-column prop="model" label="规格型号" />
-        <el-table-column prop="category" label="商品分类" />
-        <el-table-column prop="brand" label="商品品牌" />
-        <el-table-column prop="unit" label="商品单位" />
-        <el-table-column prop="purchasePrice" label="采购价格" />
-        <el-table-column prop="salePrice" label="销售价格" />
-        <el-table-column prop="barcode" label="商品条码" />
+        <el-table-column prop="name" label="商品名称" min-width="210" fixed="left" show-overflow-tooltip />
+        <el-table-column prop="code" label="商品编号" min-width="170" show-overflow-tooltip />
+        <el-table-column prop="model" label="规格型号" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="category" label="商品分类" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="brand" label="商品品牌" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="unit" label="商品单位" width="95" />
+        <el-table-column prop="purchasePrice" label="采购价格" width="110" align="right" />
+        <el-table-column prop="salePrice" label="销售价格" width="110" align="right" />
+        <el-table-column prop="barcode" label="商品条码" min-width="185" show-overflow-tooltip />
         <el-table-column label="数量" width="100" fixed="right">
           <template #default="{ row }">
             <el-input-number
@@ -86,7 +89,7 @@
         v-model:page-size="pagination.pageSize"
         :page-sizes="[30, 60, 90]"
         layout="total, sizes, prev, pager, next, jumper"
-        :total="filteredData.length"
+        :total="total"
       />
     </div>
 
@@ -94,12 +97,13 @@
     <template #footer>
       <div class="dialog-footer">
         <el-button v-if="showSearchButton" @click="toggleSearchPopup">
-          <el-icon><MoreFilled /></el-icon>
+          <el-icon><MoreFilled /></el-icon><span>更多筛选</span>
         </el-button>
 
         <div class="right-buttons">
+          <el-button v-if="mainSelectedItems.length || childSelectedItems.size" @click="clearSelection">清空已选</el-button>
           <el-button @click="cancel">取消</el-button>
-          <el-button type="primary" @click="handleConfirm">选择</el-button>
+          <el-button type="primary" :disabled="!mainSelectedItems.length && !childSelectedItems.size" @click="handleConfirm">确认选择（{{ mainSelectedItems.length + [...childSelectedItems.values()].reduce((count, rows) => count + rows.length, 0) }}）</el-button>
           <el-button type="success" @click="addItem">去商品管理新增</el-button>
         </div>
       </div>
@@ -120,302 +124,101 @@
 import { ref, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { MoreFilled } from '@element-plus/icons-vue'
+import { useHttp } from '@/plugins/http'
+import { extractErrorMessage } from '@/apis/utils/jsonResponse'
 import SearchPopup from './SearchPopup.vue'
-
-const props = defineProps({
-  showSearchButton: {
-    type: Boolean,
-    default: true
-  }
-})
-
-const visible = ref(true)
-
-//导出事件定义
+const props = defineProps({ showSearchButton: { type: Boolean, default: true } })
 const emit = defineEmits(['confirm', 'close'])
-
-// 确保每次组件挂载时弹窗都是打开的
-onMounted(() => {
-  visible.value = true
-})
-
-// 监听 visible 变化，当弹窗关闭时触发 close 事件
-watch(visible, (newVal) => {
-  if (!newVal) {
-    emit('close')
-  }
-})
-
-// 模拟数据（未来可替换API）
-const productList = ref([
-  {
-    id: 1,
-    name: '办公剪刀',
-    code: '001',
-    model: 'M1',
-    category: '',
-    brand: '得力',
-    unit: 'pcs',
-    purchasePrice: 8,
-    salePrice: 12,
-    barcode: '111111',
-    quantity: 0,
-    children: [
-      {
-        id: 11,
-        name: '办公剪刀-大号',
-        code: '001-A',
-        model: 'M1-L',
-        category: '',
-        brand: '得力',
-        unit: 'pcs',
-        purchasePrice: 10,
-        salePrice: 14,
-        barcode: '111112',
-        quantity: 0
-      },
-      {
-        id: 12,
-        name: '办公剪刀-小号',
-        code: '001-B',
-        model: 'M1-S',
-        category: '',
-        brand: '得力',
-        unit: 'pcs',
-        purchasePrice: 6,
-        salePrice: 10,
-        barcode: '111113',
-        quantity: 0
-      }
-    ]
-  },
-  {
-    id: 2,
-    name: '订书机',
-    code: '002',
-    model: 'ST10',
-    category: '',
-    brand: '晨光',
-    unit: 'set',
-    purchasePrice: 18,
-    salePrice: 28,
-    barcode: '222222',
-    quantity: 0
-  }
-])
-
-// 数据副本
-const filteredData = ref([...productList.value])
-
-// 分页
-const pagination = ref({
-  page: 1,
-  pageSize: 30
-})
-
-// 主表格引用和选中项
+const http = useHttp()
+const visible = ref(true)
+const loading = ref(false)
+const keyword = ref('')
+const filters = ref<Record<string, any>>({})
+const filteredData = ref<any[]>([])
+const total = ref(0)
+const pagination = ref({ page: 1, pageSize: 30 })
 const mainTable = ref()
 const mainSelectedItems = ref<any[]>([])
-const childSelectedItems = ref<Map<number, any[]>>(new Map())
-// 展开行管理
-const expandedRows = ref<number[]>([])
-// 子表格引用Map
-const childTables = ref<Map<number, any>>(new Map())
-
-// 搜索弹窗
+const childSelectedItems = ref(new Map<string, any[]>())
+const expandedRows = ref<string[]>([])
 const showSearchPopup = ref(false)
-
-// 下拉选项
-const selectOptions = ref({
-  categories: [] as string[],
-  brands: [] as string[],
-  types: [] as string[]
-})
-
-// 提取选项（自动从商品中收集）
-const extractOptions = () => {
-  const categories = new Set<string>()
-  const brands = new Set<string>()
-  const types = new Set<string>()
-  const traverse = (list: any[]) => {
-    list.forEach((i) => {
-      if (i.category) categories.add(i.category)
-      brands.add(i.brand)
-      if (i.model) types.add(i.model)
-      if (i.children) traverse(i.children)
+const selectOptions = ref({ categories: [] as string[], brands: [] as string[], types: [] as string[] })
+let requestSequence = 0
+async function loadProducts() {
+  const sequence = ++requestSequence
+  loading.value = true
+  mainSelectedItems.value = mainSelectedItems.value.map(selected => filteredData.value.find(row => row.id === selected.id && row._checked) || selected)
+  try {
+    const response = await http.get<any>('/goods/query-list', {
+      pageIndex: pagination.value.page, pageSize: pagination.value.pageSize,
+      keyword: keyword.value.trim() || undefined, brand: filters.value.brand || undefined,
+      category: filters.value.categoryId || undefined, spec: filters.value.type || undefined
     })
-  }
-  traverse(productList.value)
-  selectOptions.value = {
-    categories: Array.from(categories),
-    brands: Array.from(brands),
-    types: Array.from(types)
-  }
-}
-
-// 处理展开行变化
-const handleExpandChange = (row: any, expanded: boolean) => {
-  if (expanded) {
-    // 展开时，记录展开状态
-    if (!expandedRows.value.includes(row.id)) {
-      expandedRows.value.push(row.id)
+    if (sequence !== requestSequence) return
+    if (response.code !== 10000) throw new Error(response.message || '商品加载失败')
+    filteredData.value = (response.data?.rows || []).map((row: any) => ({
+      ...row, id: String(row.id), code: row.number, model: row.spec || '',
+      categoryId: row.category, category: row.categoryName || (row.category && row.category !== '0' ? row.category : '未分类'),
+      barcode: row.code || '', purchasePrice: row.buy ?? 0, salePrice: row.sell ?? 0,
+      quantity: mainSelectedItems.value.find(selected => selected.id === String(row.id))?.quantity || 1,
+      _checked: mainSelectedItems.value.some(selected => selected.id === String(row.id))
+    }))
+    total.value = Number(response.data?.total || 0)
+    selectOptions.value = {
+      categories: [...new Set(filteredData.value.map(row => String(row.category || '')).filter(Boolean))],
+      brands: [...new Set(filteredData.value.map(row => String(row.brand || '')).filter(Boolean))],
+      types: [...new Set(filteredData.value.map(row => String(row.model || '')).filter(Boolean))]
     }
-  } else {
-    // 收起时，移除展开状态
-    const index = expandedRows.value.indexOf(row.id)
-    if (index > -1) {
-      expandedRows.value.splice(index, 1)
-    }
-    // 移除子表格选中状态
-    childSelectedItems.value.delete(row.id)
-  }
+  } catch (error) {
+    if (sequence !== requestSequence) return
+    filteredData.value = []
+    total.value = 0
+    ElMessage.error(extractErrorMessage(error))
+  } finally { if (sequence === requestSequence) loading.value = false }
 }
-
-// 初始化数据中的选中状态
-filteredData.value.forEach(item => {
-  if (item.children) {
-    item.children.forEach((child: any) => {
-      child._checked = false
-    })
-  }
-})
-
-// 移除不再使用的toggleRowExpand函数
-
-// 处理单个选择
-const handleSingleSelect = (row: any) => {
-  // 确保只有无子数据的行才能被选中
-  if (row.children && row.children.length > 0) {
-    return
-  }
-  
-  // 更新主选中项列表
-  const index = mainSelectedItems.value.findIndex(item => item.id === row.id)
-  if (row._checked && index === -1) {
-    mainSelectedItems.value.push(row)
-  } else if (!row._checked && index > -1) {
-    mainSelectedItems.value.splice(index, 1)
-  }
+function search() {
+  if (pagination.value.page !== 1) pagination.value.page = 1
+  else void loadProducts()
 }
-
-// 子商品选中变化
-const handleChildSelectChange = (parent: any, selectedChildren: any[]) => {
-  // 保存子项选中状态
-  if (selectedChildren.length > 0) {
-    childSelectedItems.value.set(parent.id, selectedChildren)
-  } else {
-    childSelectedItems.value.delete(parent.id)
-  }
-}
-
-// 搜索
-const handleSearch = async (filters: Record<string, any>) => {
+function handleSearch(value: Record<string, any>) {
+  filters.value = { ...value, categoryId: filteredData.value.find(row => row.category === value.category)?.categoryId || (value.category === filters.value.category ? filters.value.categoryId : undefined) }
+  keyword.value = value.keyword || ''
   showSearchPopup.value = false
-  ElMessage.info('正在搜索...')
-
-  // 预留API接入接口
-  const results = await fetchProducts(filters)
-
-  filteredData.value = results
-  ElMessage.success('搜索完成！')
+  search()
 }
-
-// 模拟异步API函数
-async function fetchProducts(filters: Record<string, any>) {
-  console.log('调用API参数:', filters)
-  await new Promise((res) => setTimeout(res, 400)) // 模拟延迟
-
-  return productList.value.filter((item) => {
-    const matchText =
-      (!filters.keyword ||
-        item.name.includes(filters.keyword) ||
-        item.code.includes(filters.keyword) ||
-        item.barcode.includes(filters.keyword)) &&
-      (!filters.category || item.category === filters.category) &&
-      (!filters.brand || item.brand === filters.brand) &&
-      (!filters.type || item.model === filters.type)
-    return matchText
-  })
+function handleSingleSelect(row: any) {
+  const index = mainSelectedItems.value.findIndex(selected => selected.id === row.id)
+  if (row._checked && index < 0) mainSelectedItems.value.push(row)
+  else if (!row._checked && index >= 0) mainSelectedItems.value.splice(index, 1)
 }
-
-// 处理确认按钮点击
-const handleConfirm = () => {
-  console.log('=== 弹窗确认按钮被点击 ===')
-  console.log('主表格选中项:', mainSelectedItems.value)
-  console.log('子表格选中项:', childSelectedItems.value)
-  
-  const selected: any[] = []
-  
-  // 收集主表格选中的项（无子项的商品）
-  mainSelectedItems.value.forEach((item) => {
-    console.log('处理主表格项:', item.name, '是否有子项:', item.children?.length)
-    if (!item.children || item.children.length === 0) {
-      selected.push({
-        ...item,
-        quantity: item.quantity || 1
-      })
-      console.log('添加主表格商品:', item.name)
-    }
-  })
-  
-  // 收集子表格选中的项
-  childSelectedItems.value.forEach((children, parentId) => {
-    console.log('处理父商品ID:', parentId, '的子项:', children)
-    children.forEach((child) => {
-      selected.push({
-        ...child,
-        parentId: parentId,
-        quantity: child.quantity || 1
-      })
-      console.log('添加子表格商品:', child.name)
-    })
-  })
-
-  console.log('最终选中的商品列表:', selected)
-  
-  if (selected.length === 0) {
-    ElMessage.warning('请至少选择一个商品')
-    return
-  }
-
-  console.log('触发 confirm 事件，传递选中商品:', selected)
-  emit('confirm', selected)
-  visible.value = false // 关闭弹窗
-  
-  // 重置选中状态
-  resetSelectedState()
-}
-
-// 重置选中状态
-const resetSelectedState = () => {
-  filteredData.value.forEach(item => {
-    if (item.children) {
-      item.children.forEach((child: any) => {
-        child._checked = false
-      })
-    }
-  })
-  // 清空展开行
-  expandedRows.value = []
-  childTables.value.clear()
+function clearSelection() {
   mainSelectedItems.value = []
   childSelectedItems.value.clear()
+  filteredData.value.forEach(row => { row._checked = false })
 }
-
-// 其他按钮逻辑
-const cancel = () => {
+function handleChildSelectChange(parent: any, rows: any[]) {
+  if (rows.length) childSelectedItems.value.set(String(parent.id), rows)
+  else childSelectedItems.value.delete(String(parent.id))
+}
+function handleExpandChange(row: any, expanded: any) {
+  const id = String(row.id)
+  if (expanded && !expandedRows.value.includes(id)) expandedRows.value.push(id)
+  else if (!expanded) expandedRows.value = expandedRows.value.filter(value => value !== id)
+}
+function handleConfirm() {
+  const selected = [...mainSelectedItems.value.map(row => {
+    const current = filteredData.value.find(value => value.id === row.id)
+    return { ...row, quantity: current?.quantity || row.quantity || 1 }
+  }), ...[...childSelectedItems.value.entries()].flatMap(([parentId, rows]) => rows.map(row => ({ ...row, parentId })))]
+  if (!selected.length) { ElMessage.warning('请先选择商品'); return }
+  emit('confirm', selected)
   visible.value = false
 }
-const selectItems = () => ElMessage.success('已选择商品！')
-const addItem = () => {
-  window.open('/product-manage', '_blank')
-}
-
-const toggleSearchPopup = () => {
-  showSearchPopup.value = !showSearchPopup.value
-}
-
-onMounted(extractOptions)
+function cancel() { visible.value = false }
+function addItem() { window.open('/product-manage', '_blank', 'noopener') }
+function toggleSearchPopup() { showSearchPopup.value = !showSearchPopup.value }
+watch(() => [pagination.value.page, pagination.value.pageSize], loadProducts)
+onMounted(loadProducts)
 </script>
 
 <style scoped>
@@ -468,3 +271,5 @@ onMounted(extractOptions)
   z-index: 3;
 }
 </style>
+
+<style scoped>.product-search-row{display:flex;gap:10px;align-items:center;margin-bottom:16px}.product-search-row .el-input{width:280px}.product-search-row>span{font-size:12px;color:#8490a3}@media(max-width:600px){.product-search-row{flex-wrap:wrap}.product-search-row .el-input{width:100%}.right-buttons{flex-wrap:wrap}}</style>

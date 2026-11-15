@@ -106,7 +106,7 @@
           <!-- 第一列：设置按钮 + 序号 -->
           <el-table-column label="设置" width="70" align="center">
             <template #header>
-              <el-button type="text" size="small" @click="showColumnSetting = true">
+              <el-button type="text" size="small" aria-label="设置显示列" title="设置显示列" @click="showColumnSetting = true">
                 <el-icon><Setting /></el-icon>
               </el-button>
             </template>
@@ -124,10 +124,10 @@
                 size="small"
                 @click="openProductPopup(scope.$index)"
               >
-                <el-icon><Edit /></el-icon>
+                <el-icon><Edit /></el-icon><span>选商品</span>
               </el-button>
               <el-button v-else type="text" size="small" @click="deleteRow(scope.$index)">
-                <el-icon><Delete /></el-icon>
+                <el-icon><Delete /></el-icon><span>移除</span>
               </el-button>
             </template>
           </el-table-column>
@@ -297,7 +297,7 @@
     </div>
 
     <!-- 底部表单 -->
-    <DocumentForm :fields="otherInboundFields" />
+    <DocumentForm :fields="otherInboundFields" :amount="Number(totalSum)" />
 
     <!-- 生成单据弹窗 -->
     <el-dialog
@@ -373,7 +373,7 @@ function handleBatchWarehouseSelect(value: string) {
   const selectedWarehouse = warehouseOptions.value.find((w) => w.value === value)
   if (selectedWarehouse) {
     tableData.value.forEach((r) => {
-      if (r.productName) r.warehouse = selectedWarehouse.label
+      if (r.productName) r.warehouse = selectedWarehouse.value
     })
     ElMessage.success(`已批量设置仓库：${selectedWarehouse.label}`)
   }
@@ -517,38 +517,25 @@ function handleTableProductConfirm(selected: any[]) {
     showProductPopup.value = false
     return
   }
-  const first = selected[0]
-  const row = tableData.value[currentRowIndex.value]
-
-  // 适配商品结构字段名
-  row.productName = first.name
-  row.productCode = first.code
-  row.spec = first.model || ''
-  row.attr = first.category || ''
-  row.unit = first.unit || ''
-  row.warehouse = row.warehouse || '' // 不覆盖已有仓库
-  row.cost = first.purchasePrice ?? ''
-  row.quantity = first.quantity ?? ''
-
-  recalculate(row)
+  const position = currentRowIndex.value
+  const existingWarehouse = tableData.value[position].warehouse
+  const rows = selected.map(product => {
+    const row = {
+      productName: product.name || '', productCode: product.code || '',
+      spec: product.model || '', unit: product.unit || '', attr: product.selectedAttr || '',
+      warehouse: existingWarehouse || '', cost: product.purchasePrice ?? '',
+      quantity: product.quantity ?? 1, totalCost: '', remark: ''
+    }
+    recalculate(row)
+    return row
+  })
+  tableData.value.splice(position, 1, ...rows)
   showProductPopup.value = false
-
-  // 保证最后一行始终为空行
-  const last = tableData.value[tableData.value.length - 1]
-  if (last && last.productName) {
-    tableData.value.push({
-      productName: '',
-      productCode: '',
-      spec: '',
-      unit: '',
-      attr: '',
-      warehouse: '',
-      cost: '',
-      quantity: '',
-      totalCost: '',
-      remark: ''
-    })
+  if (tableData.value[tableData.value.length - 1]?.productName) {
+    tableData.value.push({ productName: '', productCode: '', spec: '', unit: '', attr: '',
+      warehouse: '', cost: '', quantity: '', totalCost: '', remark: '' })
   }
+
 }
 
 // 点击"操作"按钮
