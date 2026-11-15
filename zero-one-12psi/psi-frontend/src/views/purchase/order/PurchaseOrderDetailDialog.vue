@@ -77,7 +77,7 @@
           <el-button class="ml8" @click="toggleApprove">审核</el-button>
         </template>
         <!-- 无论是否审核，都显示这个"核对 / 反核对" -->
-        <el-button class="ml8" @click="toggleCheck">
+        <el-button class="ml8" :loading="saving" :disabled="loading || saving || isApproved || !!loadError || !currentDocument" @click="toggleCheck">
           {{ isChecked ? '反核对' : '核对' }}
         </el-button>
       </div>
@@ -346,7 +346,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, ArrowDown, Setting, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 import Supplier from '@/components/goodSearchConpoent/Supplier.vue'
 import { useRouter } from 'vue-router'
@@ -414,7 +414,23 @@ const router = useRouter()
 const isApproved = ref(false)
 const toggleApprove = () => ElMessage.warning('采购审核库存和资金联动尚在修复，本次未修改审核状态')
 const isChecked = ref(false)
-const toggleCheck = () => ElMessage.warning('采购核对业务尚在验收，本次未修改单据状态')
+const toggleCheck = async () => {
+  if (loading.value || saving.value || isApproved.value || !currentDocument.value || loadError.value) return
+  const checked = !isChecked.value
+  try {
+    await ElMessageBox.confirm(checked ? '核对已保存的采购单；页面未保存的修改不会提交。请先确认已保存，是否继续？' : '反核对后可以继续编辑采购草稿，是否继续？', checked ? '核对采购单' : '反核对采购单', { type: 'warning' })
+  } catch { return }
+  if (saving.value || !currentDocument.value) return
+  saving.value = true; saveError.value = ''
+  try {
+    const response = await PurchaseNoteAPI.check([String(currentDocument.value.header.id)], checked)
+    if (response.code !== 10000) throw new Error(response.message || '核对状态修改失败')
+    if (!await loadDocument()) throw new Error('操作已提交，读取最新状态失败，请重新加载单据')
+    emit('changed')
+    ElMessage.success(checked ? '采购单已核对' : '采购单已反核对')
+  } catch (error) { saveError.value = extractErrorMessage(error); ElMessage.error(saveError.value) }
+  finally { saving.value = false }
+}
 const readOnly = computed(() => loading.value || saving.value || !!loadError.value || !currentDocument.value || isApproved.value || isChecked.value)
 
 /* 生成到其他单据 */

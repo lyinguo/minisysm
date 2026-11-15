@@ -100,6 +100,8 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     private com.zeroone.star.purchase.service.PurchaseDocumentAccess purchaseAccess;
     @Autowired
     private com.zeroone.star.purchase.service.PurchaseDraftUpdateService purchaseDraftUpdate;
+    @Autowired
+    private com.zeroone.star.purchase.service.PurchaseCheckService purchaseCheck;
 
     @Resource
     private BuyMapper buyMapper;
@@ -640,15 +642,8 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      */
     @Override
     public JsonVO<String> checkStatus(PurchaseCheckDTO checkList) {
-
-        List<String> ids = checkList.getIds();
-        int type = checkList.getType();
-        for (String id : ids) {
-            int row = buyMapper.updateCheckById(id,type);
-            if(row==0){
-                return JsonVO.fail("修改失败");
-            }
-        }
+        if(checkList==null) throw new IllegalArgumentException("请选择采购单");
+        purchaseCheck.change(checkList.getIds(),checkList.getType());
         return JsonVO.success("修改成功");
     }
 

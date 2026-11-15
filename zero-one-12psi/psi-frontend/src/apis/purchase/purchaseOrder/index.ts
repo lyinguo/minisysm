@@ -23,6 +23,9 @@ export class PurchaseNoteAPI {
   static revise(data: Record<string, any>) {
     return this.http.post<string>(`${currBaseUrl}/revise`, data)
   }
+  static check(ids: string[], checked: boolean) {
+    return this.http.post<string>(`${currBaseUrl}/verification`, { ids, type: checked ? 1 : 0 })
+  }
   static exportSimpleReport(id: string | number) {
     return this.http.getFile(`${currBaseUrl}/export/simple`, { ids: String(id) }, { responseType: 'blob', showLoading: true })
   }

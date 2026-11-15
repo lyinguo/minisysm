@@ -7,14 +7,27 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.data.redis.core.RedisTemplate;
+import com.zeroone.star.project.constant.RedisConstant;
 import java.util.*;
 
 /** Current identity and organization scope. Function-level grants have a separate pending gate. */
 @Service
+@org.springframework.context.annotation.Import(com.zeroone.star.project.config.redis.RedisConfig.class)
 public class PurchaseDocumentAccess {
     private final UserHolder users;
     private final JdbcTemplate db;
-    public PurchaseDocumentAccess(UserHolder users,JdbcTemplate db) { this.users=users;this.db=db; }
+    private final RedisTemplate<String,Object> redis;
+    public PurchaseDocumentAccess(UserHolder users,JdbcTemplate db,RedisTemplate<String,Object> redis) { this.users=users;this.db=db;this.redis=redis; }
+    public UserDTO authorize(String resource) {
+        UserDTO actor=current();
+        if(!actor.getRoles().contains("ROLE_ADMIN")) {
+            Object allowed=redis.opsForHash().get(RedisConstant.RESOURCE_ROLES_MAP,resource);
+            if(!(allowed instanceof Collection) || Collections.disjoint(actor.getRoles(),(Collection<?>)allowed))
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有采购单操作权限");
+        }
+        return actor;
+    }
     public UserDTO current() {
         UserDTO actor;
         try { actor=users.getCurrentUser(); } catch(Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }

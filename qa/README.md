@@ -55,3 +55,9 @@
 运行 `python qa/purchase_ui_acceptance.py run` 验证真实名称、关联查询、组织数据范围、Excel内容和新增行元数据。所有写入限定专用QA库和18023采购服务。功能级角色授权、采购审核及资金库存链另行验收，不包含在这4项中。
 
 浏览器先运行 `python qa/purchase_ui_acceptance.py prepare`，在隔离UI采购单报表查询输出编号，详情数量2改3保存后运行 `verify-edit`。重新打开改4但不保存，运行 `advance-version` 模拟另一请求保存5，再从旧页面保存，应提示版本冲突且保留输入4；执行 `verify-conflict` 确认SQL仍为5。页面重新加载读取5后改3保存，再执行 `verify-edit`。私有会话、单据ID、导出文件及截图不发布。
+
+## 采购核对/审核专项
+
+运行 `python qa/purchase_posting_acceptance.py check` 验证核对事务、真实存储故障回滚/重试、组织与角色授权。`posting` 验证实际入库、应付、部分付款和反审核；当前4项仍失败，非零退出必须保留为未完成证据。默认 `all` 执行全部，不能只运行check便宣称采购审核通过。
+
+沿用采购页面专项的数量3草稿，在真实浏览器点击核对后运行 `verify-checked`，点击反核对后运行 `verify-unchecked`，独立验证状态及库存资金不变量。正常业务环境不运行任何这些写入测试。

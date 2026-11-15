@@ -22,8 +22,8 @@
                 <ul>
                   <li @click="onBatchExamine(0)">审核</li>
                   <li @click="onBatchExamine(1)">反审核</li>
-                  <li @click="onBatchCheck(0)">核对</li>
-                  <li @click="onBatchCheck(1)">反核对</li>
+                  <li @click="onBatchCheck(1)">核对</li>
+                  <li @click="onBatchCheck(0)">反核对</li>
                 </ul>
               </el-popover>
               <el-button @click="onBatchDelete" type="info">删除</el-button>
@@ -739,7 +739,23 @@
   const onDelete = (_row: RowData) => ElMessage.warning('采购删除引用保护尚在验收，本次未删除单据')
   const onBatchDelete = () => ElMessage.warning('采购批量删除尚在验收，本次未删除单据')
   const onBatchExamine = (_type: 0 | 1) => ElMessage.warning('采购审核库存和资金联动尚在修复，本次未修改审核状态')
-  const onBatchCheck = (_type: 0 | 1) => ElMessage.warning('采购批量核对尚在验收，本次未修改单据状态')
+  const checking = ref(false)
+  const onBatchCheck = async (type: 0 | 1) => {
+    if (checking.value || refreshing.value) return
+    const ids = selected.value.map(row => String(row.id || '')).filter(Boolean)
+    if (!ids.length) { ElMessage.warning('请先选择采购单'); return }
+    try { await ElMessageBox.confirm(`确认${type ? '核对' : '反核对'}选中的 ${ids.length} 张采购单？任一单据不符合条件将整批取消。`, '批量核对', { type: 'warning' }) }
+    catch { return }
+    if (checking.value) return
+    checking.value = true
+    try {
+      const response = await PurchaseNoteAPI.check(ids, type === 1)
+      if (response.code !== 10000) throw new Error(response.message || '批量核对失败')
+      await loadPurchaseList()
+      ElMessage.success(type ? '所选采购单已核对' : '所选采购单已反核对')
+    } catch (error) { ElMessage.error(extractErrorMessage(error)) }
+    finally { checking.value = false }
+  }
 
   /* 固定横向滚动条联动 */
   const tableRef = ref()

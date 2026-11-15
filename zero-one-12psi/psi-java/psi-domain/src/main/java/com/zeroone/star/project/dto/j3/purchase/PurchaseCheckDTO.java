@@ -13,6 +13,6 @@ public class PurchaseCheckDTO {
     @ApiModelProperty(value = "采购单ID", required = true)
     private List<String> ids;
 
-    @ApiModelProperty(value = "是否核对：0=核对 / 1=反核对", required = true, example = "0")
+    @ApiModelProperty(value = "核对状态：1=核对 / 0=反核对", required = true, example = "1")
     private int type;
 }
