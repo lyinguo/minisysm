@@ -91,6 +91,8 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     private com.zeroone.star.purchase.service.PurchaseOrderAuditService orderAudit;
     @Resource
     private com.zeroone.star.purchase.service.PurchaseDocumentAccess orderAccess;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseOrderDeleteService orderDeletes;
 
     /**
      * 新增采购订单
@@ -145,15 +147,8 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     @Transactional
     public JsonVO<String> deletePurchaseOrder(List<String> ids) {
 
-        // 删除采购订单详情信息
-        QueryWrapper<BorInfoDO> queryWrapper = new QueryWrapper<>();
-        queryWrapper.in("pid", ids);
-        borInfoService.remove(queryWrapper);
-
-        // 删除采购订单
-        removeByIds(ids);
-
-        return JsonVO.success("删除采购订单成功！！");
+        int deleted=orderDeletes.delete(ids);
+        return JsonVO.success("已删除"+deleted+"张采购订单草稿");
     }
 
     /**

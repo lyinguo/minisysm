@@ -435,7 +435,7 @@ const onImportData = async (data: any) => {
 
 /* 删除 */
 const onDelete = (row: RowData) => {
-  ElMessageBox.confirm(`确定删除单据【${row.orderNo}】吗？`, '提示', {
+  ElMessageBox.confirm(`确定删除采购订单草稿【${row.orderNo}】吗？仅未审核、未执行且无关联单据的订单可删除，删除后无法恢复。`, '提示', {
       type: 'warning',
     confirmButtonText: '删除',
       cancelButtonText: '取消'
@@ -554,7 +554,7 @@ const onBatchDelete = () => {
   }
 
   ElMessageBox.confirm(
-    `确定删除选中的 ${selected.value.length} 条单据吗？`,
+    `确定删除选中的 ${selected.value.length} 条采购订单草稿吗？仅未审核、未执行且无关联单据的订单可删除；删除后无法恢复。任一订单不符合条件时，整批保留。`,
     '提示',
     {
       type: 'warning',
@@ -574,12 +574,14 @@ const onBatchDelete = () => {
       }
 
       if (orderIds.length !== selected.value.length) {
-        ElMessage.warning(`共选中 ${selected.value.length} 条单据，其中 ${orderIds.length} 条有有效订单ID，将删除这 ${orderIds.length} 条`)
+        ElMessage.error('选中的单据包含无效订单ID，请刷新列表后重新选择')
+        return
       }
 
       try {
         // 调用批量删除接口
-        await PurchaseOrderAPI.deletePurchaseOrders(orderIds)
+        const response = await PurchaseOrderAPI.deletePurchaseOrders(orderIds)
+        if (response.code !== 10000) throw new Error(response.message || '删除失败，所选订单已保留')
         
         // 清空选中项
         selected.value = []
