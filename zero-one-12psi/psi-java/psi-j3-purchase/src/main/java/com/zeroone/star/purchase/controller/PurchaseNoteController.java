@@ -55,6 +55,17 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     private com.zeroone.star.purchase.service.PurchaseDraftUpdateService draftUpdates;
     @Resource
     private com.zeroone.star.purchase.service.PurchaseDocumentAccess access;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseImportService purchaseImports;
+
+    @GetMapping("/import/template")
+    @ApiOperation("下载采购草稿导入模板和填写说明")
+    public ResponseEntity<byte[]> importTemplate() throws IOException {
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=purchase-import-template.xlsx")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .body(purchaseImports.template());
+    }
     @GetMapping("/document/{id}")
     @ApiOperation("获取完整采购单及编辑版本")
     public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id) {

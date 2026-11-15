@@ -1,5 +1,11 @@
 # 系统业务验收
 
+## 采购Excel导入专项
+
+运行 `python qa/purchase_import_acceptance.py run` 执行11项实际模板/文件上传/持久化/回滚/并发/权限与入账验收，需要本地安装openpyxl。表头和指南从实际接口下载，填写后真实上传，不通过SQL伪造导入结果；主资料、外组织及故障触发器是仅限QA的显式测试夹具。与其他资源授权程序串行运行，任意失败保持未完成。
+
+页面验收先执行 `prepare` 创建私有有效/无效工作簿及会话，在隔离页面“采购单报表→批量”实际下载模板，先上传 `qa/runtime/purchase-import-browser-invalid.xlsx`，确认第4行错误持续可见，运行 `verify-rejected`。再上传 `purchase-import-browser.xlsx`，查询输出编号、打开详情后运行 `verify-saved` 独立核对2条明细及300/339/实付0、库存资金不变。工作簿、会话、报告、SQL结果和截图不发布；禁止在正常业务库执行写入验收。
+
 ## 采购入口授权专项
 
 运行 `python qa/purchase_security_acceptance.py`，使用真实新建角色用户的 OAuth 凭据验证列表、新旧详情、退货数据预览、新增、修改、两类导出和 multipart 导入入口的权限；再验证组织边界、混合导出整批拒绝、实际 Excel 文件及原 token 撤权即时生效。动态详情沿用 `/purchase-note/info` 资源授权。只能操作经容器和端口核验的 QA Redis，并恢复原资源键；不要同时运行其他会修改这些键的验收程序。

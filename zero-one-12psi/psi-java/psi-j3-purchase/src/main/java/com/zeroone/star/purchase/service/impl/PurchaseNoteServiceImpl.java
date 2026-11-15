@@ -81,6 +81,17 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
     @Transactional(rollbackFor = Exception.class)
     public String addPurchaseNote(PurchaseNoteAddDTO purchaseNoteAddDTO) {
         purchaseAccess.authorize("/purchase-note/add");
+        return saveDraft(purchaseNoteAddDTO);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String addImportedPurchaseNote(PurchaseNoteAddDTO request) {
+        purchaseAccess.authorize("/purchase-note/import");
+        return saveDraft(request);
+    }
+
+    private String saveDraft(PurchaseNoteAddDTO purchaseNoteAddDTO) {
         purchaseAmounts.calculate(purchaseNoteAddDTO);
         draftValidation.validate(purchaseNoteAddDTO);
         //合并 合并

@@ -11,11 +11,13 @@
     <AddDialog v-model:visible="addDialogVisible" />
     
     <!-- 批量操作弹窗 -->
-    <el-dialog title="批量" v-model="batchDialogVisible" width="600px" :show-close="true">
+    <el-dialog title="批量" v-model="batchDialogVisible" width="600px" :show-close="!uploading" :close-on-click-modal="!uploading" :close-on-press-escape="!uploading">
       <div class="batch-content">
         <el-tabs v-model="activeTab" class="batch-tabs">
           <el-tab-pane label="导入数据" name="import">
             <div class="tab-content">
+              <el-alert v-if="importInstructions" :title="importInstructions" type="info" :closable="false" show-icon style="margin-bottom: 12px" />
+              <el-alert v-if="importError" :title="importError" type="error" :closable="false" show-icon style="margin-bottom: 12px" />
               <div class="tips-list">
                 <div class="tip-item">
                   <span class="tip-number">1.</span>
@@ -27,7 +29,7 @@
                 </div>
                 <div class="tip-item">
                   <span class="tip-number">3.</span>
-                  <span class="tip-text">录入数据时，请勿修改首行数据标题以及排序。</span>
+                  <span class="tip-text">{{ importTemplateApi ? '请保留模板顶部说明及表头，按“填写说明”指定的行开始录入。' : '录入数据时，请勿修改首行数据标题以及排序。' }}</span>
                 </div>
                 <div class="tip-item">
                   <span class="tip-number">4.</span>
@@ -35,7 +37,7 @@
                 </div>
                 <div class="tip-item">
                   <span class="tip-number">5.</span>
-                  <span class="tip-text">点击下方上传模板，选择您编辑好的模板文件即可。</span>
+                  <span class="tip-text">点击下方上传数据文件，选择您填写好的Excel文件。</span>
                 </div>
               </div>
               <div class="button-group">
@@ -50,7 +52,7 @@
                   style="display: inline-block;"
                 >
                   <el-button type="primary" class="upload-btn" :loading="uploading">
-                    {{ uploading ? '上传中...' : '上传模板' }}
+                    {{ uploading ? '上传中...' : '上传数据文件' }}
                   </el-button>
                 </el-upload>
               </div>
@@ -124,6 +126,8 @@ const props = withDefaults(defineProps<{
   templateFileName?: string
   // 导入API函数 - 如果提供，将直接上传文件到接口；否则解析Excel后emit数据
   importApi?: ((file: File) => Promise<any>) | null
+  importTemplateApi?: (() => Promise<any>) | null
+  importInstructions?: string
   // 导出简单报表API函数 - 如果提供，将调用接口导出；否则使用本地数据导出
   // Vue 会自动将 kebab-case (export-simple-report-api) 转换为 camelCase (exportSimpleReportApi)
   exportSimpleReportApi?: ((orderId: string | number) => Promise<any>) | null
@@ -144,6 +148,8 @@ const props = withDefaults(defineProps<{
   tableColumns: () => [],
   templateFileName: '数据导入模板',
   importApi: null,
+  importTemplateApi: null,
+  importInstructions: '',
   exportSimpleReportApi: null,
   selectedOrderIds: () => [],
   exportDetailReportApi: null
@@ -162,6 +168,7 @@ const uploadRef = ref<UploadInstance | null>(null)
 const uploadedData = ref<any[]>([])
 const matchedColumns = ref<TableColumn[]>([])
 const uploading = ref(false)
+const importError = ref('')
 const currentFile = ref<File | null>(null)
 
 const openAddDialog = () => {
@@ -171,6 +178,7 @@ const openAddDialog = () => {
 
 // 打开批量操作弹窗
 const openBatchDialog = () => {
+  importError.value = ''
   batchDialogVisible.value = true
   activeTab.value = 'import' // 默认显示导入标签页
   emit('batch')
@@ -182,8 +190,15 @@ const closeBatchDialog = () => {
 }
 
 // 下载模板功能 - 根据表格组件列配置生成模板
-const downloadTemplate = () => {
+const downloadTemplate = async () => {
   try {
+    if (props.importTemplateApi) {
+      const result = await props.importTemplateApi()
+      const blob = result instanceof Blob ? result : result?.data
+      if (!(blob instanceof Blob)) throw new Error('模板下载失败，请重试')
+      downFile(blob, `${props.templateFileName}.xlsx`)
+      return
+    }
     // 获取表格列配置 - 从父组件或props传入
     const tableColumns = props.tableColumns
     
@@ -229,6 +244,7 @@ const downloadTemplate = () => {
     console.log('模板下载成功:', fileName)
   } catch (error) {
     console.error('模板下载失败:', error)
+    ElMessage.error(error instanceof Error ? error.message : '模板下载失败，请重试')
   }
 }
 
@@ -317,6 +333,8 @@ const downloadDefaultTemplate = () => {
 
 // 处理文件上传
 const handleFileChange = async (file: UploadFile) => {
+  if (uploading.value) return
+  importError.value = ''
   if (!file.raw) {
     console.error('文件对象为空')
     return
@@ -344,6 +362,7 @@ const handleFileChange = async (file: UploadFile) => {
       return
     } catch (error) {
       console.error('文件上传失败:', error)
+      importError.value = error instanceof Error ? error.message : '导入失败，请修正文件后重新上传'
       // 触发导入失败事件
       emit('import-data', { success: false, error, file: file.raw })
       // 不清空文件，让用户可以重试

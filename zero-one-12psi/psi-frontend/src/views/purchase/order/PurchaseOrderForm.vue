@@ -34,9 +34,12 @@
               :show-refresh="false"
               :table-columns="columns"
               :export-simple-report-api="handleExportSimpleReport"
+              :import-api="PurchaseNoteAPI.importFile.bind(PurchaseNoteAPI)"
+              :import-template-api="PurchaseNoteAPI.importTemplate.bind(PurchaseNoteAPI)"
+              template-file-name="采购草稿导入模板"
+              import-instructions="先下载专用模板并阅读“填写说明”，第3行开始填。填写供应商、商品和仓库编号；自动计算的金额列留空。上传后整批保存为草稿，不自动入库或付款；任意一行失败则整批不保存。"
               :selected-order-ids="selectedOrderIds"
               export-file-name="简单报表导出"
-              @batch="onBatch"
               @import-data="onImportData"
             />
             <el-button :loading="refreshing" type="primary" @click="onRefresh">刷新</el-button>
@@ -704,14 +707,13 @@
   watch(currentPage, () => { void loadPurchaseList() })
   watch(pageSize, () => { if (currentPage.value !== 1) currentPage.value = 1; else void loadPurchaseList() })
 
-  /* 批量 */
-  const onBatch = () => {
-    ElMessage.info('请先勾选需要操作的真实单据')
-  }
-
-  /* 导入（保持原逻辑） */
-  const onImportData = (_rows: any[]) => {
-    ElMessage.warning('采购导入尚未完成真实保存验收，本次数据没有写入系统')
+  /* File imports are persisted atomically by the dedicated procurement endpoint. */
+  const onImportData = (event: { success: boolean; result?: { data?: string }; error?: unknown }) => {
+    if (!event.success) {
+      return
+    }
+    ElMessage.success(event.result?.data || '采购草稿导入成功，请查询并核对后审核')
+    void loadPurchaseList()
   }
 
   async function loadAssociated(row: RowData) {

@@ -35,6 +35,17 @@ export class PurchaseNoteAPI {
   static exportSimpleReport(id: string | number) {
     return this.http.getFile(`${currBaseUrl}/export/simple`, { ids: String(id) }, { responseType: 'blob', showLoading: true })
   }
+  static importTemplate() {
+    return this.http.getFile(`${currBaseUrl}/import/template`, {}, { responseType: 'blob' })
+  }
+  static async importFile(file: File) {
+    if (!/\.(xlsx|xls)$/i.test(file.name) || file.size === 0 || file.size > 5 * 1024 * 1024) {
+      throw new Error('请选择非空的 .xlsx 或 .xls 文件，最大5MiB')
+    }
+    const result = await this.http.postWithFile<string>(`${currBaseUrl}/import`, { excelFile: file })
+    if (result.code !== 10000) throw new Error(result.message || '导入失败，整批未保存')
+    return result
+  }
 
   /**
    * 格式化日期为 YYYY-MM-DD 格式

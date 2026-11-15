@@ -5,7 +5,7 @@ import ElementPlus, { ElDatePicker } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { reactive } from 'vue'
 import { routeLocationKey } from 'vue-router'
-const api = vi.hoisted(() => ({ getList: vi.fn() }))
+const api = vi.hoisted(() => ({ getList: vi.fn(), importFile: vi.fn(), importTemplate: vi.fn() }))
 vi.mock('@/apis/purchase/purchaseOrder', () => ({ PurchaseNoteAPI: api }))
 vi.mock('./PurchaseOrderDetailDialog.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/operationbuttons/OperationButtons.vue', () => ({ default: { template: '<div />' } }))

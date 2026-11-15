@@ -15,6 +15,9 @@ public interface PurchaseNoteService {
      */
     String addPurchaseNote(PurchaseNoteAddDTO purchaseNoteAddDTO);
 
+    /** Import uses its own resource grant, with the same atomic draft writer. */
+    String addImportedPurchaseNote(PurchaseNoteAddDTO purchaseNoteAddDTO);
+
 
     /**
      * 删除采购单（支持批量）
