@@ -52,4 +52,5 @@ reference-project/
 !database/migrations/20261115_sale_rate_precision.sql
 !database/migrations/20261115_sale_posting.sql
 !database/migrations/20261115_purchase_posting.sql
+!database/migrations/20261115_goods_supplier.sql
 !**/src/test/resources/warehouse-schema.sql

@@ -33,6 +33,11 @@ const guides: Record<string, UsageGuide> = {
   '/fund-account': { group: '基础资料', summary: '维护收付款使用的资金账户，区分期初余额和业务产生的当前余额。', steps: ['新增账户并核对名称、编号、组织和期初余额。', '收款、付款和转账时选择对应资金账户。', '通过账户流水核对业务发生后的余额。'], note: '已有业务流水后不要用修改期初余额来调整当前余额。' }
 }
 export function usageGuide(path: string): UsageGuide {
+  if (path === '/purchase-booking') return {
+    group: '采购录入', summary: '先选商品，每行选择已建立供货关系的供应商，预览后按供应商拆单保存。',
+    steps: ['添加实际商品，为每行选择供货商和入库仓库。', '商品没有可用供货商时，先向供应商确认，再点击该行“维护供货商”建立关系；普通采购权限不能代替供货关系管理权限。', '填写数量、单价、税率及日期，核对下方各家订单编号和金额。', '点击“按供应商拆单保存”；全部成功后列出订单编号，任一失败保留全部输入。'],
+    note: '同一供应商的明细合并一单，不同供应商分别成单。保存的是未审核草稿，不代表已经收货入库或付款。'
+  }
   if (guides[path]) return guides[path]
   if (path.startsWith('/report/') || path.endsWith('-report') || path === '/purchase-sales-cost') return {
     group: '报表查询', summary: '按日期和业务对象筛选记录，查看明细、汇总及相关单据。',

@@ -287,6 +287,16 @@ export interface PurchaseOrderGenerateDataDTO {
 export class PurchaseOrderAPI {
   private static http = useHttp()
 
+  static supply(goods: string) {
+    return this.http.get<Array<{id:string;name:string;number:string;enabled:number}>>(`${currBaseUrl}/supply?goods=${encodeURIComponent(goods)}`)
+  }
+  static setSupply(goods: string, supplier: string, enabled: boolean) {
+    return this.http.post<string>(`${currBaseUrl}/supply`, {goods, supplier, enabled}, {upType:DataUpType.json})
+  }
+  static split(data: {number:string;time:string;arrival:string;people?:string;data?:string;rows:Array<PurchaseOrderInfoDTO & {supplier:string}>}) {
+    return this.http.post<Array<{id:string;number:string;supplier:string;lineCount:number}>>(`${currBaseUrl}/split`, data, {upType:DataUpType.json})
+  }
+
   /**
    * 新增采购订单
    * 接口路径: /j3-purchase/purchase-order/add

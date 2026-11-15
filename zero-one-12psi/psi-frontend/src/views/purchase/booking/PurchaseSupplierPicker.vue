@@ -1,6 +1,6 @@
 <template>
   <section class="supplier-step" :class="{ invalid }" aria-label="采购订单供应商">
-    <div class="supplier-step-title"><strong><span class="required">*</span> 第一步：选择供应商</strong><span>选择向谁采购，再填写商品和订单信息。</span></div>
+    <div class="supplier-step-title"><strong><span class="required">*</span> {{ title }}</strong><span>{{ description }}</span></div>
     <div class="supplier-choice">
       <el-button type="primary" :disabled="disabled" @click="openPicker">{{ supplierId ? '更换供应商' : '选择供应商' }}</el-button>
       <strong v-if="supplierId" class="chosen-name">{{ supplierName || '已选择供应商' }}</strong>
@@ -33,7 +33,7 @@
 import { ref } from 'vue'
 import { SupplierAPI } from '@/apis/basicdata/supplier'
 interface Choice { id: string; name: string; code: string }
-const props = withDefaults(defineProps<{ supplierId?: string | null; supplierName?: string; invalid?: boolean; disabled?: boolean }>(), { supplierId: null, supplierName: '', invalid: false, disabled: false })
+const props = withDefaults(defineProps<{ supplierId?: string | null; supplierName?: string; invalid?: boolean; disabled?: boolean; title?: string; description?: string }>(), { supplierId: null, supplierName: '', invalid: false, disabled: false, title: '第一步：选择供应商', description: '选择向谁采购，再填写商品和订单信息。' })
 const emit = defineEmits<{ select: [choice: Choice]; clear: []; manage: [] }>()
 const visible = ref(false)
 const name = ref('')

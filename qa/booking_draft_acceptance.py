@@ -16,6 +16,8 @@ class BookingDraftSuite(PurchasePostingSuite):
     def fixture(self):
         super().fixture();self.person=uuid.uuid4().hex
         sql(self.state,'INSERT INTO people(id,name,py,number,frame,sex,tel) VALUES('+','.join(literal(v) for v in [self.person,'QA Booking Person','qa','QP'+self.person[:16],self.state['frame_id'],0,'19900000000'])+');')
+        result=self.request('POST','/purchase-order/supply',dict(goods=self.goods,supplier=self.supplier,enabled=True),service='purchase')
+        assert result.get('code')==10000,'Could not establish actual fixture supply relationship'
 
     def order_body(self):
         return dict(supplier=self.supplier,people=self.person,time='2026-11-15',arrival='2026-11-16',number='QABOR'+uuid.uuid4().hex[:24],total=999,actual=999,source='0',file='[]',data='QA Booking',purchaseOrderInfoDTOList=[dict(goods=self.goods,attr='',unit='unit',warehouse=self.warehouse,price=100,nums=2,discount=0,dsc=0,total=999,tax=13,tat=999,tpt=999,data='QA order line')])

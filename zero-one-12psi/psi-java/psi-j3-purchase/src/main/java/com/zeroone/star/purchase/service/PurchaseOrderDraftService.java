@@ -14,7 +14,8 @@ public class PurchaseOrderDraftService {
     private final JdbcTemplate db;
     private final PurchaseDocumentAccess access;
     private final PurchaseDraftAmounts amounts;
-    public PurchaseOrderDraftService(JdbcTemplate db,PurchaseDocumentAccess access,PurchaseDraftAmounts amounts) {this.db=db;this.access=access;this.amounts=amounts;}
+    private final PurchaseSupplyService supply;
+    public PurchaseOrderDraftService(JdbcTemplate db,PurchaseDocumentAccess access,PurchaseDraftAmounts amounts,PurchaseSupplyService supply) {this.db=db;this.access=access;this.amounts=amounts;this.supply=supply;}
     private String id() {return UUID.randomUUID().toString().replace("-","");}
     private boolean absent(String value) {return value==null || value.trim().isEmpty() || "0".equals(value);}
     private void length(String value,int max,String label) {if(value!=null && value.length()>max)throw new IllegalArgumentException(label+"最多"+max+"个字符");}
@@ -59,6 +60,7 @@ public class PurchaseOrderDraftService {
         db.update("INSERT INTO psi_document_write_lock(scope) VALUES('bor') ON DUPLICATE KEY UPDATE scope='bor'");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='bor' FOR UPDATE",String.class);
         if(!db.queryForList("SELECT id FROM bor WHERE number=? FOR UPDATE",number).isEmpty())throw new IllegalArgumentException("采购订单编号已被使用");
+        for(PurchaseOrderInfoDTO line:request.getPurchaseOrderInfoDTOList()) supply.require(frame,line.getGoods(),request.getSupplier());
         String order=id();
         db.update("INSERT INTO bor(id,source,frame,supplier,time,number,total,actual,people,arrival,logistics,file,data,more,examine,state,`user`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',0,0,?)",
             order,absent(request.getSource())?"0":request.getSource(),frame,request.getSupplier(),request.getTime().atStartOfDay(),number,header.getTotal(),header.getActual(),

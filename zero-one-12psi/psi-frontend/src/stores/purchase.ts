@@ -14,6 +14,8 @@ export interface PurchaseBookData {
     documentDate: string
     documentNumber: string
     customer?: string
+    arrivalDate?: string
+    remarks?: string
   }
   tableData: any[]
   isAudited: boolean

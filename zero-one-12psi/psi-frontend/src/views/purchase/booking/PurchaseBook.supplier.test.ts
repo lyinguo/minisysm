@@ -1,79 +1,25 @@
-import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia } from 'pinia'
-import { createRouter, createMemoryHistory } from 'vue-router'
+import {beforeEach,describe,expect,it,vi} from 'vitest'
+import {flushPromises,mount} from '@vue/test-utils'
+import {createPinia} from 'pinia'
+import {createRouter,createMemoryHistory} from 'vue-router'
 import ElementPlus from 'element-plus'
-const bookingApi = vi.hoisted(() => ({ addPurchaseOrder: vi.fn() }))
-vi.mock('@/components/ReIcon/src/hooks', () => ({ useRenderIcon: () => 'span' }))
-vi.mock('@/apis/common/api', () => ({ CommonAPI: { getWarehouseNameList: vi.fn().mockResolvedValue([]) } }))
-vi.mock('@/components/documentform/DocumentForm.vue', () => ({ default: { setup(_props: unknown, { expose }: { expose: (value: unknown) => void }) { expose({ formdata: { relatedPerson: 'people-uuid', arrivalDate: '2026-11-16', actualAmount: 226, documentCost: 200 } }); return {} }, template: '<div />' } }))
-vi.mock('@/apis/purchase/PurchaseBooking/order', () => ({ PurchaseOrderAPI: bookingApi }))
-vi.mock('@/apis/basicdata/supplier', () => ({ SupplierAPI: { getSupplierList: vi.fn().mockResolvedValue({ code: 10000, data: { rows: [], total: 0 } }) } }))
+const api=vi.hoisted(()=>({supply:vi.fn(),setSupply:vi.fn(),split:vi.fn()}))
+vi.mock('@/apis/purchase/PurchaseBooking/order',()=>({PurchaseOrderAPI:api}))
+vi.mock('@/apis/common/api',()=>({CommonAPI:{getWarehouseNameList:vi.fn().mockResolvedValue([{id:'warehouse-uuid',name:'实际仓库'}])}}))
+vi.mock('@/components/operationpoptable/OperationPopTable.vue',()=>({default:{template:'<div />'}}))
+vi.mock('@/components/ReIcon/src/hooks',()=>({useRenderIcon:()=> 'span'}))
+vi.mock('@/apis/basicdata/supplier',()=>({SupplierAPI:{getSupplierList:vi.fn().mockResolvedValue({code:10000,data:{rows:[],total:0}})}}))
 import PurchaseBook from './PurchaseBook.vue'
-import PurchaseSupplierPicker from './PurchaseSupplierPicker.vue'
-import { usePurchaseStore } from '@/stores/purchase'
 import HomeView from '@/views/HomeView.vue'
-describe('purchase booking supplier guidance', () => {
-  it('submits real string identifiers and preserves draft state after successful save', async () => {
-    bookingApi.addPurchaseOrder.mockReset().mockResolvedValue({ code: 10000, data: 'saved-order-uuid' })
-    const pinia = createPinia()
-    usePurchaseStore(pinia).savePurchaseBookData({ headerForm: { supplier: '实际供应商', supplierId: 'supplier-uuid', documentDate: '2026-11-15', documentNumber: 'QA-SAVE' }, isAudited: false, tableData: [{ productName: '实际商品', goodsId: 'goods-uuid', warehouseId: 'warehouse-uuid', unit: 'unit', price: 100, quantity: 2, amount: 200, taxRate: 13, taxAmount: 26, total: 226 }] })
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
-    await router.push('/'); await router.isReady()
-    const wrapper = mount(PurchaseBook, { global: { plugins: [pinia, router, ElementPlus] } })
-    try {
-      await flushPromises()
-      await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click'); await flushPromises()
-      expect(bookingApi.addPurchaseOrder).toHaveBeenCalledWith(expect.objectContaining({ supplier: 'supplier-uuid', people: 'people-uuid', purchaseOrderInfoDTOList: [expect.objectContaining({ goods: 'goods-uuid', warehouse: 'warehouse-uuid' })] }))
-      expect(wrapper.find('.audit-stamp').exists()).toBe(false)
-      expect(usePurchaseStore(pinia).getPurchaseBookData?.isAudited).toBe(false)
-    } finally { wrapper.unmount() }
-  })
-  it('retains selection through the real workspace tab remount and asynchronous warehouse loading', async () => {
-    const pinia = createPinia()
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: HomeView, children: [{ path: 'purchase-booking', component: PurchaseBook, meta: { label: '采购订单' } }, { path: 'supplier-manage', component: { template: '<div>供应商维护</div>' }, meta: { label: '供应商管理' } }] }] })
-    await router.push('/purchase-booking'); await router.isReady()
-    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [pinia, router, ElementPlus] } })
-    try {
-      await flushPromises()
-      wrapper.findComponent(PurchaseSupplierPicker).vm.$emit('select', { id: 'workspace-supplier-uuid', name: '工作区返回保留', code: 'SUP003' }); await flushPromises()
-      wrapper.findComponent(PurchaseSupplierPicker).vm.$emit('manage'); await flushPromises()
-      await router.push('/purchase-booking'); await flushPromises()
-      expect(wrapper.findComponent(PurchaseSupplierPicker).props('supplierId')).toBe('workspace-supplier-uuid')
-      expect(usePurchaseStore(pinia).getPurchaseBookData?.headerForm.supplierId).toBe('workspace-supplier-uuid')
-    } finally { wrapper.unmount() }
-  })
-  it('restores the selected UUID after navigating to supplier maintenance and back', async () => {
-    const pinia = createPinia()
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/purchase-booking', component: PurchaseBook }, { path: '/supplier-manage', component: { template: '<div>供应商维护</div>' } }] })
-    await router.push('/purchase-booking'); await router.isReady()
-    const wrapper = mount({ template: '<router-view />' }, { global: { plugins: [pinia, router, ElementPlus] } })
-    try {
-      await flushPromises()
-      wrapper.findComponent(PurchaseSupplierPicker).vm.$emit('select', { id: 'persisted-supplier-uuid', name: '返回后仍选中', code: 'SUP002' }); await flushPromises()
-      wrapper.findComponent(PurchaseSupplierPicker).vm.$emit('manage'); await flushPromises()
-      expect(wrapper.text()).toContain('供应商维护')
-      await router.push('/purchase-booking'); await flushPromises()
-      expect(wrapper.findComponent(PurchaseSupplierPicker).props('supplierId')).toBe('persisted-supplier-uuid')
-      expect(wrapper.text()).toContain('返回后仍选中')
-    } finally { wrapper.unmount() }
-  })
-  it('opens supplier selection on missing save and preserves actual UUID/name in its draft', async () => {
-    const pinia = createPinia()
-    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] })
-    await router.push('/'); await router.isReady()
-    const wrapper = mount(PurchaseBook, { attachTo: document.body, global: { plugins: [pinia, router, ElementPlus] } })
-    try {
-      await flushPromises()
-      await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click'); await flushPromises()
-      expect(document.body.textContent).toContain('选择采购订单供应商')
-      const picker = wrapper.findComponent(PurchaseSupplierPicker)
-      picker.vm.$emit('select', { id: 'actual-supplier-uuid', name: '实际选择供应商', code: 'SUP001' }); await flushPromises()
-      expect(usePurchaseStore(pinia).getPurchaseBookData?.headerForm).toEqual(expect.objectContaining({ supplierId: 'actual-supplier-uuid', supplier: '实际选择供应商' }))
-      expect(wrapper.text()).toContain('实际选择供应商')
-      expect(picker.props('invalid')).toBe(false)
-      picker.vm.$emit('clear'); await flushPromises()
-      expect(usePurchaseStore(pinia).getPurchaseBookData?.headerForm.supplierId).toBe('')
-    } finally { wrapper.unmount() }
-  })
+import {usePurchaseStore} from '@/stores/purchase'
+function seed(pinia:ReturnType<typeof createPinia>){usePurchaseStore(pinia).savePurchaseBookData({headerForm:{supplier:'旧表头不得自动回填',supplierId:'old-header',documentDate:'2026-11-15',arrivalDate:'2026-11-16',documentNumber:'QA-SPLIT'},isAudited:false,tableData:[{productName:'商品甲',goodsId:'goods-a',supplierId:'supplier-a',warehouseId:'warehouse-uuid',unit:'件',price:100,quantity:2,taxRate:13},{productName:'商品乙',goodsId:'goods-b',supplierId:'supplier-b',warehouseId:'warehouse-uuid',unit:'件',price:75,quantity:1,taxRate:0}]})}
+async function setup(shell=false){const pinia=createPinia();seed(pinia);const router=createRouter({history:createMemoryHistory(),routes:shell?[{path:'/',component:HomeView,children:[{path:'purchase-booking',component:PurchaseBook,meta:{label:'采购订单'}},{path:'supplier-manage',component:{template:'<div>供应商维护</div>'},meta:{label:'供应商管理'}}]}]:[{path:'/purchase-booking',component:PurchaseBook},{path:'/supplier-manage',component:{template:'<div>供应商维护</div>'}}]});await router.push('/purchase-booking');await router.isReady();const wrapper=mount({template:'<router-view />'},{global:{plugins:[pinia,router,ElementPlus]}});await flushPromises();return {wrapper,pinia,router}}
+async function save(wrapper:Awaited<ReturnType<typeof setup>>['wrapper']){await wrapper.findAll('button').find(b=>b.text()==='按供应商拆单保存')!.trigger('click');await flushPromises()}
+describe('per-row supplier purchase entry',()=>{
+  beforeEach(()=>{vi.clearAllMocks();api.supply.mockImplementation((goods:string)=>Promise.resolve({code:10000,data:[{id:goods==='goods-a'?'supplier-a':'supplier-b',name:goods==='goods-a'?'实际供应商甲':'实际供应商乙',number:'S',enabled:1}]}));api.split.mockResolvedValue({code:10000,data:[{id:'order-a',number:'QA-SPLIT-001',supplier:'supplier-a',lineCount:1},{id:'order-b',number:'QA-SPLIT-002',supplier:'supplier-b',lineCount:1}]})})
+  it('shows per-row supplier and correct independent group preview, without header supplier',async()=>{const {wrapper}=await setup();try{expect(wrapper.text()).toContain('本行供应商');expect(wrapper.text()).toContain('QA-SPLIT-001 · 实际供应商甲 · 1 行 · 含税 226.0000');expect(wrapper.text()).toContain('QA-SPLIT-002 · 实际供应商乙 · 1 行 · 含税 75.0000');expect(wrapper.text()).not.toContain('旧表头不得自动回填')}finally{wrapper.unmount()}})
+  it('submits actual row references once, displays all returned drafts and clears only after success',async()=>{const {wrapper,pinia}=await setup();try{await save(wrapper);expect(api.split).toHaveBeenCalledTimes(1);expect(api.split).toHaveBeenCalledWith(expect.objectContaining({number:'QA-SPLIT',rows:[expect.objectContaining({goods:'goods-a',supplier:'supplier-a',warehouse:'warehouse-uuid',total:200,tpt:226}),expect.objectContaining({goods:'goods-b',supplier:'supplier-b',total:75,tpt:75})]}));expect(wrapper.text()).toContain('QA-SPLIT-001');expect(wrapper.text()).toContain('QA-SPLIT-002');expect(usePurchaseStore(pinia).getPurchaseBookData?.tableData).toHaveLength(0);expect(usePurchaseStore(pinia).getPurchaseBookData?.isAudited).toBe(false)}finally{wrapper.unmount()}})
+  it('keeps every input after an atomic server rejection',async()=>{api.split.mockResolvedValue({code:9995,message:'第二家供应商已停用'});const {wrapper,pinia}=await setup();try{await save(wrapper);expect(wrapper.text()).toContain('第二家供应商已停用');expect(usePurchaseStore(pinia).getPurchaseBookData?.tableData).toHaveLength(2);expect(usePurchaseStore(pinia).getPurchaseBookData?.headerForm.documentNumber).toBe('QA-SPLIT')}finally{wrapper.unmount()}})
+  it('refuses unlinked or disabled suppliers without submitting',async()=>{api.supply.mockResolvedValue({code:10000,data:[{id:'supplier-a',name:'停用供货商',enabled:0}]});const {wrapper}=await setup();try{await save(wrapper);expect(api.split).not.toHaveBeenCalled();expect(wrapper.text()).toContain('第1行请选择该商品的有效供货商')}finally{wrapper.unmount()}})
+  it('preserves each row supplier through the actual workspace remount',async()=>{const {wrapper,pinia,router}=await setup(true);try{await router.push('/supplier-manage');await flushPromises();await router.push('/purchase-booking');await flushPromises();expect(usePurchaseStore(pinia).getPurchaseBookData?.tableData.map(r=>r.supplierId)).toEqual(['supplier-a','supplier-b']);expect(wrapper.text()).toContain('实际供应商甲');expect(wrapper.text()).toContain('实际供应商乙')}finally{wrapper.unmount()}})
 })
