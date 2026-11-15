@@ -7,6 +7,70 @@ from acceptance import QA, read_state, sql, literal
 
 
 class ExtendedPostingSuite(SalePostingSuite):
+    def source_state_cases(self):
+        def linked(state=0,approved=1):
+            self.fixture();order,line=uuid.uuid4().hex,uuid.uuid4().hex
+            sql(self.state,'INSERT INTO sor(id,frame,customer,time,number,total,actual,arrival,examine,state,`user`) VALUES('+','.join(literal(v) for v in [order,self.state['frame_id'],self.customer,'2026-11-14','QA-SOR-'+order[:16],500,565,'2026-11-15',approved,state,self.actor])+');'+'INSERT INTO sor_info(id,pid,goods,attr,unit,price,nums,total,tpt,handle) VALUES('+','.join(literal(v) for v in [line,order,self.goods,'','unit',100,5,500,565,0])+');')
+            body=self.body();body.update(source=order,money=50,account=self.account);body['items'][0].update(source=line,discount=1)
+            return order,line,self.save_checked(body)
+        def closed():
+            order,line,id=linked(3)
+            assert self.post([id]).get('code')!=10000,'Closed source order incorrectly allowed sales posting'
+            self.assert_empty_posting(id,10)
+            assert self.scalar('SELECT CAST(state AS SIGNED) FROM sor WHERE id='+literal(order)+';')=='3'
+            assert Decimal(self.scalar('SELECT handle FROM sor_info WHERE id='+literal(line)+';'))==0
+            sql(self.state,'UPDATE sor SET state=0 WHERE id='+literal(order)+';')
+            assert self.post([id]).get('code')==10000 and self.inventory()==8
+            assert self.balance('account',self.account)==150 and self.balance('customer',self.customer)==176
+            assert self.post([id],False).get('code')==10000;self.assert_empty_posting(id,10)
+            return ['SQL closed source state3 blocks actual sale posting and all stock/cash/receivable/handled changes; reopening only owned fixture permits original draft posting and reversal']
+        self.case('sale.source_closed_order_atomic',closed)
+        def approval():
+            order,line,id=linked(0,2)
+            assert self.post([id]).get('code')!=10000,'Invalid approval2 was treated as approved boolean1'
+            self.assert_empty_posting(id,10)
+            assert Decimal(self.scalar('SELECT handle FROM sor_info WHERE id='+literal(line)+';'))==0
+            return ['Owned malformed approval2 cannot masquerade as approved1; source quantity and all posting effects unchanged']
+        self.case('sale.source_nonbinary_approval_denied',approval)
+        def corrupt():
+            order,line,id=linked(4)
+            assert self.post([id]).get('code')!=10000,'Unknown execution state accepted'
+            self.assert_empty_posting(id,10)
+            assert self.scalar('SELECT CAST(state AS SIGNED) FROM sor WHERE id='+literal(order)+';')=='4'
+            return ['Unknown source execution enum is rejected instead of silently normalized while posting']
+        self.case('sale.source_unknown_state_denied',corrupt)
+        def reverse_closed():
+            order,line,id=linked()
+            assert self.post([id]).get('code')==10000
+            sql(self.state,'UPDATE sor SET state=3 WHERE id='+literal(order)+';')
+            assert self.post([id],False).get('code')!=10000,'Reversal silently reopened closed order'
+            assert self.inventory()==8 and self.balance('account',self.account)==150 and self.balance('customer',self.customer)==176
+            assert self.scalar('SELECT CAST(state AS SIGNED) FROM sor WHERE id='+literal(order)+';')=='3'
+            assert Decimal(self.scalar('SELECT handle FROM sor_info WHERE id='+literal(line)+';'))==2
+            assert self.ledger_count('room_info',id)==self.ledger_count('account_info',id)==1
+            sql(self.state,'UPDATE sor SET state=1 WHERE id='+literal(order)+';')
+            assert self.post([id],False).get('code')==10000;self.assert_empty_posting(id,10)
+            return ['Actual posted sale cannot silently reopen a closed source on reversal; original movements remain intact; reopening owned SQL fixture permits reversal']
+        self.case('sale.source_closed_reverse_preserves_posting',reverse_closed)
+        def full_quantity():
+            order,line,first=linked()
+            assert self.post([first]).get('code')==10000
+            body=self.body();body.update(source=order);body['items'][0].update(source=line,nums=3,discount=1)
+            second=self.save_checked(body);assert self.post([second]).get('code')==10000
+            assert self.inventory()==5 and self.balance('customer',self.customer)==515 and self.balance('account',self.account)==150
+            assert self.scalar('SELECT CAST(state AS SIGNED) FROM sor WHERE id='+literal(order)+';')=='2'
+            assert Decimal(self.scalar('SELECT handle FROM sor_info WHERE id='+literal(line)+';'))==5
+            body=self.body();body.update(source=order);body['items'][0].update(source=line,nums=1,discount=1)
+            excess=self.save_checked(body);assert self.post([excess]).get('code')!=10000
+            assert self.inventory()==5 and self.balance('customer',self.customer)==515 and self.ledger_count('room_info',excess)==0
+            assert self.post([second],False).get('code')==10000
+            assert self.scalar('SELECT CAST(state AS SIGNED) FROM sor WHERE id='+literal(order)+';')=='1'
+            assert Decimal(self.scalar('SELECT handle FROM sor_info WHERE id='+literal(line)+';'))==2
+            assert self.post([first],False).get('code')==10000;self.assert_empty_posting(first,10)
+            assert self.scalar('SELECT CAST(state AS SIGNED) FROM sor WHERE id='+literal(order)+';')=='0'
+            assert Decimal(self.scalar('SELECT handle FROM sor_info WHERE id='+literal(line)+';'))==0
+            return ['Actual two shipments2+3 advance source0->1->2, extra shipment rejected atomically; reversals restore2->1->0 and original stock/cash/receivable']
+        self.case('sale.source_partial_full_quantity_roundtrip',full_quantity)
     def save_checked(self, body):
         identifier = self.create(body)
         self.sale('POST', '/sale/form/check?check=true', [identifier])
@@ -21,6 +85,7 @@ class ExtendedPostingSuite(SalePostingSuite):
         assert self.scalar('SELECT COUNT(*) FROM psi_sale_posting WHERE sale_id='+literal(identifier)+';') == '0'
 
     def run(self):
+        self.source_state_cases()
         def retry():
             self.fixture()
             identifier = self.draft(received=50)
@@ -254,4 +319,7 @@ class ExtendedPostingSuite(SalePostingSuite):
 
 
 if __name__ == '__main__':
-    ExtendedPostingSuite(read_state()).run()
+    import sys
+    suite=ExtendedPostingSuite(read_state())
+    if len(sys.argv)>1 and sys.argv[1]=='source-state':suite.source_state_cases();suite.write_report()
+    else:suite.run()

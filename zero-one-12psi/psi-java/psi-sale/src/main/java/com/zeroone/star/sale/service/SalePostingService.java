@@ -130,8 +130,10 @@ public class SalePostingService {
             if(lines.stream().anyMatch(row->!s(row.get("source")).isEmpty() && !"0".equals(s(row.get("source"))))) throw new IllegalArgumentException("商品明细关联了订单但单据来源为空");
             return;
         }
-        List<Map<String,Object>> orders=db.queryForList("SELECT * FROM sor WHERE id=? FOR UPDATE",source);
-        if(orders.size()!=1 || n(orders.get(0).get("examine"))!=1 || n(orders.get(0).get("state"))==3
+        // MySQL TINYINT(1) is otherwise returned as Boolean, collapsing states 2/3 to 1.
+        List<Map<String,Object>> orders=db.queryForList("SELECT s.*,CAST(s.examine AS SIGNED) AS approval_state,CAST(s.state AS SIGNED) AS execution_state FROM sor s WHERE s.id=? FOR UPDATE",source);
+        if(orders.size()!=1 || n(orders.get(0).get("approval_state"))!=1
+                || orders.get(0).get("execution_state")==null || n(orders.get(0).get("execution_state"))<0 || n(orders.get(0).get("execution_state"))>2
                 || !s(head.get("frame")).equals(s(orders.get(0).get("frame"))) || !s(head.get("customer")).equals(s(orders.get(0).get("customer"))))
             throw new IllegalArgumentException("来源订单不存在、未审核、已关闭或客户组织不匹配");
         for(Map<String,Object> line:lines) {
