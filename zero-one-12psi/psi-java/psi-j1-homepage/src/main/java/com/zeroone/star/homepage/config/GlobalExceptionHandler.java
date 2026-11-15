@@ -27,6 +27,10 @@ import java.util.stream.StreamSupport;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public JsonVO<String> status(org.springframework.web.server.ResponseStatusException error) {
+        return JsonVO.create(null,error.getStatus().value(),error.getReason());
+    }
     /**
      * 系统通用异常处理
      * @param e 异常类型

@@ -1,5 +1,13 @@
 # 系统业务验收
 
+## 数据备份与恢复专项
+
+`prepare_oauth_build.py --module psi-j1-homepage` 构建独立homepage-project，`start_java_test.ps1 -Service homepage` 在18025启动。`python qa/backup_acceptance.py run` 真实验证管理员权限、撤权、状态检查及SQL下载；将备份恢复到新建的严格psi_qa_名称数据库，核对全部表数量、真实采购入账的库存/资金/应付及精确文本/二进制和触发器，最后清理本次新恢复库。不要与其他QA写入测试同时运行，以保证前后对比一致。
+
+故障专项：先确认并停止专用homepage进程，使用 `-Service homepage -BackupContainer qa-backup-missing-20261115` 启动同一候选，执行 `python qa/backup_acceptance.py unavailable`；不停止真正MySQL容器。验证后恢复无覆盖参数的正常QA候选。浏览器先执行该脚本 `prepare`，进入隔离页面“系统配置→数据备份”，验证失败提示、环境重试、实际SQL下载，并独立核对页面SHA256。下载SQL、会话、日志和恢复库数据一律不发布。
+
+正常本地环境通过 `/system/backup` 使用，接口 `/homepage/system/backup/status` 和 `/download` 只允许当前数据库role=0的系统管理员。默认Docker容器mysql8；其他部署需配置 `psi.backup.container`，并保证服务能运行Docker CLI和容器内mysqldump、容器环境提供MySQL认证。导出只处理当前业务数据库，超时或容器/数据库身份不匹配拒绝；不提供自动恢复或上传覆盖数据库操作。复杂视图/例程/事件及跨版本恢复需单独验收。
+
 ## 核心收付款优先：付款草稿专项
 
 使用 `prepare_oauth_build.py --module psi-j6-payment_order` 构建独立 `payment-project`，随后 `start_java_test.ps1 -Service payment` 仅在18024端口启动。与其余QA服务共用专用测试库和18379 QA Redis；写入保护要求服务名和固定端口同时匹配，不能仅凭端口范围判断隔离。

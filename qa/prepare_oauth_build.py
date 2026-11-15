@@ -7,12 +7,12 @@ import xml.etree.ElementTree as ET
 from acceptance import ROOT, QA
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--module', choices=['psi-oauth2', 'psi-j7-supportinfo', 'psi-j2-storemanagement', 'psi-j6-basic_Information', 'psi-sale', 'psi-j3-purchase', 'psi-j6-payment_order'], default='psi-oauth2')
+parser.add_argument('--module', choices=['psi-oauth2', 'psi-j7-supportinfo', 'psi-j2-storemanagement', 'psi-j6-basic_Information', 'psi-sale', 'psi-j3-purchase', 'psi-j6-payment_order', 'psi-j1-homepage'], default='psi-oauth2')
 arguments = parser.parse_args()
 source = ROOT / 'zero-one-12psi/psi-java' / arguments.module
 project = {'psi-oauth2': 'oauth-project', 'psi-j7-supportinfo': 'supportinfo-project',
            'psi-j2-storemanagement': 'store-project', 'psi-j6-basic_Information': 'basic-project',
-           'psi-sale': 'sale-project', 'psi-j3-purchase': 'purchase-project', 'psi-j6-payment_order': 'payment-project'}[arguments.module]
+           'psi-sale': 'sale-project', 'psi-j3-purchase': 'purchase-project', 'psi-j6-payment_order': 'payment-project', 'psi-j1-homepage': 'homepage-project'}[arguments.module]
 destination = QA / 'runtime/java' / project
 destination.mkdir(parents=True, exist_ok=True)
 for item in (source / 'src').rglob('*'):

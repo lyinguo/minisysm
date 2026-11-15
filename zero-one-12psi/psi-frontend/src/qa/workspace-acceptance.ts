@@ -30,7 +30,7 @@ async function start() {
     { text: '采购与销售', paths: ['/purchase-booking', '/purchase-order', '/purchase-order-report', '/purchase-return', '/sales-booking', '/sales-order', '/sales-order-report', '/sales-return'] },
     { text: '库存与资金', paths: ['/inventory-query', '/other-inbound', '/other-outbound', '/transfer-order', '/receipt-order', '/payment-order', '/writeoff-order'] },
     { text: '报表查询', paths: ['/report/purchase/summary', '/report/purchase/payment', '/report/sales/summary', '/report/sales/profit'] },
-    { text: '系统配置', paths: ['/sysmanage/import', '/sysmanage/dictionary', '/sysmanage/menu', '/system/summary'] }
+    { text: '系统配置', paths: ['/sysmanage/import', '/sysmanage/dictionary', '/sysmanage/menu', '/system/summary', '/system/backup'] }
   ]
   Object.assign(useUserStore(), {
     token: session.token, isLoaded: true, user: { username: '界面验收 · 隔离环境', avatar: '' },

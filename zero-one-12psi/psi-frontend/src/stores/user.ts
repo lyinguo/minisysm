@@ -847,7 +847,7 @@ export const useUserStore = defineStore('user', {
     getMenuPathMap(): Record<string, string> {
       return {
         // 暂时未实现的功能，映射到404页面或最接近的现有路由
-        数据备份: '/system-settings', // 映射到系统设置
+        数据备份: '/system/backup',
         数据核准: '/system/summary',
         表单字段: '/sysmanage/menu', // 映射到菜单管理
         序列查询: '/serial-query',
@@ -876,6 +876,8 @@ export const useUserStore = defineStore('user', {
           (item as any).route ||
           (item as any).link ||
           undefined
+
+        if (item.name === '数据备份' && (!href || href === '/system-settings')) href = '/system/backup'
 
         // 纠正后端历史错误路径（否则会直接进前端 404）
         if (href) {

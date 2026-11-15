@@ -103,7 +103,7 @@ class Suite:
 
     def request(self, method, path, body=None, service='c1'):
         port = self.state[service + '_port']
-        dedicated_ports = {'c1': 18091, 'supportinfo': 18007, 'store': 18020, 'basic': 18021, 'sale': 18022, 'purchase': 18023, 'payment': 18024}
+        dedicated_ports = {'c1': 18091, 'supportinfo': 18007, 'store': 18020, 'basic': 18021, 'sale': 18022, 'purchase': 18023, 'payment': 18024, 'homepage': 18025}
         if dedicated_ports.get(service) != port or not path.startswith('/'):
             raise RuntimeError('Refusing writes outside isolated service ports')
         request = urllib.request.Request('http://127.0.0.1:' + str(port) + path, method=method,

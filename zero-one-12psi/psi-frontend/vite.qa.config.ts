@@ -13,7 +13,7 @@ const config = mergeConfig(base, defineConfig({
     name: 'private-qa-session',
     configureServer(server) {
       server.middlewares.use('/api', (request, response, next) => {
-        if (['/c1-systemparameters/', '/j7-sysargs/', '/store/', '/goods/', '/basic_information/', '/sale/', '/j3-purchase/'].some(prefix => request.url?.startsWith(prefix))) { next(); return }
+        if (['/c1-systemparameters/', '/j7-sysargs/', '/store/', '/goods/', '/basic_information/', '/sale/', '/j3-purchase/', '/homepage/'].some(prefix => request.url?.startsWith(prefix))) { next(); return }
         response.statusCode = 503
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.end(JSON.stringify({ code: 9998, message: '隔离验收环境尚未启动此业务服务' }))
@@ -27,6 +27,7 @@ const config = mergeConfig(base, defineConfig({
   }]
 }))
 config.server!.proxy = {
+  '/api/homepage': { target: 'http://127.0.0.1:18025', rewrite: path => path.replace('/api', '') },
   '/api/c1-systemparameters': { target: 'http://127.0.0.1:18091', rewrite: path => path.replace('/api/c1-systemparameters', '') },
   '/api/j7-sysargs': { target: 'http://127.0.0.1:18007', rewrite: path => path.replace('/api/j7-sysargs', '') },
   '/api/store': { target: 'http://127.0.0.1:18020', rewrite: path => path.replace('/api/store', '') },

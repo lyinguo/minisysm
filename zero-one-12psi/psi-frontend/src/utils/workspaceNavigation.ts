@@ -21,6 +21,7 @@ export function navigationEntries(menus: Menu[], exists: (path: string) => boole
 
 export interface UsageGuide { group: string; summary: string; steps: string[]; note?: string }
 const guides: Record<string, UsageGuide> = {
+  '/system/backup': { group: '系统设置', summary: '生成并下载当前业务数据库的SQL备份，留存维护前的数据。', steps: ['使用系统管理员账号，检查Docker与MySQL备份环境。', '生成并下载备份，确认浏览器保存SQL文件。', '将备份妥善保管，恢复前先在独立空数据库中验证。'], note: '只备份数据库，不包含上传附件、Redis及服务配置；下载文件包含账号与业务数据，不应上传到公开仓库。' },
   '/dashboard': { group: '工作台', summary: '从业务入口开始，按资料准备、业务录入、结果查询的顺序使用系统。', steps: ['首次使用先维护组织、商品、仓库和往来单位。', '选择采购、销售或库存业务，录入单据并核对明细。', '在对应报表中按日期、单位和商品查看业务结果。'] },
   '/user-manage': { group: '账号与权限', summary: '维护系统登录账号，为用户选择所属组织和角色。', steps: ['先准备组织和角色，再点击“新增用户”。', '填写名称、登录账号、手机号和初始密码；组织和角色均需选择。', '点击“编辑”维护资料，修改已有用户时密码留空表示保持原密码。'], note: '登录账号创建后不能修改；被历史业务引用的用户不能直接删除。' },
   '/user-role': { group: '账号与权限', summary: '维护角色及其功能权限和数据范围，再将角色分配给用户。', steps: ['新增角色并填写容易识别的名称。', '按职责选择功能权限和数据范围，核对后保存。', '回到用户管理分配角色，再使用对应用户验证实际访问范围。'], note: '菜单是否显示、接口是否允许、数据范围是否受限，需要分别检查。' },

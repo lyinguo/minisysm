@@ -5,6 +5,12 @@ import type { RouteRecordRaw } from 'vue-router'
  */
 const routes: RouteRecordRaw[] = [
   {
+    path: 'system/backup',
+    name: 'DatabaseBackup',
+    meta: { label: '数据备份', icon: 'mdi:database-export' },
+    component: () => import('@/views/advancedSettings/backup/DatabaseBackup.vue')
+  },
+  {
     path: 'system/summary',
     name: 'SystemSummary',
     meta: { label: '数据核准', icon: 'mdi:check-decagram' },
