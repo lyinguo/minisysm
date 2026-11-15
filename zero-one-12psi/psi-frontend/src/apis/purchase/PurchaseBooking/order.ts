@@ -159,6 +159,7 @@ export interface PurchaseOrderListItem {
 
 // 采购订单其他部分详情
 export interface PurchaseOrderOtherDetailDTO {
+  supplierName?: string
   /** 实际金额 */
   actual?: string | number
   /** 到货日期 */
@@ -183,6 +184,8 @@ export interface PurchaseOrderOtherDetailDTO {
 
 // 采购订单详情商品项
 export interface PurchaseOrderDetailItem {
+  number?: string
+  warehouseName?: string
   /** 金额 */
   amount?: string | number
   /** 辅助属性 */
@@ -573,7 +576,7 @@ export class PurchaseOrderAPI {
    * @returns 响应数据
    */
   static async auditPurchaseOrders(
-    ids: number[],
+    ids: (number | string)[],
     type: 0 | 1
   ): Promise<ApiResponse<string[]>> {
     try {
@@ -585,14 +588,13 @@ export class PurchaseOrderAPI {
         throw new Error('操作类型不能为空')
       }
 
-      // 过滤掉无效的ID
-      const validIds = ids
-        .map(id => typeof id === 'number' ? id : parseInt(String(id), 10))
-        .filter(id => !isNaN(id) && id > 0)
-
-      if (validIds.length === 0) {
-        throw new Error('订单ID数组中没有有效的订单ID')
-      }
+      const validIds = ids.map(id => {
+        if (typeof id === 'number' && (!Number.isSafeInteger(id) || id <= 0)) throw new Error('请使用完整订单ID')
+        const value = typeof id === 'string' ? id.trim() : typeof id === 'number' ? String(id) : ''
+        if (!value || value === '0') throw new Error('订单ID不能为空')
+        return value
+      })
+      if (new Set(validIds).size !== validIds.length || validIds.length > 200 || (type !== 0 && type !== 1)) throw new Error('请选择1到200张不同订单和有效审核操作')
 
       // 按照接口文档，参数名是 ids 和 type（type: 1=审核，0=反审核）
       const requestData = {
@@ -617,6 +619,10 @@ export class PurchaseOrderAPI {
       }
       throw error
     }
+  }
+
+  static orderStatus(id: string | number) {
+    return this.http.get<{id:string;frame:string;examine:number;state:number}>(`${currBaseUrl}/status?id=${encodeURIComponent(String(id))}`)
   }
 
   /**
@@ -681,14 +687,11 @@ export class PurchaseOrderAPI {
       // 将 ID 转换为字符串
       const idStr = String(id)
 
-      const result = await this.http.get<PurchaseOrderDetailResponse>(
-        `${currBaseUrl}/detail`,
-        { id: idStr },
-        {
-          showLoading: true
-        }
-      )
-      return result
+      const result = await this.http.get<{header:Record<string,any>;items:Record<string,any>[]}>(`${currBaseUrl}/document?id=${encodeURIComponent(idStr)}`, undefined, {showLoading:true})
+      if(result.code!==10000 || !result.data)return {code:result.code,message:result.message,data:undefined}
+      const head=result.data.header
+      const header={...head,arrivalTime:head.arrival}
+      return {...result,data:result.data.items.map(item=>({...item,amount:item.total,purchaseOrderOtherDetailDTO:header}))}
     } catch (error: any) {
       console.error('获取采购订单详情失败:', error)
       if (error.response) {

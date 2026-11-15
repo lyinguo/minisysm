@@ -6,6 +6,7 @@
     class="pb-detail-dialog"
     title="采购订单详情"
   >
+    <el-alert v-if="auditError" :title="auditError" type="error" :closable="false" show-icon />
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <div class="left">
@@ -90,7 +91,7 @@
             </template>
           </el-dropdown>
 
-          <el-button class="ml8" @click="toggleApprove">反审核</el-button>
+          <el-button class="ml8" :loading="auditBusy" @click="toggleApprove">反审核</el-button>
         </template>
 
         <!-- 未审核时：显示 生成 + 审核 -->
@@ -107,7 +108,7 @@
             </template>
           </el-dropdown>
 
-          <el-button class="ml8" @click="toggleApprove">审核</el-button>
+          <el-button class="ml8" :loading="auditBusy" @click="toggleApprove">审核</el-button>
         </template>
       </div>
     </div>
@@ -381,7 +382,7 @@
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="innerVisible = false">关闭</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button type="primary" :disabled="isApproved || auditBusy" @click="save">保存</el-button>
       </div>
     </template>
   </el-dialog>
@@ -408,7 +409,7 @@ interface Props {
   record?: any
 }
 const props = defineProps<Props>()
-const emit = defineEmits(['update:visible', 'save'])
+const emit = defineEmits(['update:visible', 'save', 'audit'])
 
 const router = useRouter()
 
@@ -579,10 +580,23 @@ function handleBatchWarehouseSelect(selected: any) {
 
 /* 审核状态 */
 const isApproved = ref(false)
-const toggleApprove = () => {
-  // 已审核 -> 反审核：切到未审核（显示"保存+审核"）
-  // 未审核 -> 审核：切回已审核（显示"生成+反审核"）
-  isApproved.value = !isApproved.value
+const auditBusy = ref(false)
+const auditError = ref('')
+const toggleApprove = async () => {
+  if (auditBusy.value) return
+  auditError.value = ''
+  if (!orderId.value) { auditError.value = '请先保存并重新打开实际订单'; return }
+  auditBusy.value = true
+  try {
+    const result = await PurchaseOrderAPI.auditPurchaseOrders([String(orderId.value)], isApproved.value ? 0 : 1)
+    if (result.code !== 10000) throw new Error(result.message || '审核操作失败')
+    const actual = await PurchaseOrderAPI.orderStatus(orderId.value)
+    if (actual.code !== 10000 || !actual.data) throw new Error(actual.message || '状态读取失败，请关闭详情重新查询')
+    isApproved.value = Number(actual.data.examine) === 1
+    emit('audit')
+    ElMessage.success(isApproved.value ? '采购订单已审核，尚未收货入库' : '采购订单已反审核')
+  } catch (error) { auditError.value = error instanceof Error ? error.message : '审核操作失败' }
+  finally { auditBusy.value = false }
 }
 
 /**
@@ -591,12 +605,12 @@ const toggleApprove = () => {
 function convertDetailItemToTableRow(item: PurchaseOrderDetailItem): TableRowData {
   return {
     productName: item.name || '',
-    productCode: item.goods || '', // 商品ID
+    productCode: item.number || item.goods || '',
     goodsId: item.goods || '', // 保存商品ID（用于更新）
     spec: item.spec || '',
     attr: item.attr || '',
     unit: item.unit || '',
-    warehouse: item.warehouse || '', // 仓库ID或名称
+    warehouse: item.warehouseName || item.warehouse || '',
     warehouseId: item.warehouse || '', // 保存仓库ID（用于更新）
     price: item.price ? String(item.price) : '',
     quantity: item.nums ? String(item.nums) : '',
@@ -628,7 +642,8 @@ function fillDetailData(detailData: PurchaseOrderDetailResponse) {
   if (otherDetail) {
     header.documentDate = otherDetail.time || ''
     header.documentNumber = otherDetail.number || ''
-    supplierModel.name = otherDetail.supplier || ''
+    supplierModel.name = otherDetail.supplierName || otherDetail.supplier || ''
+    supplierModel.id = otherDetail.supplier || ''
     // 注意：otherDetail.supplier 可能是名称，需要从原始数据中获取ID
     // 如果接口返回的是ID，则直接使用；如果是名称，需要查找对应的ID
     // 这里假设接口返回的是名称，我们需要保存供应商ID（如果有的话）
@@ -711,8 +726,11 @@ watch(
       
       fillDetailData(newRecord.detailData)
       
-      // 如果有审核状态，设置审核状态
-      if (newRecord.auditStatus) {
+      const actualItems = Array.isArray(newRecord.detailData) ? newRecord.detailData : [newRecord.detailData]
+      const actualStatus = actualItems[0]?.purchaseOrderOtherDetailDTO?.examine
+      if (actualStatus !== undefined) {
+        isApproved.value = Number(actualStatus) === 1
+      } else if (newRecord.auditStatus) {
         const status = String(newRecord.auditStatus)
         isApproved.value = status === '已审核' || status === '1' || status === 'true'
       }

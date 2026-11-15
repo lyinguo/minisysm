@@ -25,5 +25,5 @@ public class AuditRequestDTO {
 
     @ApiModelProperty(value = "审核ID列表", required = true)
     @NotEmpty(message = "审核ID列表不能为空")
-    private List<Long> ids;
+    private List<String> ids;
 }

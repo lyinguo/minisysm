@@ -162,6 +162,7 @@
       v-model:visible="detailVisible"
       :record="currentRow"
       @save="handleDetailSave"
+      @audit="purchaseSearchRef?.search?.()"
     />
   </div>
 </template>
@@ -230,7 +231,7 @@ const handleDetailSave = (payload: any) => {
 }
 
 interface RowData {
-  id?: number
+  id?: number | string
   org: string
   supplier: string
   date: string
@@ -487,6 +488,10 @@ const onBatchExamine = async (type: 0 | 1) => {
     }
   })
 
+  if (invalidRows.length > 0 && validRows.length > 0) {
+    ElMessage.warning('所选订单状态不一致，本次未处理任何订单，请核对后重新选择')
+    return
+  }
   if (validRows.length === 0) {
     const actionName = type === 0 ? '审核' : '反审核'
     const requiredStatus = type === 0 ? '未审核' : '已审核'
@@ -503,7 +508,7 @@ const onBatchExamine = async (type: 0 | 1) => {
   // 提取订单ID
   const orderIds = validRows
     .map(row => row.id)
-    .filter(id => id !== undefined && id !== null && id > 0) as number[]
+    .filter(id => id !== undefined && id !== null && String(id).trim() !== '' && String(id) !== '0') as (number | string)[]
 
   if (orderIds.length === 0) {
     ElMessage.error('选中的单据缺少订单ID，无法执行审核操作')
@@ -520,7 +525,8 @@ const onBatchExamine = async (type: 0 | 1) => {
     const apiType = type === 0 ? 1 : 0
     
     // 调用批量审核/反审核接口，传递 ids 和 type 参数
-    await PurchaseOrderAPI.auditPurchaseOrders(orderIds, apiType)
+    const response = await PurchaseOrderAPI.auditPurchaseOrders(orderIds, apiType)
+    if (response.code !== 10000) throw new Error(response.message || '整批审核失败')
     
     // 清空选中项
     selected.value = []
@@ -560,7 +566,7 @@ const onBatchDelete = () => {
       // 提取订单ID
       const orderIds = selected.value
         .map(row => row.id)
-        .filter(id => id !== undefined && id !== null && id > 0) as number[]
+    .filter(id => id !== undefined && id !== null && String(id).trim() !== '' && String(id) !== '0') as (number | string)[]
 
       if (orderIds.length === 0) {
         ElMessage.error('选中的单据缺少订单ID，无法执行删除操作')

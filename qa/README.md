@@ -1,5 +1,11 @@
 # 系统业务验收
 
+## 采购订单审核及实际订单到入库
+
+`python qa/booking_audit_acceptance.py run` 执行12项真实UUID审核、整批失败/故障回滚、并发、当前角色/组织权限、供货状态、金额、期间、完整读取和旧修改保护。联动用真实接口创建订单并审核，再实际创建带来源头/行ID的采购单，核对审核及反审核，独立核对库存/现金/应付/订单已接收量。与其他QA写入测试串行执行，角色键恢复、期间和故障触发器仅清理本次自建夹具。
+
+浏览器运行prepare，在18030隔离工作区进入采购订单报表，按打印编号筛选，详情应完整显示2条商品，点击审核后执行verify-audited，再页面反审核后执行verify-reversed。它核对状态1再0、头400/452和两条明细、库存0/现金100/应付0。新完整读取使用/purchase-order/document，授权资源仍是/purchase-order/detail；审核及状态读取用/purchase-order/audit，列表用/purchase-order/list。无权限不是可用演示数据的理由。此专项不证明页面生成采购单、全部订单修改/导入/删除/导出权限和全系统验收完成。
+
 ## 逐行供应商及自动拆单
 
 `python qa/purchase_split_acceptance.py run` 执行8项实际接口/数据库/权限/并发/故障回滚专项。采购服务启动自动建立psi_goods_supplier，独立迁移见database/migrations/20261115_goods_supplier.sql；不迁入历史推断关系。每个组织单独维护商品与供应商多对多关系，维护权限资源为/purchase-order/supply/manage，新增/查询选项用现有/purchase-order/add。普通采购授权不意味着可改变供货清单。脚本仅向严格绑定QA库及18023服务写入，新角色测试只临时修改QA Redis并恢复。

@@ -87,6 +87,10 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     private UserHolder userHolder;
     @Resource
     private com.zeroone.star.purchase.service.PurchaseOrderDraftService orderDrafts;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseOrderAuditService orderAudit;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseDocumentAccess orderAccess;
 
     /**
      * 新增采购订单
@@ -106,18 +110,13 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     @Override
     @Transactional
     public JsonVO<String> updatePurchaseOrder(PurchaseOrderUpdateDTO purchaseOrderUpdateDTO) {
-
+        orderAudit.guardUpdate(purchaseOrderUpdateDTO);
         String id = purchaseOrderUpdateDTO.getId();
 
         BorDO bor = BeanUtil.copyProperties(purchaseOrderUpdateDTO, BorDO.class);
         List<PurchaseOrderInfoDTO> borInfoDTOList = purchaseOrderUpdateDTO.getPurchaseOrderInfoDTOList();
 
-        try {
-            // 设置操作人 id
-            bor.setUser(userHolder.getCurrentUser().getId());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        // The existing creator and organization belong to the original document.
         // 修改采购订单
         updateById(bor);
 
@@ -165,11 +164,13 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
      */
     @Override
     public PageDTO<PurchaseOrderListDTO> listPurchaseOrders(PurchaseOrderQuery query) {
+        String allowedFrame=orderAccess.frame(orderAccess.authorize("/purchase-order/list"));
         // 分页插件对象
         IPage<BorDO> ipage = new Page<>(query.getPageIndex(), query.getPageSize());
 
         // 条件
         LambdaQueryWrapper<BorDO> w = new LambdaQueryWrapper<>();
+        if(allowedFrame!=null)w.eq(BorDO::getFrame,allowedFrame);
         w.likeRight(StringUtils.isNotBlank(query.getNumber()), BorDO::getNumber, query.getNumber())
                 .eq(StringUtils.isNotBlank(query.getSupplier()), BorDO::getSupplier, query.getSupplier())
                 .eq(StringUtils.isNotBlank(query.getPeople()), BorDO::getPeople, query.getPeople())
@@ -217,6 +218,7 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
      */
     @Override
     public PurchaseOrderDetailDTO getPurchaseOrderDetail(String id) {
+        orderAudit.document(id);
         BorDO bor = this.getById(id);
         if (bor == null) throw new RuntimeException("单据不存在");
 
@@ -272,40 +274,7 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<String> batchApprovePurchaseOrders(AuditRequestDTO dto) {
-        List<String> idList = dto.getIds()
-                .stream()
-                .map(String::valueOf)
-                .collect(Collectors.toList());
-
-        // 反审核锁:bor.number在buy.source中存在且 number非空禁止反审核
-        if (dto.getType() == 0) {   // 反审核
-            for (String id : idList) {
-                // 用 bor.id → 拿到 bor 抬头
-                BorDO bor = this.getById(id);
-                if (bor == null) continue;
-
-                // 锁:buy.source = bor.number且number非空禁止反审核
-                BuyDO buy = buyMapper.selectOne(
-                        new LambdaQueryWrapper<BuyDO>()
-                                .eq(BuyDO::getSource, bor.getNumber())
-                                .isNotNull(BuyDO::getNumber)
-                                .last("LIMIT 1")
-                );
-                if (buy != null && buy.getNumber() != null && !buy.getNumber().isEmpty()) {
-                    throw new RuntimeException("单据已生成采购单，禁止反审核：" + buy.getNumber());
-                }
-            }
-        }
-
-        // 批量更新 bor 审核状态
-        LambdaUpdateWrapper<BorDO> wrapper = new LambdaUpdateWrapper<>();
-        wrapper.set(BorDO::getExamine, dto.getType() == 1)
-                .in(BorDO::getId, idList);
-
-        this.update(wrapper);
-        // 返回受影响 ID
-        return idList;
-
+        return orderAudit.audit(dto);
     }
     @Resource
     EasyExcelComponent excel;

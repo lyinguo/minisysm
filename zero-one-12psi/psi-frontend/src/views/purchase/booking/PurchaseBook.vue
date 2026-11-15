@@ -6,7 +6,7 @@
       <el-form-item label="单据日期"><el-date-picker v-model="header.documentDate" value-format="YYYY-MM-DD" type="date" placeholder="单据日期" /></el-form-item>
       <el-form-item label="到货日期"><el-date-picker v-model="header.arrivalDate" value-format="YYYY-MM-DD" type="date" placeholder="到货日期" /></el-form-item>
     </el-form>
-    <div class="entry-actions"><el-button type="primary" :disabled="saving" @click="productsOpen = true">添加商品</el-button><el-button :loading="saving" type="success" @click="save">按供应商拆单保存</el-button><el-button :disabled="saving" @click="router.push('/supplier-manage')">供应商资料</el-button></div>
+    <div class="entry-actions"><el-button type="primary" :disabled="saving" @click="productsOpen = true">添加商品</el-button><el-button :loading="saving" type="success" @click="save">按供应商拆单保存</el-button><el-button :disabled="saving" @click="router.push('/purchase-booking-report')">查询采购订单</el-button><el-button :disabled="saving" @click="router.push('/supplier-manage')">供应商资料</el-button></div>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <el-table :data="rows" border empty-text="点击“添加商品”开始采购" style="width:100%">
       <el-table-column type="index" label="序号" width="60" />
