@@ -81,20 +81,8 @@ export class PurchaseNoteAPI {
       if (!buyDTO.supplier || buyDTO.supplier === 0) {
         throw new Error('供应商不能为空')
       }
-      // 验证供应商ID是否在Java int范围内（-2147483648 到 2147483647）
-      const supplierIdNum = Number(buyDTO.supplier)
-      const INT_MIN = -2147483648
-      const INT_MAX = 2147483647
-      if (isNaN(supplierIdNum) || supplierIdNum < INT_MIN || supplierIdNum > INT_MAX) {
-        throw new Error(
-          `供应商ID值超出范围（${buyDTO.supplier}）。Java int类型范围：${INT_MIN} 到 ${INT_MAX}。请联系后端开发人员将supplier字段改为Long类型。`
-        )
-      }
-      if (!buyDTO.people || buyDTO.people === 0) {
-        throw new Error('关联人员不能为空')
-      }
-      if (!buyDTO.account || buyDTO.account === '' || buyDTO.account === '0') {
-        throw new Error('结算账户不能为空')
+      if (Number(buyDTO.money) > 0 && (!buyDTO.account || buyDTO.account === '0')) {
+        throw new Error('填写实付金额时请选择结算账户')
       }
       if (!buyDTO.time || (typeof buyDTO.time === 'string' && buyDTO.time.trim() === '')) {
         throw new Error('单据时间不能为空')
@@ -124,9 +112,9 @@ export class PurchaseNoteAPI {
           logistics: buyDTO.logistics || '',
           money: Number(buyDTO.money) || 0,
           number: String(buyDTO.number).trim(),
-          people: Number(buyDTO.people),
-          source: buyDTO.source ? Number(buyDTO.source) : undefined,
-          supplier: Number(buyDTO.supplier),
+          people: String(buyDTO.people || ''),
+          source: String(buyDTO.source || '0'),
+          supplier: String(buyDTO.supplier),
           time: this.formatDate(buyDTO.time),
           total: Number(buyDTO.total) || 0
         },
@@ -143,7 +131,7 @@ export class PurchaseNoteAPI {
           goods: String(item.goods),
           goodsNumber: item.goodsNumber || '',
           logistics: String(item.logistics || ''),
-          mfd: item.mfd ? this.formatDate(item.mfd) : this.formatDate(new Date()),
+          mfd: item.mfd ? this.formatDate(item.mfd) : '',
           money: Number(item.money) || 0,
           name: item.name || '',
           noteTotal: Number(item.noteTotal) || 0,
@@ -161,7 +149,7 @@ export class PurchaseNoteAPI {
           total: Number(item.total) || 0,
           tpt: Number(item.tpt) || 0,
           unit: String(item.unit),
-          warehouse: Number(item.warehouse)
+          warehouse: String(item.warehouse)
         }))
       }
 
@@ -176,6 +164,7 @@ export class PurchaseNoteAPI {
           showLoading: true
         }
       )
+      if (result.code !== 10000 || !result.data) throw new Error(result.message || '采购单保存失败')
       return result
     } catch (error: any) {
       console.error('新增采购单失败:', error)

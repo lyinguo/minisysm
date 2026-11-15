@@ -40,11 +40,9 @@ public class PurchaseNoteInfoDTO {
     @NotNull(message = "仓库ID不能为空")
     private String warehouse;
     @ApiModelProperty(value = "商品批次号", required = false, example = "1")
-    @NotBlank(message = "批次号不能为空") // 允许空字符串，但不允许null
     private String batch;
 
     @ApiModelProperty(value = "生产日期 由字符串日期转换而来 ", required = true, example = "2025-10-30")
-    @NotNull(message = "生产日期时间不能为空")
     private String mfd;
 
     @ApiModelProperty(value = "商品单价", required = true, example = "2.0000")

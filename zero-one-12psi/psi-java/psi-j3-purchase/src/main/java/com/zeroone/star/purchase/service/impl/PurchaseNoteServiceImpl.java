@@ -62,6 +62,8 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
 
     @Autowired
     private UserMapper userMapper;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseDraftValidation draftValidation;
 
     /**
      * 新增采购单
@@ -72,6 +74,7 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String addPurchaseNote(PurchaseNoteAddDTO purchaseNoteAddDTO) {
+        draftValidation.validate(purchaseNoteAddDTO);
         //合并 合并
         try {
             // 1. 转换并保存采购单主表数据
@@ -142,7 +145,7 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
         }
 
         // 字段映射
-        buyDO.setSource(String.valueOf(buyDTO.getSource()));
+        buyDO.setSource(buyDTO.getSource() == null ? "0" : buyDTO.getSource());
 //        buyDO.setFrame(String.valueOf(buyDTO.getFrame())); // 用户ID 通过负载信息获取
         buyDO.setSupplier(String.valueOf(buyDTO.getSupplier()));
         buyDO.setTime(convertDateStringToLocalDateTime(buyDTO.getTime()));
@@ -154,13 +157,11 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
         buyDO.setAccount(buyDTO.getAccount() != null ? String.valueOf(buyDTO.getAccount()) : null);
         buyDO.setPeople(buyDTO.getPeople() != null ? String.valueOf(buyDTO.getPeople()) : null);
         buyDO.setLogistics(buyDTO.getLogistics());
-//        buyDO.setFile(buyDTO.getFile());
-        //TODO：这个文件需要先通过一个接口生成一个文件路径，然后再将这个文件路径保存到 PurchaseNoteBuyDTO.file 中
-        buyDO.setFile("需要添加到dfs中生成一个path");
+        buyDO.setFile(buyDTO.getFile() == null ? "" : buyDTO.getFile());
         buyDO.setData(buyDTO.getData());
         buyDO.setExamine(0);
         buyDO.setNucleus(0);
-        buyDO.setCse(0);
+        buyDO.setCse(buyDTO.getCost() != null && buyDTO.getCost().signum() > 0 ? 0 : 3);
         buyDO.setInvoice(0);
         buyDO.setCheck(false);
 //        buyDO.setUser("System");
@@ -187,13 +188,14 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
             buyInfoDO.setPid(pid); // 使用主表返回的ID作为外键
 
             // 字段映射
-            buyInfoDO.setSource(source);
+            buyInfoDO.setSource(infoDTO.getSource());
             buyInfoDO.setGoods(String.valueOf(infoDTO.getGoods()));
             buyInfoDO.setAttr(infoDTO.getAttr());
             buyInfoDO.setUnit(infoDTO.getUnit());
             buyInfoDO.setWarehouse(infoDTO.getWarehouse());
             buyInfoDO.setBatch(infoDTO.getBatch());
-            buyInfoDO.setMfd(LocalDate.from(convertDateStringToLocalDateTime(infoDTO.getMfd())));
+            buyInfoDO.setMfd(infoDTO.getMfd() == null || infoDTO.getMfd().trim().isEmpty() ? null : LocalDate.from(convertDateStringToLocalDateTime(infoDTO.getMfd())));
+            buyInfoDO.setSerial(infoDTO.getSerial());
             buyInfoDO.setPrice(infoDTO.getPrice());
             buyInfoDO.setNums(infoDTO.getNums());
             buyInfoDO.setDiscount(infoDTO.getDiscount());
@@ -222,7 +224,7 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
     private LocalDateTime convertDateStringToLocalDateTime(String dateStr) {
         // 处理空字符串或null，返回当前时间
         if (dateStr == null || dateStr.trim().isEmpty()) {
-            return LocalDateTime.now();
+            throw new IllegalArgumentException("单据日期不能为空");
         }
 
         // 定义支持的日期格式（可根据实际需求扩展）
@@ -247,7 +249,7 @@ public class PurchaseNoteServiceImpl implements PurchaseNoteService {
         }
 
         // 所有格式都解析失败时，返回当前时间
-        return LocalDateTime.now();
+        throw new IllegalArgumentException("日期格式无效，请使用yyyy-MM-dd或完整日期时间");
     }
 
     /**

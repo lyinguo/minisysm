@@ -26,7 +26,14 @@ import java.util.stream.StreamSupport;
  * @version 1.0.0
  */
 @RestControllerAdvice
+@lombok.extern.slf4j.Slf4j
 public class GlobalExceptionHandler {
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public JsonVO<String> status(org.springframework.web.server.ResponseStatusException error) {
+        return JsonVO.create(null,error.getStatus().value(),error.getReason());
+    }
+    @ExceptionHandler(IllegalArgumentException.class)
+    public JsonVO<String> invalid(IllegalArgumentException error) { return JsonVO.create(null,9995,error.getMessage()); }
     /**
      * 系统通用异常处理
      * @param e 异常类型
@@ -37,7 +44,8 @@ public class GlobalExceptionHandler {
         if (e instanceof HttpMediaTypeException) {
             return JsonVO.create(e.getMessage(), ResultStatus.CONTENT_TYPE_ERR);
         }
-        return JsonVO.create(e.getMessage(), ResultStatus.SERVER_ERROR);
+        log.error("采购服务处理失败",e);
+        return JsonVO.create(null, ResultStatus.SERVER_ERROR);
     }
 
     /**

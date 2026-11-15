@@ -63,7 +63,7 @@ export interface PurchaseNoteInfoDTO {
   /** 商品单位 */
   unit: string
   /** 仓库ID */
-  warehouse: number
+  warehouse: string | number
 }
 
 // 采购单主表信息
@@ -85,11 +85,11 @@ export interface PurchaseNoteBuyDTO {
   /** 单据编号 */
   number: string
   /** 关联人员ID */
-  people: number
+  people: string | number
   /** 关联单据（BOR，用这个来确定是否为采购订单传来，非零表示生成而来的） */
-  source?: number
+  source?: string | number
   /** 供应商ID */
-  supplier: number
+  supplier: string | number
   /** 单据时间 */
   time: string
   /** 单据金额 */

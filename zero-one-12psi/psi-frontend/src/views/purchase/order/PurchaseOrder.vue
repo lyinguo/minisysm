@@ -58,7 +58,7 @@
         <div class="action-buttons-container">
           <!-- 未审核状态：显示保存和刷新 -->
           <ButtonGroup v-if="!isAudited" align="right" gap="0px">
-            <BusinessButton action-type="save" @action="handleSave" />
+            <BusinessButton action-type="save" custom-text="保存草稿" :loading="savingPurchase" :disabled="savingPurchase" @action="handleSave" />
             <BusinessButton action-type="refresh" @action="handleRefresh" />
           </ButtonGroup>
 
@@ -305,7 +305,7 @@
     </div>
 
     <!-- 底部表单 -->
-    <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" />
+    <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.paidAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
 
     <!-- 商品选择弹窗（用于 el-table） -->
     <OperationPopTable
@@ -1442,7 +1442,10 @@ const handleProductConfirm = (selectedProducts: any[]) => {
 /**
  * 保存按钮处理函数
  */
+const savingPurchase = ref(false)
 async function handleSave() {
+  if (savingPurchase.value) return
+  savingPurchase.value = true
   console.log('保存数据')
   console.log('头部表单数据:', headerForm)
 
@@ -1483,21 +1486,6 @@ async function handleSave() {
       return
     }
     
-    // 验证供应商ID是否在Java int范围内（-2147483648 到 2147483647）
-    const supplierIdNum = Number(supplierId.value)
-    const INT_MIN = -2147483648
-    const INT_MAX = 2147483647
-    if (isNaN(supplierIdNum) || supplierIdNum < INT_MIN || supplierIdNum > INT_MAX) {
-      ElMessage.error(
-        `供应商ID值超出范围（${supplierId.value}）。Java int类型范围：${INT_MIN} 到 ${INT_MAX}。请联系后端开发人员将supplier字段改为Long类型。`
-      )
-      console.error('供应商ID超出范围:', {
-        supplierId: supplierId.value,
-        supplierIdNum,
-        intRange: `${INT_MIN} 到 ${INT_MAX}`
-      })
-      return
-    }
     if (!headerForm.documentNumber) {
       ElMessage.warning('请输入单据编号')
       return
@@ -1506,20 +1494,9 @@ async function handleSave() {
       ElMessage.warning('请选择单据日期')
       return
     }
-    if (!documentFormData.relatedPerson) {
-      ElMessage.warning('请选择关联人员')
-      return
-    }
-    if (!documentFormData.settlementAccount) {
-      ElMessage.warning('请选择结算账户')
-      return
-    }
-    
-    // 验证结算账户ID是否有效
-    // 后端需要字符串类型的账户ID
-    const accountId = documentFormData.settlementAccount
-    if (!accountId) {
-      ElMessage.warning('请选择有效的结算账户')
+    const accountId = String(documentFormData.settlementAccount || '')
+    if (Number(documentFormData.paidAmount) > 0 && (!accountId || accountId === '0')) {
+      ElMessage.warning('填写实付金额时请选择结算账户')
       return
     }
 
@@ -1533,9 +1510,9 @@ async function handleSave() {
       logistics: documentFormData.logistics?.number || documentFormData.logistics?.name || '',
       money: Number(documentFormData.paidAmount) || 0,
       number: headerForm.documentNumber,
-      people: Number(documentFormData.relatedPerson) || 0,
+      people: String(documentFormData.relatedPerson || ''),
       source: 0, // 采购单默认为0，如果是从采购订单生成则为非0
-      supplier: Number(supplierId.value),
+      supplier: String(supplierId.value),
       time: headerForm.documentDate,
       total: Number(documentFormData.documentCost) || 0
     }
@@ -1555,12 +1532,12 @@ async function handleSave() {
       }
       const goods = String(goodsId)
       
-      // 将 warehouse ID 转换为数字类型（后端期望 number 类型）
+      // 仓库标识保持字符串，兼容UUID和长编号。
       if (!row.warehouseId) {
         throw new Error(`第 ${index + 1} 行的仓库ID不能为空，请选择仓库`)
       }
-      const warehouse = Number(row.warehouseId)
-      if (isNaN(warehouse) || warehouse === 0) {
+      const warehouse = String(row.warehouseId)
+      if (!warehouse || warehouse === '0') {
         throw new Error(`第 ${index + 1} 行的仓库ID格式错误，请重新选择仓库`)
       }
       
@@ -1594,7 +1571,7 @@ async function handleSave() {
         goods: goods, // 商品ID，字符串类型
         goodsNumber: isElTable ? (row.productCode || '') : (row.number || ''),
         logistics: documentFormData.logistics?.number || documentFormData.logistics?.name || '',
-        mfd: new Date().toISOString().split('T')[0], // 生产日期，默认今天
+        mfd: row.mfd || '', // 普通商品不生成虚构生产日期
         money: Number(documentFormData.paidAmount) || 0,
         name: isElTable ? (row.productName || '') : (row.name || ''),
         noteTotal: Number(documentFormData.documentCost) || 0,
@@ -1602,7 +1579,7 @@ async function handleSave() {
         nums: isElTable ? (Number(row.quantity) || 0) : (Number(row.nums) || 0),
         people: String(documentFormData.relatedPerson || ''),
         price: Number(row.price) || 0,
-        serial: '[]', // 序列号，默认为空数组
+        serial: typeof row.serial === 'string' ? row.serial : JSON.stringify(row.serial || []),
         source: '0', // 关联详情ID，默认为0
         spec: row.spec || '',
         supplier: String(supplierId.value || ''),
@@ -1612,7 +1589,7 @@ async function handleSave() {
         total: discountedTotal,
         tpt: tpt,
         unit: unit, // 确保是字符串类型
-        warehouse: warehouse // 仓库ID，数字类型
+        warehouse: warehouse
       }
     })
 
@@ -1638,17 +1615,18 @@ async function handleSave() {
         documentNumber: headerForm.documentNumber
       },
       tableData: validTableData,
-      isAudited: true,
+      isAudited: false,
       isChecked: isChecked.value
     })
 
-    // 保存成功后，设置为已审核状态
-    isAudited.value = true
-    ElMessage.success(`采购单保存成功，共 ${validTableData.length} 条商品数据`)
+    isAudited.value = false
+    ElMessage.success(`采购草稿已保存，共 ${validTableData.length} 条商品数据`)
   } catch (error: any) {
     console.error('❌ 保存采购单失败:', error)
     const errorMessage = error.message || error.response?.data?.message || '保存失败，请检查数据后重试'
     ElMessage.error(errorMessage)
+  } finally {
+    savingPurchase.value = false
   }
 }
 

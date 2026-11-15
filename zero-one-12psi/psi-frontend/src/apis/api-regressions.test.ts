@@ -6,9 +6,42 @@ import { SupplierAPI } from './basicdata/supplier'
 import request from './openapi-ts-request-shim'
 import { getOrgTree } from './common'
 import { SaleOrderApi } from './sales/order'
+import { PurchaseNoteAPI } from './purchase/purchaseOrder'
+import type { PurchaseNoteAddDTO } from './purchase/purchaseOrder/type'
 
 describe('unfinished API actions', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('rejects a procurement business failure instead of reporting the draft saved', async () => {
+    mocks.post.mockResolvedValue({ code: 9995, message: '采购单编号已被使用' })
+    const body = {
+      purchaseNoteBuyDTO: { supplier: 'supplier-uuid', people: '', account: '', time: '2026-11-15', number: 'PURCHASE-QA', money: 0, total: 100, actual: 100, cost: 0 },
+      purchaseNoteInfoDTOS: [{ goods: 'goods-uuid', warehouse: 'warehouse-uuid', unit: 'unit', nums: 1, price: 100 }]
+    } as PurchaseNoteAddDTO
+    await expect(PurchaseNoteAPI.addPurchaseNote(body)).rejects.toThrow('采购单编号已被使用')
+  })
+  it.each(['b7dcd471c1ef4a4a911b06273e92156e', '12345678901234567890'])('preserves procurement string identifiers: %s', async supplier => {
+    mocks.post.mockResolvedValue({ code: 10000, data: 'persisted-purchase-id' })
+    const body = {
+      purchaseNoteBuyDTO: { supplier, people: 'person-uuid', account: 'account-uuid', source: 'order-uuid', time: '2026-11-15', number: 'PURCHASE-QA', money: 0, total: 200, actual: 226, cost: 0 },
+      purchaseNoteInfoDTOS: [{ goods: 'goods-uuid', warehouse: 'warehouse-uuid', unit: 'unit', mfd: '', serial: '["SN1","SN2"]', price: 100, nums: 2, tax: .13, total: 200, tpt: 226 }]
+    } as PurchaseNoteAddDTO
+    await PurchaseNoteAPI.addPurchaseNote(body)
+    const payload = mocks.post.mock.calls[0][1]
+    expect(payload.purchaseNoteBuyDTO).toMatchObject({ supplier, people: 'person-uuid', source: 'order-uuid' })
+    expect(payload.purchaseNoteInfoDTOS[0]).toMatchObject({ goods: 'goods-uuid', warehouse: 'warehouse-uuid', mfd: '', serial: '["SN1","SN2"]' })
+  })
+  it('allows unpaid procurement without a person or account and requires an account for payment', async () => {
+    const body = {
+      purchaseNoteBuyDTO: { supplier: 'supplier-uuid', people: '', account: '', time: '2026-11-15', number: 'PURCHASE-QA', money: 0, total: 100, actual: 100, cost: 0 },
+      purchaseNoteInfoDTOS: [{ goods: 'goods-uuid', warehouse: 'warehouse-uuid', unit: 'unit', nums: 1, price: 100 }]
+    } as PurchaseNoteAddDTO
+    mocks.post.mockResolvedValue({ code: 10000, data: 'persisted-purchase-id' })
+    await PurchaseNoteAPI.addPurchaseNote(body)
+    expect(mocks.post).toHaveBeenCalledTimes(1)
+    body.purchaseNoteBuyDTO.money = 1
+    await expect(PurchaseNoteAPI.addPurchaseNote(body)).rejects.toThrow('填写实付金额时请选择结算账户')
+    expect(mocks.post).toHaveBeenCalledTimes(1)
+  })
   it.each([true, false])('sends sales audit and check IDs as JSON arrays (target=%s)', async target => {
     const api = new SaleOrderApi()
     const ids = ['1234567890123456789', 'sale-uuid']

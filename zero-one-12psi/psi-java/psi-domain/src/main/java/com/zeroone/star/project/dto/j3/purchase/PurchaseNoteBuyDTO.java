@@ -19,7 +19,7 @@ public class PurchaseNoteBuyDTO {
 
     @ApiModelProperty(value = "供应商ID", required = true, example = "1")
     @NotNull(message = "供应商ID不能为空")
-    @Min(value = 1, message = "供应商ID必须大于0（需存在有效的供应商）") // 供应商必须存在，ID至少为1
+    @Size(max = 32, message = "供应商ID最多32个字符")
     private String supplier;
 
     @ApiModelProperty(value = "单据时间（Time）", required = true, example = "2025-10-30")
@@ -51,11 +51,11 @@ public class PurchaseNoteBuyDTO {
     private BigDecimal cost;
 
     @ApiModelProperty(value = "结算账户ID",required = true, example = "1")
-    @Min(value = 0, message = "结算账户ID不能小于0（若填写需为有效账户）") // 可选字段，填写时需非负
+    @Size(max = 32, message = "结算账户ID最多32个字符")
     private String account;
 
     @ApiModelProperty(value = "关联人员ID", required = true,example = "1")
-    @Min(value = 0, message = "关联人员ID不能小于0（填写需为有效人员）")
+    @Size(max = 32, message = "关联人员ID最多32个字符")
     private String people;
 
     @ApiModelProperty(value = "物流信息", required = false, example = "sf12345")
@@ -70,7 +70,6 @@ public class PurchaseNoteBuyDTO {
     private String data;
 
     @ApiModelProperty(value = "关联单据|BOR(用这个来确定是否为采购订单传来非零表示生成而来的)", required = false, example = "0")
-    @NotNull(message = "关联单据ID不能为空")
-    @Min(value = 0, message = "关联单据ID不能小于0，默认为0") // 允许0（非生成）或正数（生成而来）
+    @Size(max = 32, message = "关联单据ID最多32个字符")
     private String source;
 }
