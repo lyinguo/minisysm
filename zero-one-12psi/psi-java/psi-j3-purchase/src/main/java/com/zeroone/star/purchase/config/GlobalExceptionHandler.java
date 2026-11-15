@@ -34,6 +34,8 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(IllegalArgumentException.class)
     public JsonVO<String> invalid(IllegalArgumentException error) { return JsonVO.create(null,9995,error.getMessage()); }
+    @ExceptionHandler(IllegalStateException.class)
+    public JsonVO<String> conflict(IllegalStateException error) { return JsonVO.create(null,9999,error.getMessage()); }
     /**
      * 系统通用异常处理
      * @param e 异常类型

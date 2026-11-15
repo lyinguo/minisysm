@@ -37,6 +37,9 @@ public class PurchaseDraftValidation {
         }
     }
     public void validate(PurchaseNoteAddDTO request) {
+        validate(request,"");
+    }
+    public void validate(PurchaseNoteAddDTO request,String excludeId) {
         if(!TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("采购单保存必须位于事务中");
         if(request==null || request.getPurchaseNoteBuyDTO()==null || request.getPurchaseNoteInfoDTOS()==null || request.getPurchaseNoteInfoDTOS().isEmpty()) throw new IllegalArgumentException("采购单及商品明细不能为空");
         UserDTO actor;
@@ -54,7 +57,7 @@ public class PurchaseDraftValidation {
         String number=head.getNumber()==null ? "":head.getNumber().trim();
         if(number.isEmpty() || number.length()>32) throw new IllegalArgumentException("采购编号必须为1到32个字符");
         head.setNumber(number);
-        if(!db.queryForList("SELECT id FROM buy WHERE number=? FOR UPDATE",number).isEmpty()) throw new IllegalArgumentException("采购单编号已被使用");
+        if(!db.queryForList("SELECT id FROM buy WHERE number=? AND id<>? FOR UPDATE",number,excludeId).isEmpty()) throw new IllegalArgumentException("采购单编号已被使用");
         reference("supplier",head.getSupplier(),"供应商",frame,false);
         reference("account",head.getAccount(),"结算账户",frame,true);
         reference("people",head.getPeople(),"关联人员",frame,true);

@@ -51,6 +51,13 @@ import java.util.List;
 @Validated
 @Slf4j
 public class PurchaseNoteController implements PurchaseNoteApis {
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseDraftUpdateService draftUpdates;
+    @GetMapping("/document/{id}")
+    @ApiOperation("获取完整采购单及编辑版本")
+    public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id) {
+        return JsonVO.success(draftUpdates.detail(id));
+    }
     @Autowired
     private IBuyService iBuyService;
 

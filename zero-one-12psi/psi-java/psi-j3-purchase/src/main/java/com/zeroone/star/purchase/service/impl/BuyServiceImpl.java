@@ -96,6 +96,9 @@ import static com.alibaba.druid.util.StringUtils.*;
 @Slf4j
 @Service("purchaseIBuyService")
 public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBuyService {
+    @Autowired
+    private com.zeroone.star.purchase.service.PurchaseDraftUpdateService purchaseDraftUpdate;
+
     @Resource
     private BuyMapper buyMapper;
     @Resource
@@ -625,113 +628,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      */
     @Override
     public JsonVO<String> updateBuy(RevisePurchaseDTO revisePurchaseDTO) {
-        //把前端接受的数据依次放到对应DO中去
-        BuyDO buyDO = BuyDO.builder()
-                .id(revisePurchaseDTO.getId())
-                .supplier(revisePurchaseDTO.getSupplier())
-                .time(revisePurchaseDTO.getTime())
-                .number(revisePurchaseDTO.getNumber())
-                .actual(revisePurchaseDTO.getActual())
-                .money(revisePurchaseDTO.getMoney())
-                .account(revisePurchaseDTO.getAccount())
-                .people(revisePurchaseDTO.getPeople())
-                .logistics(revisePurchaseDTO.getLogistics())
-                .file(revisePurchaseDTO.getFile())
-                .data(revisePurchaseDTO.getData())
-                .examine(revisePurchaseDTO.getExamine())
-                .check(revisePurchaseDTO.getCheckStatus()==0?false:true)
-                .build();
-        //前端获取的
-        int examineTemp = revisePurchaseDTO.getExamine();
-        //数据库中的
-        int examineSQL = buyMapper.selectById(revisePurchaseDTO.getId()).getExamine();
-        int rows = buyMapper.updateByPurchaseId(buyDO);
-        if( rows==0){
-            return JsonVO.fail("更新失败,采购单记录不存在");
-        }
-        List<PurchaseBuyInfoDTO> details = revisePurchaseDTO.getDetails();
-        //需要判断该条数据是否之前存在过，存在则修改，不存在就新增
-        if(details!=null && !details.isEmpty()){
-            for (PurchaseBuyInfoDTO detail : details) {
-                String id = detail.getId();
-                //折扣额
-                BigDecimal dsc = detail.getPrice()
-                        .multiply(detail.getDiscount())
-                        .multiply(detail.getNums())
-                        .multiply(BigDecimal.valueOf(0.01))
-                        .setScale(4, RoundingMode.HALF_UP);
-                //金额
-                BigDecimal total = detail.getPrice()
-                        .multiply(detail.getNums())
-                        .subtract(dsc)
-                        .setScale(4, RoundingMode.HALF_UP);
-                //税额
-                BigDecimal tat = total
-                        .multiply(detail.getTax())
-                        .multiply(BigDecimal.valueOf(0.01))
-                        .setScale(4, RoundingMode.HALF_UP);
-                //价税合计
-                BigDecimal tpt = tat.add(total)
-                        .setScale(4, RoundingMode.HALF_UP);
-                BuyInfoDO buyInfoDO = BuyInfoDO.builder()
-                        .id(detail.getId())
-                        .pid(revisePurchaseDTO.getId())
-                        .goods(detail.getGoods())
-                        .unit(detail.getUnit())
-                        .warehouse(detail.getWarehouse())
-                        .price(detail.getPrice())
-                        .nums(detail.getNums())
-                        .discount(detail.getDiscount())
-                        .dsc(dsc)
-                        .total(total)
-                        .tax(detail.getTax())
-                        .tat(tat)
-                        .tpt(tpt)
-                        .data(detail.getData())
-                        .retreat(detail.getRetreat())
-                        .build();
-                if(buyInfoMapper.selectById(buyInfoDO.getId()) == null){
-                    rows = buyInfoMapper.insert(buyInfoDO);
-                    if( rows==0){
-                        return JsonVO.fail("更新失败,采购单详情插入失败");
-                    }
-                }
-                else {
-                    rows = buyInfoMapper.updateById(buyInfoDO);
-                    if( rows==0){
-                        return JsonVO.fail("更新失败,采购单详情更新失败");
-                    }
-                }
-                //审核反审核相应的库存更新
-                if(examineTemp!=examineSQL){
-                    //需要去回档库存
-                    if(examineTemp==0){
-                        roomMapper.updateNumsByWarehouseAndGoods(detail.getWarehouse(), detail.getGoods(),detail.getNums());
-                    } else if (examineTemp==1) {
-                        //去消耗库存
-                        roomMapper.updateNumsByWarehouseAndGoods(detail.getWarehouse(), detail.getGoods(),detail.getNums().multiply(BigDecimal.valueOf(-1)));
-
-                    }
-                    else{return JsonVO.fail("更新失败,审核数据不对");}
-                }
-            }
-        }
-         List<String> incomingIds = details.stream()
-                .map(d -> org.springframework.util.StringUtils.hasText(d.getId()) ? d.getId() : null)
-                .filter(Objects::nonNull).collect(Collectors.toList());
-         buyInfoMapper.deleteByPidAndIdNotIn(revisePurchaseDTO.getId(), incomingIds);
-
-        //审核反审核相应的资金更新
-        if(examineTemp!=examineSQL){
-            //需要去回档资金
-            if(examineTemp==0){
-                accountMapper.updateAccountByName(revisePurchaseDTO.getAccount(),revisePurchaseDTO.getMoney().multiply(BigDecimal.valueOf(-1)));
-            } else if (examineTemp==1) {
-                //去增加资金
-                accountMapper.updateAccountByName(revisePurchaseDTO.getAccount(),revisePurchaseDTO.getMoney());
-            }
-            else{return JsonVO.fail("更新失败,审核数据不对");}
-        }
+        purchaseDraftUpdate.update(revisePurchaseDTO);
         return JsonVO.success("更新成功");
     }
 

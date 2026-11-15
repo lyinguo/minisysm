@@ -21,6 +21,9 @@ import java.util.List;
 @Data
 @ApiModel("修改采购单")
 public class RevisePurchaseDTO {
+    @ApiModelProperty(value="完整单据读取时返回的版本，保存时必须原样提交",required=true)
+    @NotBlank(message="请先读取完整采购单，再提交编辑版本")
+    private String version;
     @ApiModelProperty(value = "采购单ID", example = "1", required = true)
     @NotBlank(message = "ID不能为空")
     @Size(max = 32, message = "ID长度不能超过32")
@@ -55,7 +58,6 @@ public class RevisePurchaseDTO {
     private BigDecimal money;
 
     @ApiModelProperty(value = "结算账户", example = "ICBC-xxx")
-    @NotNull(message = "结算账户不能为空")
     @Size(max = 64, message = "结算账户长度不能超过64")
     private String account;
 
@@ -67,9 +69,8 @@ public class RevisePurchaseDTO {
     @Size(max = 256, message = "物流信息长度不能超过256")
     private String logistics;
 
-    @ApiModelProperty(value = "单据附件",example = "http://localhost:8080/file.word")
-    @Size(max = 500, message = "附件URL长度不能超过500字符")
-    @Pattern(regexp = "^(https?|ftp)://[^\\s/$.?#].[^\\s]*$", message = "附件URL格式不正确")
+    @ApiModelProperty(value = "单据附件元数据，允许空值、相对文件路径或附件JSON数组")
+    @Size(max = 16384, message = "附件元数据长度不能超过16384字符")
     private String file;
 
     @ApiModelProperty(value = "备注信息", example = "可以为空")
