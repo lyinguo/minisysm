@@ -5,6 +5,13 @@ import { returnDraftApi } from './returnDraft'
 const input = { source: 'a'.repeat(32), sourceVersion: 'b'.repeat(64), number: 'QA-RETURN', time: '2026-11-16 12:00:00', money: 0, cost: 0, account: '', data: '', salesReturnOrderInfos: [{ source: 'line-uuid', nums: 1 }] }
 describe('persisted return draft transport', () => {
   beforeEach(() => vi.clearAllMocks())
+  it('posts financial transitions with the frozen version and rejects incomplete maps before transport', async () => {
+    http.post.mockResolvedValue({ code: 10000, data: 1 })
+    expect(await returnDraftApi.post(['first'], 1, 'a'.repeat(64))).toBe(1)
+    expect(http.post).toHaveBeenCalledWith('/sale/return/return/examine', { ids: ['first'], status: 1, versions: { first: 'a'.repeat(64) } })
+    await expect(returnDraftApi.post(['first', 'second'], 0, { first: 'a'.repeat(64) })).rejects.toThrow('全部选中')
+    expect(http.post).toHaveBeenCalledTimes(1); expect(http.get).not.toHaveBeenCalled()
+  })
   it('sends the complete frozen review map without rereading versions', async () => {
     const versions = { first: 'a'.repeat(64), second: 'b'.repeat(64) }
     http.post.mockResolvedValue({ code: 10000, data: 2 })

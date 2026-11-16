@@ -66,5 +66,5 @@ public interface SaleReturnFormApis {
     /**
      * 审核/反审核销售退货单
      */
-    JsonVO examine(SaleReturnIdsDTO saleReturnIdsDTO);
+    JsonVO examine(com.zeroone.star.project.dto.j4.sale.SaleReturnReviewCommand command);
 }

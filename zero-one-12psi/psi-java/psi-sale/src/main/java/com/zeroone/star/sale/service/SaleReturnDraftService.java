@@ -81,6 +81,7 @@ public class SaleReturnDraftService {
             String source=s(line.get("source"));Map<String,Object> limit=available.get(source);
             BigDecimal quantity=amount(d(line.get("nums")),12,"退货数量");
             if(!seen.add(source) || limit==null || quantity.signum()<=0 || quantity.compareTo(d(limit.get("available")))>0)throw new IllegalArgumentException("退货来源明细重复、失效或数量超出当前可退范围");
+            previews.validateSerials(limit,quantity,s(line.get("serial")));
             Map<String,Object> original=db.queryForMap("SELECT * FROM sell_info WHERE id=? AND pid=?",source,head.get("source"));
             for(String field:Arrays.asList("goods","attr","unit","warehouse","batch","mfd"))if(!s(line.get(field)).equals(s(original.get(field))))throw new IllegalArgumentException("退货商品、仓库、属性、单位或批次与来源不一致");
             for(String field:Arrays.asList("price","discount","tax"))if(d(line.get(field)).compareTo(d(original.get(field)))!=0)throw new IllegalArgumentException("退货单价或费率与来源不一致，请重新核对");
@@ -159,6 +160,7 @@ public class SaleReturnDraftService {
             row.put("tpt",amount(d(row.get("total")).add(d(row.get("tat"))),12,"价税合计"));
             String serial=text(line.getSerial(),16000,"序列信息");if(serial.isEmpty())serial="[]";
             try{cn.hutool.json.JSONUtil.parseArray(serial);}catch(Exception error){throw new IllegalArgumentException("序列信息必须为JSON数组");}
+            previews.validateSerials(source,qty,serial);
             row.put("serial",serial);row.put("data",text(line.getData(),256,"明细备注"));lines.add(row);total=total.add(d(row.get("total")));actual=actual.add(d(row.get("tpt")));
         }
         total=amount(total,16,"单据金额");actual=amount(actual,16,"实际金额");
@@ -186,6 +188,12 @@ public class SaleReturnDraftService {
     public void delete(String id,String version){
         UserDTO actor=access.authorize("/sale/return/deleteSalesReturnOrder");sales.lockWrites();Map<String,Object> head=head(id,true);access.requireFrame(actor,s(head.get("frame")));free(head);versions.require(id,version);
         history(id,actor,"删除销售退货自由草稿");db.update("DELETE FROM sre_info WHERE pid=?",id);db.update("DELETE FROM sre WHERE id=?",id);
+    }
+    @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
+    public Map<String,Object> sourceOptions(String id){
+        UserDTO actor=access.authorize("/sale/return/updateSalesReturnOrder");Map<String,Object> head=head(id,false);access.requireFrame(actor,s(head.get("frame")));free(head);
+        SaleReturnGenerateDTO preview=previews.previewForDraft(s(head.get("source")),id);
+        Map<String,Object> result=new LinkedHashMap<>();result.put("version",versions.version(id,false));result.put("sourceVersion",preview.getSourceVersion());result.put("items",preview.getItems());return result;
     }
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public List<Map<String,Object>> accounts(String source,String keyword,boolean updating){

@@ -52,6 +52,8 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     @Resource
     private com.zeroone.star.sale.service.SaleReturnReviewService reviews;
     @Resource
+    private com.zeroone.star.sale.service.SaleReturnPostingService posting;
+    @Resource
     private SaleReturnFormService saleReturnFormService;
 
     @Resource
@@ -89,6 +91,8 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     }
     @GetMapping("/document/{id}")
     public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id){return JsonVO.success(drafts.detail(id));}
+    @GetMapping("/document/{id}/source-options")
+    public JsonVO<java.util.Map<String,Object>> sourceOptions(@PathVariable String id){return JsonVO.success(drafts.sourceOptions(id));}
     @GetMapping("/accounts")
     public JsonVO<List<java.util.Map<String,Object>>> accounts(@RequestParam String source,@RequestParam(defaultValue="") String keyword,@RequestParam(defaultValue="false") boolean updating){return JsonVO.success(drafts.accounts(source,keyword,updating));}
     public static class DraftRemoval {public String version;}
@@ -134,11 +138,7 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     }
     @PostMapping("/return/examine")
     @ApiOperation(value = "审核退货单(支持批量)")
-    public JsonVO<Integer> examine(@RequestBody @ApiParam(value = "退货单ID对象",required = true)SaleReturnIdsDTO saleReturnIdsDTO) {
-        Integer status = saleReturnIdsDTO.getStatus();
-        if(status == 1) {
-            return saleReturnFormplusService.examine(saleReturnIdsDTO);
-        }
-        return saleReturnFormplusService.unexamine(saleReturnIdsDTO);
+    public JsonVO<Integer> examine(@RequestBody SaleReturnReviewCommand command) {
+        return JsonVO.success(posting.post(command));
     }
 }

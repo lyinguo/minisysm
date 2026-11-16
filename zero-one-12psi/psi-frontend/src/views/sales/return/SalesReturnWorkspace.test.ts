@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ElementPlus, { ElSelect, ElMessageBox } from 'element-plus'
-const mocks = vi.hoisted(() => ({ sourceList: vi.fn(), sourceDocument: vi.fn(), preview: vi.fn(), list: vi.fn(), document: vi.fn(), save: vi.fn(), remove: vi.fn(), accounts: vi.fn(), review: vi.fn() }))
+const mocks = vi.hoisted(() => ({ sourceList: vi.fn(), sourceDocument: vi.fn(), preview: vi.fn(), list: vi.fn(), document: vi.fn(), save: vi.fn(), remove: vi.fn(), accounts: vi.fn(), review: vi.fn(), post: vi.fn(), sourceOptions: vi.fn() }))
 vi.mock('@/apis/sales/order', () => ({ saleOrderApi: { getSaleList: mocks.sourceList, getDocument: mocks.sourceDocument, getGenerateReturnData: mocks.preview } }))
 vi.mock('@/apis/sales/returnDraft', () => ({ returnDraftApi: mocks }))
 import Workspace from './SalesReturnWorkspace.vue'
@@ -28,6 +28,45 @@ describe('actual sales return draft workspace', () => {
     mocks.save.mockResolvedValue(identifier)
     mocks.accounts.mockResolvedValue([])
     mocks.review.mockResolvedValue(1)
+    mocks.post.mockResolvedValue(1)
+    mocks.sourceOptions.mockResolvedValue({ version: 'd'.repeat(64), sourceVersion, items: [{ source: 'source-line', serialRequired: false, availableSerials: [] }] })
+  })
+  it('submits the displayed checked version for financial posting without saving or refreshing first', async () => {
+    const checked = document(); checked.header.check = 1; mocks.document.mockResolvedValue(checked)
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const wrapper = await render('?draft=' + identifier)
+    try { await button(wrapper, '审核并入账'); expect(mocks.post).toHaveBeenCalledWith([identifier], 1, 'd'.repeat(64)); expect(mocks.document).toHaveBeenCalledTimes(2); expect(mocks.save).not.toHaveBeenCalled() } finally { wrapper.unmount() }
+  })
+  it('keeps rejected posting visible without rereading and blessing a newer version', async () => {
+    const checked = document(); checked.header.check = 1; mocks.document.mockResolvedValue(checked)
+    mocks.post.mockRejectedValueOnce(new Error('退款账户余额不足'))
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const wrapper = await render('?draft=' + identifier)
+    try { await button(wrapper, '审核并入账'); expect(wrapper.text()).toContain('退款账户余额不足'); expect(mocks.document).toHaveBeenCalledTimes(1); expect(mocks.save).not.toHaveBeenCalled() } finally { wrapper.unmount() }
+  })
+  it('refuses options read from a different version and disables saving until an explicit reread', async () => {
+    mocks.sourceOptions.mockResolvedValue({ version: 'e'.repeat(64), sourceVersion, items: [] })
+    const wrapper = await render('?draft=' + identifier)
+    try { expect(wrapper.text()).toContain('退货单或来源已变化'); await button(wrapper, '保存草稿修改'); expect(mocks.save).not.toHaveBeenCalled(); expect(mocks.review).not.toHaveBeenCalled() } finally { wrapper.unmount() }
+  })
+  it('allows a reviewer to submit the known detail version when editing options are forbidden', async () => {
+    mocks.sourceOptions.mockRejectedValueOnce(new Error('无编辑权限'))
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const wrapper = await render('?draft=' + identifier)
+    try { expect(wrapper.text()).toContain('无编辑权限'); await button(wrapper, '保存草稿修改'); expect(mocks.save).not.toHaveBeenCalled(); await button(wrapper, '核对退货单'); expect(mocks.review).toHaveBeenCalledWith([identifier], 1, 'd'.repeat(64)) } finally { wrapper.unmount() }
+  })
+  it('requires an explicit original serial selection and persists only those selected numbers', async () => {
+    mocks.preview.mockResolvedValue({ code: 10000, data: { source, sourceVersion, sourceNumber: 'QA-SOURCE', customer: 'customer', items: [{ source: 'source-line', goodsName: 'QA goods', unit: 'unit', available: 2, nums: 2, price: 100, tpt: 226, serial: '[]', serialRequired: true, availableSerials: ['ORIGINAL-A', 'ORIGINAL-B'], sourceQuantity: 2, serialBaseQuantity: 2 }] } })
+    const wrapper = await render()
+    try {
+      await button(wrapper, '选择此来源'); await button(wrapper, '保存退货草稿')
+      expect(wrapper.text()).toContain('请按退货基础数量选择可用的原销售序列号'); expect(mocks.save).not.toHaveBeenCalled()
+      const serialPicker = wrapper.findAllComponents(ElSelect).find(select => select.props('multiple'))!
+      expect(serialPicker.exists()).toBe(true)
+      serialPicker.vm.$emit('update:modelValue', ['ORIGINAL-A', 'ORIGINAL-B']); await flushPromises()
+      await button(wrapper, '保存退货草稿')
+      expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ salesReturnOrderInfos: [expect.objectContaining({ serial: '["ORIGINAL-A","ORIGINAL-B"]' })] }))
+    } finally { wrapper.unmount() }
   })
   it('reviews the displayed saved version and rereads only after successful mutation', async () => {
     vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)

@@ -124,6 +124,7 @@ class SaleReturnReviewSuite(SaleReturnDraftSuite):
                 with qa_resource_grants(self.state, ['/sale/return/return/check'], [role]):
                     assert self.review([identifier], versions=frozen).get('code') == 403
                 with qa_resource_grants(self.state, ['/sale/return/return/check', '/sale/form/getSaleDetail'], [role]):
+                    assert self.request('GET', '/sale/return/document/' + identifier + '/source-options', service='sale').get('code') == 403
                     assert self.review([identifier], versions=frozen).get('code') == 10000
                 assert self.review([identifier], status=0, versions=frozen).get('code') == 403
             finally:

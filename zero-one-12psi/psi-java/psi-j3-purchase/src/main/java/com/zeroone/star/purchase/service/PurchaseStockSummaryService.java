@@ -123,6 +123,8 @@ public class PurchaseStockSummaryService {
                     cost=exactValue.divide(quantity,8,RoundingMode.HALF_UP);
                 }
             }
+            // A sales return retains the exact source issue value when purchases replay shared stock.
+            if(incoming && "sre".equals(type))exactValue=d(row.get("bct"));
             BigDecimal value=exactValue==null ? cost.multiply(quantity).setScale(4,RoundingMode.HALF_UP):exactValue;
             cost=value.divide(quantity,4,RoundingMode.HALF_UP);
             if(closed) { cost=d(row.get("uct"));value=d(row.get("bct")); }

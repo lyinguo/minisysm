@@ -21,7 +21,21 @@ export interface ReturnDraftInput {
   data: string
   salesReturnOrderInfos: { id?: string; source: string; nums: number; serial?: string; data?: string }[]
 }
+async function submitReviewed(path: string, ids: string[], status: 0 | 1, reviewed: string | Record<string, string>) {
+  const versions = typeof reviewed === 'string' && ids.length === 1 ? { [ids[0]]: reviewed } : reviewed
+  if (!ids.length || ids.length > 200 || new Set(ids).size !== ids.length || !versions || typeof versions !== 'object' || Object.keys(versions).length !== ids.length || ids.some(id => !id || !/^[0-9a-f]{64}$/.test(versions[id] || ''))) throw new Error('请重新读取全部选中退货单并核对版本')
+  const response = await useHttp().post(path, { ids: [...ids], status, versions: { ...versions } })
+  if (response.code !== 10000) throw new Error(extractErrorMessage(response) || '退货状态操作失败')
+  if (!Number.isInteger(response.data) || response.data < 0 || response.data > ids.length) throw new Error('服务未返回有效核对结果，请重新读取单据核实')
+  return response.data as number
+}
 export const returnDraftApi = {
+  async sourceOptions(id: string): Promise<Pick<ReturnDraftDocument, 'version' | 'sourceVersion' | 'items'>> {
+    const response = await useHttp().get('/sale/return/document/' + encodeURIComponent(id) + '/source-options')
+    if (response.code !== 10000) throw new Error(extractErrorMessage(response) || '来源序列号读取失败')
+    if (!Array.isArray(response.data?.items) || !/^[0-9a-f]{64}$/.test(response.data?.version || '') || !/^[0-9a-f]{64}$/.test(response.data?.sourceVersion || '')) throw new Error('来源选项数据不完整，请重新读取')
+    return response.data
+  },
   async document(id: string): Promise<ReturnDraftDocument> {
     const response = await useHttp().get('/sale/return/document/' + encodeURIComponent(id))
     if (response.code !== 10000) throw new Error(extractErrorMessage(response) || '退货详情读取失败')
@@ -52,11 +66,9 @@ export const returnDraftApi = {
     return response.data
   },
   async review(ids: string[], status: 0 | 1, reviewed: string | Record<string, string>) {
-    const versions = typeof reviewed === 'string' && ids.length === 1 ? { [ids[0]]: reviewed } : reviewed
-    if (!ids.length || ids.length > 200 || new Set(ids).size !== ids.length || !versions || typeof versions !== 'object' || Object.keys(versions).length !== ids.length || ids.some(id => !id || !/^[0-9a-f]{64}$/.test(versions[id] || ''))) throw new Error('请重新读取全部选中退货单并核对版本')
-    const response = await useHttp().post('/sale/return/return/check', { ids: [...ids], status, versions: { ...versions } })
-    if (response.code !== 10000) throw new Error(extractErrorMessage(response) || '退货核对失败')
-    if (!Number.isInteger(response.data) || response.data < 0 || response.data > ids.length) throw new Error('服务未返回有效核对结果，请重新读取单据核实')
-    return response.data as number
+    return submitReviewed('/sale/return/return/check', ids, status, reviewed)
+  },
+  async post(ids: string[], status: 0 | 1, reviewed: string | Record<string, string>) {
+    return submitReviewed('/sale/return/return/examine', ids, status, reviewed)
   }
 }
