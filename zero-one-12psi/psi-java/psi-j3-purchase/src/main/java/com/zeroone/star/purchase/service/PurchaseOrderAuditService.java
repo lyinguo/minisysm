@@ -15,7 +15,8 @@ public class PurchaseOrderAuditService {
     private final PurchaseDocumentAccess access;
     private final PurchaseSupplyService supply;
     private final PurchaseDraftAmounts amounts;
-    public PurchaseOrderAuditService(JdbcTemplate db,PurchaseDocumentAccess access,PurchaseSupplyService supply,PurchaseDraftAmounts amounts) {this.db=db;this.access=access;this.supply=supply;this.amounts=amounts;}
+    private final PurchaseOrderAttachmentStore attachments;
+    public PurchaseOrderAuditService(JdbcTemplate db,PurchaseDocumentAccess access,PurchaseSupplyService supply,PurchaseDraftAmounts amounts,PurchaseOrderAttachmentStore attachments) {this.db=db;this.access=access;this.supply=supply;this.amounts=amounts;this.attachments=attachments;}
     private static String text(Object value){return value==null?"":value.toString();}
     private static int integer(Object value){return value instanceof Boolean?((Boolean)value?1:0):value==null?0:((Number)value).intValue();}
     private static BigDecimal decimal(Object value){return value==null?BigDecimal.ZERO:new BigDecimal(value.toString());}
@@ -28,6 +29,7 @@ public class PurchaseOrderAuditService {
         rows.addAll(db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS version_approval,CAST(b.state AS SIGNED) AS version_execution FROM bor b WHERE b.id=?"+suffix,id));
         rows.addAll(db.queryForList("SELECT * FROM bor_info WHERE pid=? ORDER BY id"+suffix,id));
         rows.addAll(db.queryForList("SELECT id FROM record WHERE type='bor' AND source=? ORDER BY id"+suffix,id));
+        rows.addAll(attachments.versionRows(id,locked));
         return digest(rows);
     }
     private String digest(List<Map<String,Object>> rows){
@@ -46,7 +48,7 @@ public class PurchaseOrderAuditService {
             StringBuilder result=new StringBuilder();for(byte item:digest)result.append(String.format("%02x",item & 255));return result.toString();
         }catch(java.security.NoSuchAlgorithmException error){throw new IllegalStateException("无法校验订单版本",error);}
     }
-    /** Three batch reads in the caller's list snapshot, never one lookup per row. */
+    /** Four batch reads in the caller's list snapshot, never one lookup per row. */
     public Map<String,String> versions(List<String> ids){
         Map<String,String> result=new HashMap<>();if(ids.isEmpty())return result;
         if(ids.size()>200)throw new IllegalArgumentException("每页最多200张订单");
@@ -61,6 +63,9 @@ public class PurchaseOrderAuditService {
         for(Map<String,Object> history:db.queryForList("SELECT id,source FROM record WHERE type='bor' AND source IN ("+placeholders+") ORDER BY source,id",parameters)){
             List<Map<String,Object>> rows=stored.get(text(history.get("source")));if(rows!=null)rows.add(Collections.singletonMap("id",history.get("id")));
         }
+        for(Map<String,Object> attachment:attachments.versionRows(ids)){
+            List<Map<String,Object>> rows=stored.get(text(attachment.get("order_id")));if(rows!=null)rows.add(attachment);
+        }
         for(Map.Entry<String,List<Map<String,Object>>> entry:stored.entrySet())result.put(entry.getKey(),digest(entry.getValue()));
         return result;
     }
@@ -71,7 +76,7 @@ public class PurchaseOrderAuditService {
         if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
         Map<String,Object> head=found.get(0);head.put("state",integer(head.remove("source_state")));access.requireFrame(actor,text(head.get("frame")));
         head.put("time",text(head.get("time")));head.put("arrival",text(head.get("arrival")));head.put("examine",integer(head.remove("source_approval")));
-        Map<String,Object> result=new LinkedHashMap<>();result.put("version",version(id,false));result.put("header",head);result.put("items",db.queryForList("SELECT i.*,g.name,g.number,g.spec,w.name AS warehouseName FROM bor_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));return result;
+        Map<String,Object> result=new LinkedHashMap<>();result.put("version",version(id,false));result.put("header",head);result.put("attachments",attachments.items(id));result.put("items",db.queryForList("SELECT i.*,g.name,g.number,g.spec,w.name AS warehouseName FROM bor_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));return result;
     }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String,Object> status(String id){
@@ -105,6 +110,18 @@ public class PurchaseOrderAuditService {
             db.update("INSERT INTO psi_document_write_lock(scope) VALUES(?) ON DUPLICATE KEY UPDATE scope=VALUES(scope)",scope);db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope=? FOR UPDATE",String.class,scope);
         }
     }
+    /** Called inside the attachment mutation transaction; shares the same lock order as editing/audit. */
+    public UserDTO guardAttachment(String id,String expected){
+        UserDTO actor=access.authorize("/purchase-order/update");access.authorize("/purchase-order/detail");lock();
+        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS approval,CAST(b.state AS SIGNED) AS execution FROM bor b WHERE id=? FOR UPDATE",id);
+        if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
+        Map<String,Object> head=found.get(0);access.requireFrame(actor,text(head.get("frame")));
+        if(expected==null || !expected.matches("[0-9a-f]{64}") || !expected.equals(version(id,true)))throw new IllegalStateException("采购订单已变化，请关闭详情重新打开，核对后再操作附件");
+        if(head.get("approval")==null || head.get("execution")==null || integer(head.get("approval"))!=0 || integer(head.get("execution"))!=0 || !db.queryForList("SELECT id FROM buy WHERE source=? OR source=? FOR UPDATE",id,head.get("number")).isEmpty() || !db.queryForList("SELECT i.id FROM buy_info i JOIN bor_info o ON o.id=i.source WHERE o.pid=? FOR UPDATE",id).isEmpty())throw new IllegalArgumentException("已审核、接收、关闭或有关联采购单的订单不能修改附件");
+        if(count("SELECT COUNT(*) FROM period WHERE date>=DATE(?)",head.get("time"))>0)throw new IllegalArgumentException("订单日期已结账，不能修改附件");
+        return actor;
+    }
+    String attachmentVersion(String id){return version(id,true);}
     public void guardUpdate(PurchaseOrderUpdateDTO request){
         UserDTO actor=access.authorize("/purchase-order/update");lock();
         List<Map<String,Object>> found=db.queryForList("SELECT * FROM bor WHERE id=? FOR UPDATE",request.getId());

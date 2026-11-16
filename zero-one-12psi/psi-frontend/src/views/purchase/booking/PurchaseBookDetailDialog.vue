@@ -381,6 +381,7 @@
 
       <!-- 底部表单 -->
       <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" :optional-fields="['relatedPerson', 'logistics']" :computed-amounts="true" :disabled="isApproved" />
+      <PurchaseOrderAttachments :key="String(orderId)" :order-id="String(orderId)" :version="documentVersion" :items="attachments" :disabled="isApproved || hasUnsavedChanges || saveBusy || auditBusy" :legacy="!!originalFile && originalFile !== '[]'" @updated="attachmentUpdated" @busy="attachmentBusy = $event" />
     </div>
 
     <template #footer>
@@ -404,7 +405,8 @@ import DocumentForm from '@/components/documentform/DocumentForm.vue'
 import { useRouter } from 'vue-router'
 import Warehouse from '@/components/goodSearchConpoent/Warehouse.vue'
 import type { PurchaseOrderDetailResponse, PurchaseOrderDetailItem, PurchaseOrderUpdateDTO } from '@/apis/purchase/PurchaseBooking/order'
-import { PurchaseOrderAPI } from '@/apis/purchase/PurchaseBooking/order'
+import { PurchaseOrderAPI, type PurchaseOrderAttachment, type PurchaseOrderAttachmentResult } from '@/apis/purchase/PurchaseBooking/order'
+import PurchaseOrderAttachments from './PurchaseOrderAttachments.vue'
 import type { ComponentPublicInstance } from 'vue'
 import { usePurchaseStore } from '@/stores/purchase'
 import PurchaseReceiveDialog from './PurchaseReceiveDialog.vue'
@@ -429,6 +431,13 @@ const documentFormRef = ref<ComponentPublicInstance<{ formdata: any }> | null>(n
 const saveBusy = ref(false)
 const originalFile = ref('')
 const documentVersion = ref('')
+const attachments = ref<PurchaseOrderAttachment[]>([])
+const attachmentBusy = ref(false)
+function attachmentUpdated(result:PurchaseOrderAttachmentResult) {
+  documentVersion.value=result.version
+  attachments.value=result.items
+  emit('audit')
+}
 const savedSnapshot = ref<string | null>(null)
 
 /* v-model:visible */
@@ -584,7 +593,7 @@ const isApproved = ref(false)
 const auditBusy = ref(false)
 const auditError = ref('')
 const toggleApprove = async () => {
-  if (auditBusy.value || saveBusy.value) return
+  if (auditBusy.value || saveBusy.value || attachmentBusy.value) return
   auditError.value = ''
   if (hasUnsavedChanges.value) { auditError.value = '请先保存修改，再重新打开订单核对审核'; return }
   if (!orderId.value) { auditError.value = '请先保存并重新打开实际订单'; return }
@@ -654,6 +663,7 @@ function fillDetailData(detailData: PurchaseOrderDetailResponse) {
     supplierModel.id = otherDetail.supplier || ''
     originalFile.value = otherDetail.file ?? ''
     documentVersion.value = otherDetail.version || ''
+    attachments.value = otherDetail.attachments || []
     
     // 填充底部表单数据到 footer（用于保存时使用）
     footer.actualAmount = otherDetail.actual ? String(otherDetail.actual) : ''
@@ -763,6 +773,8 @@ onBeforeUnmount(() => { if (resetTimer) clearTimeout(resetTimer) })
 function resetForm() {
   savedSnapshot.value = null
   documentVersion.value = ''
+  attachments.value = []
+  attachmentBusy.value = false
   originalFile.value = ''
   supplierModel.name = ''
   supplierModel.id = ''
@@ -1063,7 +1075,6 @@ const purchaseBookFields = [
   'relatedPerson', // 关联人员
   'arrivalDate', // 到货日期
   'logistics', // 物流信息
-  'documentAttachment', // 单据附件
   'remarks' // 备注信息
 ]
 
@@ -1105,7 +1116,7 @@ function convertTableRowToOrderInfo(row: TableRowData): any {
 
 /* 保存 */
 const save = async () => {
-  if (saveBusy.value || isApproved.value || auditBusy.value) return
+  if (saveBusy.value || isApproved.value || auditBusy.value || attachmentBusy.value) return
   auditError.value = ''
   try {
     // 验证必填字段

@@ -4,6 +4,16 @@ import type { ApiResponse, PageDTO } from '@/apis/type'
 // 定义一个功能模块基础url，方便替换
 const currBaseUrl = '/j3-purchase/purchase-order'
 
+export interface PurchaseOrderAttachment {
+  id: string
+  name: string
+  size: number
+  sha256: string
+  uploadedAt: string
+  uploaderName?: string
+}
+export interface PurchaseOrderAttachmentResult { version: string; items: PurchaseOrderAttachment[] }
+
 // 采购订单详情项
 export interface PurchaseOrderInfoDTO {
   /** 辅助属性 */
@@ -166,6 +176,7 @@ export interface PurchaseOrderListItem {
 
 // 采购订单其他部分详情
 export interface PurchaseOrderOtherDetailDTO {
+  attachments?: PurchaseOrderAttachment[]
   version?: string
   supplierName?: string
   peopleName?: string
@@ -312,6 +323,35 @@ export class PurchaseOrderAPI {
         ? payload.message
         : typeof error?.message === 'string' && error.message.trim() ? error.message : fallback
     return new Error(message)
+  }
+
+  static async uploadAttachment(order: string, version: string, file: File): Promise<PurchaseOrderAttachmentResult> {
+    try {
+      if (!file.size || file.size > 5 * 1024 * 1024) throw new Error('请选择非空附件，单个文件不能超过5MiB')
+      const result = await this.http.postWithFile<PurchaseOrderAttachmentResult>(`${currBaseUrl}/attachments/${encodeURIComponent(order)}`, {version, file})
+      if (result.code !== 10000 || !result.data) throw new Error(result.message || '附件上传失败')
+      return result.data
+    } catch (error) { throw this.orderError(error, '附件上传失败') }
+  }
+  static async removeAttachment(order: string, id: string, version: string): Promise<PurchaseOrderAttachmentResult> {
+    try {
+      const result = await this.http.delete<PurchaseOrderAttachmentResult>(`${currBaseUrl}/attachments/${encodeURIComponent(order)}/${encodeURIComponent(id)}`, {version}, {upType: DataUpType.json})
+      if (result.code !== 10000 || !result.data) throw new Error(result.message || '附件移除失败')
+      return result.data
+    } catch (error) { throw this.orderError(error, '附件移除失败') }
+  }
+  static async downloadAttachment(order: string, id: string): Promise<Blob> {
+    try {
+      const result = await this.http.getFile(`${currBaseUrl}/attachments/${encodeURIComponent(order)}/${encodeURIComponent(id)}`, {}, {responseType: 'blob'})
+      const blob = result instanceof Blob ? result : result?.data
+      if (!(blob instanceof Blob)) throw new Error('下载失败，未返回附件')
+      if (blob.type.includes('json')) {
+        let message = '附件下载失败'
+        try { const data = JSON.parse(await blob.text()); message = typeof data.data === 'string' ? data.data : data.message || message } catch { /* Preserve the safe fallback. */ }
+        throw new Error(message)
+      }
+      return blob
+    } catch (error) { throw this.orderError(error, '附件下载失败') }
   }
 
   static receivePreview(id:string) {
@@ -721,10 +761,10 @@ export class PurchaseOrderAPI {
       // 将 ID 转换为字符串
       const idStr = String(id)
 
-      const result = await this.http.get<{version:string;header:Record<string,any>;items:Record<string,any>[]}>(`${currBaseUrl}/document?id=${encodeURIComponent(idStr)}`, undefined, {showLoading:true})
+      const result = await this.http.get<{version:string;header:Record<string,any>;items:Record<string,any>[];attachments?:PurchaseOrderAttachment[]}>(`${currBaseUrl}/document?id=${encodeURIComponent(idStr)}`, undefined, {showLoading:true})
       if(result.code!==10000 || !result.data)return {code:result.code,message:result.message,data:undefined}
       const head=result.data.header
-      const header={...head,arrivalTime:head.arrival,version:result.data.version}
+      const header={...head,arrivalTime:head.arrival,version:result.data.version,attachments:result.data.attachments || []}
       return {...result,data:result.data.items.map(item=>({...item,amount:item.total,purchaseOrderOtherDetailDTO:header}))}
     } catch (error: any) {
       console.error('获取采购订单详情失败:', error)
