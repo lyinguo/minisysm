@@ -15,6 +15,7 @@
           <label class="form-label">供应商</label>
           <el-input
             v-model="supplierModel.name"
+            :disabled="isApproved"
             placeholder="请选择供应商"
             readonly
             clearable
@@ -56,6 +57,7 @@
           <label class="form-label">单据日期</label>
           <el-date-picker
             v-model="header.documentDate"
+            :disabled="isApproved"
             type="date"
             placeholder="2025-10-26"
             format="YYYY-MM-DD"
@@ -69,6 +71,7 @@
           <label class="form-label">单据编号</label>
           <el-input
             v-model="header.documentNumber"
+            :disabled="isApproved"
             placeholder="CGDD2510262244385"
             clearable
             class="number-input"
@@ -138,31 +141,24 @@
             <template #default="scope">
               <el-button
                 v-if="!scope.row.productName"
+                :disabled="isApproved"
                 type="text"
                 size="small"
                 @click="openProductPopup(scope.$index)"
               >
                 <el-icon><Edit /></el-icon>
               </el-button>
-              <el-button v-else type="text" size="small" @click="deleteRow(scope.$index)">
+              <el-button v-else :disabled="isApproved" type="text" size="small" @click="deleteRow(scope.$index)">
                 <el-icon><Delete /></el-icon>
               </el-button>
             </template>
           </el-table-column>
 
           <!-- 商品名称（表头带常规/扫码开关） -->
-          <el-table-column v-if="visibleColumns.productName" label="商品名称" align="center">
+          <el-table-column v-if="visibleColumns.productName" label="商品名称" min-width="210" align="center">
             <template #header>
               <div class="flex-center">
                 <span>商品名称</span>
-                <el-switch
-                  v-model="scanMode"
-                  size="small"
-                  inline-prompt
-                  active-text="扫码"
-                  inactive-text="常规"
-                  style="margin-left: 6px"
-                />
               </div>
             </template>
             <template #default="{ row }">{{ row.productName }}</template>
@@ -171,15 +167,16 @@
           <el-table-column
             v-if="visibleColumns.productCode"
             prop="productCode"
+            min-width="150"
             label="商品编号"
             align="center"
           />
-          <el-table-column v-if="visibleColumns.spec" prop="spec" label="规格型号" align="center" />
-          <el-table-column v-if="visibleColumns.attr" prop="attr" label="辅助属性" align="center" />
-          <el-table-column v-if="visibleColumns.unit" prop="unit" label="单位" align="center" />
+          <el-table-column v-if="visibleColumns.spec" prop="spec" label="规格型号" min-width="120" align="center" />
+          <el-table-column v-if="visibleColumns.attr" prop="attr" label="辅助属性" min-width="100" align="center" />
+          <el-table-column v-if="visibleColumns.unit" prop="unit" label="单位" min-width="80" align="center" />
 
           <!-- 仓库（表头带🔁批量按钮） -->
-          <el-table-column v-if="visibleColumns.warehouse" label="仓库" align="center">
+          <el-table-column v-if="visibleColumns.warehouse" label="仓库" min-width="190" align="center">
             <template #header>
               <div class="flex-center">
                 <span>仓库</span>
@@ -194,7 +191,7 @@
                 >
                   <Warehouse @confirm="handleBatchWarehouseSelect" />
                   <template #reference>
-                    <el-button type="text" size="small">
+                    <el-button :disabled="isApproved" type="text" size="small">
                       <el-icon><Refresh /></el-icon>
                     </el-button>
                   </template>
@@ -213,7 +210,7 @@
               >
                 <Warehouse @confirm="handleWarehouseConfirm" />
                 <template #reference>
-                  <el-button type="text" size="small">
+                  <el-button :disabled="isApproved" type="text" size="small">
                     {{ scope.row.warehouse || '选择仓库' }}
                   </el-button>
                 </template>
@@ -222,10 +219,10 @@
           </el-table-column>
 
           <!-- 单价 -->
-          <el-table-column label="单价" align="center">
+          <el-table-column label="单价" min-width="120" align="center">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!isApproved"
                 class="editable-cell"
                 @input="onEditableInput(row, 'price', $event)"
                 @blur="onEditableBlur(row, 'price', $event)"
@@ -236,16 +233,22 @@
           </el-table-column>
 
           <!-- 数量 -->
-          <el-table-column label="数量" align="center">
+          <el-table-column label="数量" min-width="110" align="center">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!isApproved"
                 class="editable-cell"
                 @input="onEditableInput(row, 'quantity', $event)"
                 @blur="onEditableBlur(row, 'quantity', $event)"
               >
                 {{ row.quantity || '' }}
               </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="减免(%)" align="center" width="110">
+            <template #default="{ row }">
+              <el-input v-if="row.productName" v-model="row.discount" aria-label="减免百分比" :disabled="isApproved" @change="recalculate(row)" />
             </template>
           </el-table-column>
 
@@ -266,12 +269,12 @@
           />
 
           <!-- 税率(%) -->
-          <el-table-column label="税率(%)" align="center">
+          <el-table-column label="税率(%)" min-width="110" align="center">
             <!-- 表头：标题 + 批量按钮 -->
             <template #header>
               <div class="flex-center">
                 <span>税率(%)</span>
-                <el-button type="text" size="small" @click="showTaxBatch = true">
+                <el-button :disabled="isApproved" type="text" size="small" @click="showTaxBatch = true">
                   <el-icon><Refresh /></el-icon>
                 </el-button>
               </div>
@@ -280,7 +283,7 @@
             <!-- 单行编辑 -->
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!isApproved"
                 class="editable-cell"
                 @input="onEditableInput(row, 'taxRate', $event)"
                 @blur="onEditableBlur(row, 'taxRate', $event)"
@@ -305,10 +308,10 @@
             width="110"
           />
           <!-- 备注信息 -->
-          <el-table-column label="备注信息" align="center">
+          <el-table-column label="备注信息" min-width="200" align="center">
             <template #default="{ row }">
               <div
-                contenteditable="true"
+                :contenteditable="!isApproved"
                 class="editable-cell"
                 @input="onEditableInput(row, 'remark', $event)"
                 @blur="onEditableBlur(row, 'remark', $event)"
@@ -376,13 +379,13 @@
       <div class="divider"></div>
 
       <!-- 底部表单 -->
-      <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" />
+      <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" :optional-fields="['relatedPerson', 'logistics']" :computed-amounts="true" :disabled="isApproved" />
     </div>
 
     <template #footer>
       <div class="dialog-footer">
         <el-button @click="innerVisible = false">关闭</el-button>
-        <el-button type="primary" :disabled="isApproved || auditBusy" @click="save">保存</el-button>
+        <el-button type="primary" :loading="saveBusy" :disabled="isApproved || auditBusy || saveBusy" @click="save">保存</el-button>
       </div>
     </template>
   </el-dialog>
@@ -404,6 +407,8 @@ import { PurchaseOrderAPI } from '@/apis/purchase/PurchaseBooking/order'
 import type { ComponentPublicInstance } from 'vue'
 import { usePurchaseStore } from '@/stores/purchase'
 import PurchaseReceiveDialog from './PurchaseReceiveDialog.vue'
+import { receivingAmounts } from '@/utils/receivingAmounts'
+import { onBeforeUnmount } from 'vue'
 
 /* props & emits */
 interface Props {
@@ -420,6 +425,8 @@ const purchaseStore = usePurchaseStore()
 
 // DocumentForm 组件引用
 const documentFormRef = ref<ComponentPublicInstance<{ formdata: any }> | null>(null)
+const saveBusy = ref(false)
+const originalFile = ref('')
 
 /* v-model:visible */
 const innerVisible = computed({
@@ -462,8 +469,8 @@ function handleClearSupplier() {
 
 /* 底部表单 */
 const footer = reactive({
-  documentCost: '16.95',
-  actualAmount: '1',
+  documentCost: '',
+  actualAmount: '',
   relatedPerson: 'NTJK_test_DD001',
   arrivalDate: '',
   logistics: '',
@@ -472,6 +479,8 @@ const footer = reactive({
 
 // 定义表格行数据类型
 interface TableRowData {
+  discount?: string | number
+  discountAmount?: string | number
   productName: string
   productCode: string
   goodsId?: string // 商品ID（用于更新接口）
@@ -492,24 +501,6 @@ interface TableRowData {
 
 // ① 先定义表格数据
 const tableData = ref<TableRowData[]>([
-  {
-    productName: '九九',
-    productCode: '2233535',
-    goodsId: '2233535',
-    spec: '',
-    attr: '',
-    unit: '件',
-    warehouse: '',
-    warehouseId: '',
-    price: 199,
-    quantity: 1,
-    warenumber: 1,
-    amount: 199,
-    taxRate: 13,
-    taxAmount: 25.87,
-    total: 224.87,
-    remark: ''
-  },
   {
     productName: '',
     productCode: '',
@@ -606,6 +597,8 @@ const toggleApprove = async () => {
  */
 function convertDetailItemToTableRow(item: PurchaseOrderDetailItem): TableRowData {
   return {
+    discount: item.discount ?? 0,
+    discountAmount: item.dsc ?? 0,
     productName: item.name || '',
     productCode: item.number || item.goods || '',
     goodsId: item.goods || '', // 保存商品ID（用于更新）
@@ -644,11 +637,9 @@ function fillDetailData(detailData: PurchaseOrderDetailResponse) {
   if (otherDetail) {
     header.documentDate = otherDetail.time || ''
     header.documentNumber = otherDetail.number || ''
-    supplierModel.name = otherDetail.supplierName || otherDetail.supplier || ''
+    supplierModel.name = otherDetail.supplierName || (otherDetail.supplier ? '供应商资料缺失，请重新选择' : '')
     supplierModel.id = otherDetail.supplier || ''
-    // 注意：otherDetail.supplier 可能是名称，需要从原始数据中获取ID
-    // 如果接口返回的是ID，则直接使用；如果是名称，需要查找对应的ID
-    // 这里假设接口返回的是名称，我们需要保存供应商ID（如果有的话）
+    originalFile.value = otherDetail.file ?? ''
     
     // 填充底部表单数据到 footer（用于保存时使用）
     footer.actualAmount = otherDetail.actual ? String(otherDetail.actual) : ''
@@ -668,23 +659,14 @@ function fillDetailData(detailData: PurchaseOrderDetailResponse) {
         if (otherDetail.arrivalTime) {
           formdata.arrivalDate = otherDetail.arrivalTime
         }
-        if (otherDetail.logistics) {
-          // logistics 可能是字符串或对象，需要根据实际情况处理
-          formdata.logistics = typeof otherDetail.logistics === 'string' 
-            ? { key: 'auto', name: '自动识别', number: otherDetail.logistics }
-            : otherDetail.logistics
-        }
-        if (otherDetail.data) {
-          formdata.remarks = otherDetail.data
-        }
+        formdata.logistics = { key: 'auto', name: '自动识别', number: otherDetail.logistics || '' }
+        formdata.remarks = otherDetail.data || ''
         if (otherDetail.total !== undefined && otherDetail.total !== null) {
           formdata.documentCost = Number(otherDetail.total)
           formdata.documentBaseCost = Number(otherDetail.total)
         }
-        if (otherDetail.people) {
-          formdata.relatedPerson = otherDetail.people
-          formdata.relatedPersonName = otherDetail.people // 如果没有名称，使用ID作为显示
-        }
+        formdata.relatedPerson = otherDetail.people || ''
+        formdata.relatedPersonName = otherDetail.peopleName || (otherDetail.people ? '人员资料缺失，请重新选择' : '')
       }
     })
   }
@@ -745,22 +727,26 @@ watch(
 )
 
 // 监听对话框显示状态，关闭时重置表单
+let resetTimer: ReturnType<typeof setTimeout> | undefined
 watch(
   () => props.visible,
   (visible) => {
+    if (resetTimer) clearTimeout(resetTimer)
     if (!visible) {
       // 对话框关闭时，延迟重置表单（避免关闭动画时数据闪烁）
-      setTimeout(() => {
-        resetForm()
+      resetTimer = setTimeout(() => {
+        if (!props.visible) resetForm()
       }, 300)
     }
   }
 )
+onBeforeUnmount(() => { if (resetTimer) clearTimeout(resetTimer) })
 
 /**
  * 重置表单数据
  */
 function resetForm() {
+  originalFile.value = ''
   supplierModel.name = ''
   supplierModel.id = ''
   header.documentDate = ''
@@ -957,10 +943,16 @@ function recalculate(row: TableRowData) {
   const qty = parseFloat(String(row.quantity)) || 0
   const rate = parseFloat(String(row.taxRate)) || 0
 
-  // 计算金额、税额、总计
-  row.amount = +(price * qty).toFixed(2)
-  row.taxAmount = +((row.amount * rate) / 100).toFixed(2)
-  row.total = +(row.amount + row.taxAmount).toFixed(2)
+  try {
+    const amount = receivingAmounts(price, qty, Number(row.discount || 0), rate)
+    const gross = receivingAmounts(price, qty, 0, 0).net
+    row.discountAmount = Number((gross - amount.net).toFixed(4))
+    row.amount = amount.net
+    row.taxAmount = Number((amount.actual - amount.net).toFixed(4))
+    row.total = amount.actual
+  } catch {
+    row.amount = row.taxAmount = row.total = ''
+  }
 
   // 计算完后立即刷新状态栏
   updateStatusBar()
@@ -973,7 +965,11 @@ function updateStatusBar() {
   const totalCount = validRows.length
   const totalSum = validRows.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
 
-  console.log(`状态栏已更新：总条数=${totalCount}，总合计=${totalSum.toFixed(2)}`)
+  const formdata = documentFormRef.value?.formdata
+  if (formdata) {
+    formdata.documentCost = Number(validRows.reduce((sum, r) => sum + Number(r.amount || 0), 0).toFixed(4))
+    formdata.actualAmount = Number(totalSum.toFixed(4))
+  }
 }
 
 // ====== OperationPopTable -> 表格 的回填（不影响你 ag-grid 的 handleProductConfirm）======
@@ -1065,7 +1061,7 @@ const totalSum = computed(() => {
     // 累加每一行的价税合计
     .reduce((acc, r) => acc + (Number(r.total) || 0), 0)
 
-  return sum.toFixed(2)
+  return sum.toFixed(4)
 })
 
 /**
@@ -1084,20 +1080,21 @@ function convertTableRowToOrderInfo(row: TableRowData): any {
     tat: parseFloat(String(row.taxAmount)) || 0,
     attr: row.attr || '',
     data: row.remark || '',
-    discount: 0,
-    dsc: 0
+    discount: Number(row.discount || 0),
+    dsc: Number(row.discountAmount || 0)
   }
 }
 
 /* 保存 */
 const save = async () => {
+  if (saveBusy.value || isApproved.value || auditBusy.value) return
   try {
     // 验证必填字段
     if (!header.documentNumber) {
       ElMessage.error('单据编号不能为空')
       return
     }
-    if (!supplierModel.name) {
+    if (!supplierModel.id) {
       ElMessage.error('供应商不能为空')
       return
     }
@@ -1122,12 +1119,6 @@ const save = async () => {
     // 验证到货日期
     if (!formdata.arrivalDate) {
       ElMessage.error('到货日期不能为空')
-      return
-    }
-
-    // 验证关联人员
-    if (!formdata.relatedPerson) {
-      ElMessage.error('关联人员不能为空')
       return
     }
 
@@ -1157,27 +1148,29 @@ const save = async () => {
     }
 
     // 计算单据金额（价税合计之和）
-    const total = validRows.reduce((sum, r) => sum + (Number(r.total) || 0), 0)
+    const total = Number(validRows.reduce((sum, r) => sum + Number(r.amount || 0), 0).toFixed(4))
+    const actual = Number(validRows.reduce((sum, r) => sum + Number(r.total || 0), 0).toFixed(4))
 
     // 构建更新数据
     const updateData: PurchaseOrderUpdateDTO = {
       id: orderId.value ? String(orderId.value) : undefined,
       number: header.documentNumber,
-      supplier: supplierModel.id || supplierModel.name, // 优先使用ID，如果没有则使用名称
+      supplier: supplierModel.id,
       time: header.documentDate,
       arrival: formdata.arrivalDate,
-      actual: Number(formdata.actualAmount) || 0,
+      actual,
       total: total,
       people: formdata.relatedPerson,
       data: formdata.remarks || '',
       logistics: typeof formdata.logistics === 'object' 
-        ? formdata.logistics?.number || formdata.logistics?.name || '' 
+        ? formdata.logistics?.number || ''
         : formdata.logistics || '',
-      file: '', // 单据附件，需要根据实际情况处理
+      file: originalFile.value,
       purchaseOrderInfoDTOList: validRows.map(convertTableRowToOrderInfo)
     }
 
     // 调用更新接口
+    saveBusy.value = true
     const response = await PurchaseOrderAPI.updatePurchaseOrder(updateData)
     
     if (response.code === 10000) {
@@ -1199,7 +1192,7 @@ const save = async () => {
     console.error('保存订单失败:', error)
     const errorMessage = error?.message || error?.response?.data?.message || '订单修改失败，请稍后重试'
     ElMessage.error(errorMessage)
-  }
+  } finally { saveBusy.value = false }
 }
 </script>
 

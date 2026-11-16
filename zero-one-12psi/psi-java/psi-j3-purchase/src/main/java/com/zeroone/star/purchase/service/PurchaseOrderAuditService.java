@@ -21,9 +21,10 @@ public class PurchaseOrderAuditService {
     private static BigDecimal decimal(Object value){return value==null?BigDecimal.ZERO:new BigDecimal(value.toString());}
     private static String uid(){return UUID.randomUUID().toString().replace("-","");}
     private int count(String sql,Object...args){return db.queryForObject(sql,Integer.class,args);}
+    @Transactional(readOnly=true)
     public Map<String,Object> document(String id){
         UserDTO actor=access.authorize("/purchase-order/detail");
-        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS source_approval,CAST(b.state AS SIGNED) AS source_state,s.name AS supplierName FROM bor b LEFT JOIN supplier s ON s.id=b.supplier WHERE b.id=?",id);
+        List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS source_approval,CAST(b.state AS SIGNED) AS source_state,s.name AS supplierName,p.name AS peopleName,u.name AS userName,f.name AS frameName FROM bor b LEFT JOIN supplier s ON s.id=b.supplier LEFT JOIN people p ON p.id=b.people LEFT JOIN `user` u ON u.id=b.`user` LEFT JOIN frame f ON f.id=b.frame WHERE b.id=?",id);
         if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
         Map<String,Object> head=found.get(0);head.put("state",integer(head.remove("source_state")));access.requireFrame(actor,text(head.get("frame")));
         head.put("time",text(head.get("time")));head.put("arrival",text(head.get("arrival")));head.put("examine",integer(head.remove("source_approval")));

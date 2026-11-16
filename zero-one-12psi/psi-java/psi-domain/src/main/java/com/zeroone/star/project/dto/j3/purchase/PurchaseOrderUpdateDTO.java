@@ -82,8 +82,8 @@ public class PurchaseOrderUpdateDTO {
     /**
      * 关联人员
      */
-    @NotBlank(message = "关联人员不能为空")
-    @ApiModelProperty(value = "关联人员", example = "1983381181546139852", required = true)
+    @Size(max = 32, message = "关联人员ID不能超过32个字符")
+    @ApiModelProperty(value = "关联人员（可选）", example = "1983381181546139852")
     private String people;
 
     /**

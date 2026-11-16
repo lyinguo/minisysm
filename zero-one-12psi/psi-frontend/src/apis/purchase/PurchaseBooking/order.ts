@@ -165,6 +165,11 @@ export interface PurchaseOrderListItem {
 // 采购订单其他部分详情
 export interface PurchaseOrderOtherDetailDTO {
   supplierName?: string
+  peopleName?: string
+  userName?: string
+  frameName?: string
+  examine?: number
+  state?: number
   /** 实际金额 */
   actual?: string | number
   /** 到货日期 */
@@ -189,6 +194,8 @@ export interface PurchaseOrderOtherDetailDTO {
 
 // 采购订单详情商品项
 export interface PurchaseOrderDetailItem {
+  discount?: string | number
+  dsc?: string | number
   number?: string
   warehouseName?: string
   /** 金额 */
@@ -426,9 +433,6 @@ export class PurchaseOrderAPI {
     }
     if (!data.supplier || (typeof data.supplier === 'string' && data.supplier.trim() === '')) {
       throw new Error('供应商不能为空')
-    }
-    if (!data.people || (typeof data.people === 'string' && data.people.trim() === '')) {
-      throw new Error('关联人员不能为空')
     }
     if (!data.time || (typeof data.time === 'string' && data.time.trim() === '')) {
       throw new Error('单据时间不能为空')
@@ -821,9 +825,6 @@ export class PurchaseOrderAPI {
         throw new Error('采购订单详情列表不能为空，请确保所有行的商品ID和仓库ID都已填写')
       }
       
-      // 调试日志：打印请求数据
-      console.log('修改采购订单请求数据:', JSON.stringify(cleanData, null, 2))
-      
       const result = await this.http.put<string>(
         `${currBaseUrl}/update`,
         cleanData,
@@ -854,9 +855,6 @@ export class PurchaseOrderAPI {
     }
     if (!data.supplier || (typeof data.supplier === 'string' && data.supplier.trim() === '')) {
       throw new Error('供应商不能为空')
-    }
-    if (!data.people || (typeof data.people === 'string' && data.people.trim() === '')) {
-      throw new Error('关联人员不能为空')
     }
     if (!data.time || (typeof data.time === 'string' && data.time.trim() === '')) {
       throw new Error('单据时间不能为空')
@@ -896,7 +894,8 @@ export class PurchaseOrderAPI {
     const cleaned: any = {}
     
     // 必填字段列表（即使为空也要保留）
-    const requiredFields = ['number', 'supplier', 'people', 'time', 'arrival', 'actual', 'total']
+    // Empty editable text means clear it, rather than silently retain the old value.
+    const requiredFields = ['number', 'supplier', 'people', 'time', 'arrival', 'actual', 'total', 'data', 'logistics', 'file']
     
     // ID 字段列表（需要转换为字符串）
     const idFields = ['supplier', 'people', 'source', 'id']
