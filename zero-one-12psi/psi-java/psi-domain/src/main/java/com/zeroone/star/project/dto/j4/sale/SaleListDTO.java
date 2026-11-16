@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @ApiModel("销售单列表数据对象")
 public class SaleListDTO {
+    private String version;
     private String customerName;
     private String frameName;
     private String peopleName;

@@ -6,7 +6,10 @@ public class AttachReadGate {
         VirtualMachine target=VirtualMachine.attach(args[0]);
         try{
             String command=target.getSystemProperties().getProperty("sun.java.command","").replace('\\','/').toLowerCase(java.util.Locale.ROOT);
-            if(!command.contains("/qa/runtime/java/purchase-") || !command.contains("--server.port=18023") || !command.contains("--spring.application.name=qa-purchase"))throw new IllegalArgumentException("Only the dedicated QA purchase JVM can be gated");
+            boolean purchase=command.contains("/qa/runtime/java/purchase-") && command.contains("--server.port=18023") && command.contains("--spring.application.name=qa-purchase");
+            boolean sale=command.contains("/qa/runtime/java/sale-") && command.contains("--server.port=18022") && command.contains("--spring.application.name=qa-sale");
+            if(!purchase && !sale)throw new IllegalArgumentException("Only a dedicated QA purchase or sales JVM can be gated");
+            if(!"off".equals(args[2]) && (sale!=args[2].startsWith("on-sale:")))throw new IllegalArgumentException("QA gate mode must match the dedicated service");
             target.loadAgent(args[1],args[2]);
         }finally{target.detach();}
     }

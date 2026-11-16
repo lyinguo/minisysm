@@ -165,13 +165,9 @@ public class SaleFormController implements SaleFormApis {
     @ApiOperation(value = "核对/反核对(支持批量)")
     @Override
     public JsonVO<Integer> checkSales(
-            @RequestBody List<String> ids,
+            @RequestBody com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command,
             @RequestParam boolean check) {
-        if(ids == null || ids.isEmpty()){
-            throw new IllegalArgumentException("要核对或反核对的销售单id列表不能为空");
-        }
-        Integer count = saleFormService.checkSales(ids,check);
-        return JsonVO.success(count);
+        return JsonVO.success(saleFormService.checkSales(command,check));
     }
 
     /**
@@ -181,13 +177,9 @@ public class SaleFormController implements SaleFormApis {
     @ApiOperation(value = "审核/反审核(支持批量)")
     @Override
     public JsonVO<Integer> examineSales(
-            @RequestBody List<String> ids,
+            @RequestBody com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command,
             @RequestParam boolean examine) {
-        if(ids == null || ids.isEmpty()){
-            throw new IllegalArgumentException("要审核或反审核的销售单id列表不能为空");
-        }
-        Integer count = saleFormService.examineSales(ids,examine);
-        return JsonVO.success(count);
+        return JsonVO.success(saleFormService.examineSales(command,examine));
     }
 
     /**

@@ -14,6 +14,8 @@ public class QaReadGate {
         if("off".equals(args)){folder=null;return;}
         if(args.startsWith("on-purchase:")){
             target="com/zeroone/star/purchase/service/PurchaseSnapshotService";methodName="versions";folder=Paths.get(args.substring(12));
+        }else if(args.startsWith("on-sale:")){
+            target="com/zeroone/star/sale/service/SaleSnapshotService";methodName="versions";folder=Paths.get(args.substring(8));
         }else if(args.startsWith("on:")){
             target="com/zeroone/star/purchase/service/PurchaseOrderListView";methodName="enrich";folder=Paths.get(args.substring(3));
         }else throw new IllegalArgumentException("QA gate mode required");

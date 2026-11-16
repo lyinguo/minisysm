@@ -21,7 +21,7 @@ def prepare():
     print('Prepared isolated browser sale: '+body['number'])
 
 
-def verify(audited):
+def verify(audited,checked=True):
     state=read_state(); fixture=json.loads(path.read_text(encoding='utf-8'))
     assert fixture['database']==state['database'], 'Browser fixture belongs to another QA database'
     identifier=literal(fixture['id'])
@@ -36,14 +36,19 @@ def verify(audited):
     for table in ('room_info','summary','account_info'):
         assert int(scalar("SELECT COUNT(*) FROM "+table+" WHERE type='sell' AND `class`="+identifier+';'))==(1 if audited else 0)
     assert int(scalar('SELECT COUNT(*) FROM psi_sale_posting WHERE sale_id='+identifier+';'))==(1 if audited else 0)
-    result=dict(case='sale.browser_real_'+('audit' if audited else 'reverse'),status='verified',stock=str(stock),account=150 if audited else 100,receivable=176 if audited else 0,production_business_writes=0,all_system_features_accepted=False)
-    (QA / ('reports/sale-browser-'+('audit' if audited else 'reverse')+'.json')).write_text(json.dumps(result,indent=2),encoding='utf-8')
-    print('PASS browser '+('audit' if audited else 'reverse')+' independent SQL: stock='+str(stock)+' and stock/cash/receivable journals agree')
+    assert scalar('SELECT CAST(`check` AS SIGNED) FROM sell WHERE id='+identifier+';')==('1' if checked else '0')
+    expected_history=3 if audited else 4 if checked else 5
+    assert scalar("SELECT COUNT(*) FROM record WHERE type='sell' AND source="+identifier+';')==str(expected_history)
+    assert scalar("SELECT COUNT(*) FROM record WHERE type='sell' AND source="+identifier+' AND `user`='+literal(fixture['actor'])+';')==str(expected_history)
+    stage='audit' if audited else 'reverse' if checked else 'unchecked'
+    result=dict(case='sale.browser_real_'+stage,status='verified',stock=str(stock),account=150 if audited else 100,receivable=176 if audited else 0,checked=checked,operator_history=expected_history,production_business_writes=0,all_system_features_accepted=False)
+    (QA / ('reports/sale-browser-'+stage+'.json')).write_text(json.dumps(result,indent=2),encoding='utf-8')
+    print('PASS browser '+stage+' independent SQL: stock='+str(stock)+' and stock/cash/receivable journals agree')
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=['prepare','verify-audited','verify-reversed'])
+    parser.add_argument('action',choices=['prepare','verify-audited','verify-reversed','verify-unchecked'])
     action=parser.parse_args().action
     if action=='prepare': prepare()
-    else: verify(action=='verify-audited')
+    else: verify(action=='verify-audited',action!='verify-unchecked')

@@ -1,5 +1,13 @@
 # 系统业务验收
 
+## 销售单核对与审核的读取版本
+
+运行`python qa/sale_snapshot_acceptance.py run`执行16项真实HTTP/MySQL专项，包含旧版本、版本格式、旧数组入口、历史故障、批量库存资金回滚、并发和列表读取竞争；只有`baseline`则执行前6项。所有命令仅针对专用QA环境；必须与其他期间、角色和读取门控夹具串行执行。原有销售业务专项会在命令前显式读取版本，不能作为旧页面安全性的替代证明。
+
+销售核对与审核保留`check?check=true|false`、`examine?examine=true|false`路径，JSON正文改为`{ "ids": ["所读ID"], "version": "所读64位小写SHA256" }`；批量使用`versions`映射完整覆盖IDs，不与version混用。列表行和完整详情返回同一种版本。版本失效后需要重新打开并核对实际内容，不能独立取新版本替旧页面授权。
+
+浏览器运行`python qa/sale_browser_acceptance.py prepare`，使用18030的隔离会话进入`/sales-order-report`，筛选打印编号，实际核对和审核后执行`verify-audited`；页面反审核后执行`verify-reversed`，反核对后执行`verify-unchecked`。独立验证库存、现金、应收、流水、状态及3/4/5条当前操作人历史。SQL夹具、会话、截图及日志只保留于私有runtime/reports，不发布；这些检查不代表销售退货或全部角色页面已验收。
+
 ## 采购收货单真实附件
 
 `python qa/purchase_attachment_acceptance.py run`执行17项真实HTTP multipart/二进制下载、MySQL、OAuth权限与库存资金专项，只允许专用QA数据库和18023端口；与其他有期间/授权夹具的验收串行执行。

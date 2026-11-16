@@ -123,6 +123,7 @@ export interface SaleDocumentDetail {
  * 销售单列表数据对象
  */
 export interface SaleListItem {
+  version?: string
   customerName?: string
   frameName?: string
   peopleName?: string

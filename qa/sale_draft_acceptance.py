@@ -14,6 +14,17 @@ from acceptance import QA, read_state, sql, literal
 
 
 class SaleDraftSuite(WarehouseSuite):
+    def request(self, method, path, body=None, service='c1'):
+        # Existing posting suites explicitly reread before each command; stale-page
+        # acceptance supplies its own object and must never receive fresh versions here.
+        if service == 'sale' and method == 'POST' and isinstance(body, list) and path.split('?')[0] in ('/sale/form/check', '/sale/form/examine'):
+            versions = {}
+            for identifier in body:
+                result = super().request('GET', '/sale/form/document/' + str(identifier), service='sale')
+                versions[identifier] = result.get('data', {}).get('version', '0' * 64) if result.get('code') == 10000 else '0' * 64
+            body = dict(ids=body, versions=versions)
+        return super().request(method, path, body, service)
+
     def __init__(self, state):
         super().__init__(state)
         self.customer = uuid.uuid4().hex

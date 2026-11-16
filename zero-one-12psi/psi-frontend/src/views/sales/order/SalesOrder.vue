@@ -1672,69 +1672,10 @@ function handleGenerate() {
 /**
  * 反审核按钮处理函数
  */
-async function handleUnaudit() {
-  console.log('反审核')
-  try {
-    // 这里需要获取销售单ID，暂时用模拟数据
-    const saleId = '1' // 实际应该从数据中获取
-    const response = await saleOrderApi.examineSales([saleId], false)
-
-    if (response.code === 10000) {
-      isAudited.value = false
-      // 同时重置核对状态
-      isChecked.value = false
-      ElMessage.success('已反审核，恢复到未审核状态')
-    } else {
-      ElMessage.error(response.message || '反审核失败')
-    }
-  } catch (error) {
-    console.error('反审核失败:', error)
-    ElMessage.error('反审核失败，请重试')
-  }
-}
-
-/**
- * 核对按钮处理函数
- */
-async function handleCheck() {
-  console.log('核对数据')
-  try {
-    // 这里需要获取销售单ID，暂时用模拟数据
-    const saleId = '1' // 实际应该从数据中获取
-    const response = await saleOrderApi.checkSales([saleId], true)
-
-    if (response.code === 10000) {
-      isChecked.value = true
-      ElMessage.success('数据核对完成')
-    } else {
-      ElMessage.error(response.message || '核对失败')
-    }
-  } catch (error) {
-    console.error('核对失败:', error)
-    ElMessage.error('核对失败，请重试')
-  }
-}
-
-/**
- * 反核对按钮处理函数
- */
-async function handleUncheck() {
-  console.log('反核对数据')
-  try {
-    const saleId = '1' // 实际应该从数据中获取
-    const response = await saleOrderApi.checkSales([saleId], false)
-
-    if (response.code === 10000) {
-      isChecked.value = false
-      ElMessage.success('已取消核对')
-    } else {
-      ElMessage.error(response.message || '反核对失败')
-    }
-  } catch (error) {
-    console.error('反核对失败:', error)
-    ElMessage.error('反核对失败，请重试')
-  }
-}
+function openSavedSales() { router.push('/sales-order-report') }
+function handleUnaudit() { openSavedSales() }
+function handleCheck() { openSavedSales() }
+function handleUncheck() { openSavedSales() }
 
 /**
  * 生成采购退货单处理函数

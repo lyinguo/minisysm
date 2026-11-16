@@ -63,12 +63,12 @@ public interface SaleFormApis {
     /**
      * 核对/反核对(支持批量)
      * */
-    JsonVO<Integer> checkSales(List<String> ids, boolean check);
+    JsonVO<Integer> checkSales(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command, boolean check);
 
     /**
      * 审核/反审核(支持批量)
      * */
-    JsonVO<Integer> examineSales(List<String> ids, boolean examine);
+    JsonVO<Integer> examineSales(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command, boolean examine);
 
 
     @ApiOperation(value = "获取销售单列表（条件+分页）")

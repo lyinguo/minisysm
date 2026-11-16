@@ -6,10 +6,8 @@ import com.zeroone.star.project.dto.j4.sale.SaleInfoDTO;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.DigestUtils;
 import javax.annotation.PostConstruct;
 import java.math.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /** Draft persistence only. Saving never posts stock or account/customer balances. */
@@ -17,7 +15,8 @@ import java.util.*;
 public class SaleDraftService {
     private final JdbcTemplate db;
     private final SaleDocumentAccess access;
-    public SaleDraftService(JdbcTemplate db,SaleDocumentAccess access) { this.db=db;this.access=access; }
+    private final SaleSnapshotService snapshots;
+    public SaleDraftService(JdbcTemplate db,SaleDocumentAccess access,SaleSnapshotService snapshots) { this.db=db;this.access=access;this.snapshots=snapshots; }
     @PostConstruct
     public void initialize() {
         db.execute("CREATE TABLE IF NOT EXISTS psi_document_write_lock (scope VARCHAR(40) NOT NULL PRIMARY KEY)");
@@ -44,9 +43,6 @@ public class SaleDraftService {
     private List<Map<String,Object>> rows(String id,boolean lock) {
         return db.queryForList("SELECT * FROM sell_info WHERE pid=? ORDER BY id"+(lock ? " FOR UPDATE" : ""),id);
     }
-    private String version(Map<String,Object> head,List<Map<String,Object>> lines) {
-        return DigestUtils.md5DigestAsHex((head.toString()+lines.toString()).getBytes(StandardCharsets.UTF_8));
-    }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String,Object> detail(String id) {
         UserDTO actor=access.authorize("/sale/form/getSaleDetail");
@@ -56,7 +52,7 @@ public class SaleDraftService {
         Map<String,Object> head=header(id,false);
         access.requireFrame(actor,text(head.get("frame")));
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("version",version(head,rows(id,false)));
+        result.put("version",snapshots.version(id,false));
         if (head.get("time") instanceof java.util.Date) head.put("timeEpoch",((java.util.Date)head.get("time")).getTime());
         else if (head.get("time") instanceof java.time.LocalDateTime)
             head.put("timeEpoch",((java.time.LocalDateTime)head.get("time")).atZone(java.time.ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli());
@@ -153,7 +149,7 @@ public class SaleDraftService {
             if (status(original.get("examine"))!=0 || status(original.get("check"))!=0 || status(original.get("nucleus"))!=0
                     || status(original.get("invoice"))==1 || status(original.get("invoice"))==2 || status(original.get("cse"))==1 || status(original.get("cse"))==2)
                 throw new IllegalStateException("单据已审核、核对或存在结算记录，不能直接修改");
-            if (!version(original,previous).equals(dto.getVersion())) throw new IllegalStateException("单据已被其他操作修改，请重新打开详情");
+            if (!snapshots.version(dto.getId(),true).equals(dto.getVersion())) throw new IllegalStateException("单据已被其他操作修改，请重新打开详情");
         } else {
             if (dto.getId()!=null && !dto.getId().isEmpty()) throw new IllegalArgumentException("新增销售单不能指定ID");
         }
@@ -178,6 +174,6 @@ public class SaleDraftService {
         java.sql.Timestamp now=new java.sql.Timestamp(System.currentTimeMillis());
         db.update("INSERT INTO `log`(id,time,`user`,info) VALUES(?,?,?,?)",uid(),now,actor.getId(),(update ? "修改" : "新增")+"销售单["+id+"]");
         db.update("INSERT INTO record(id,type,source,time,`user`,info) VALUES(?,'sell',?,?,?,?)",uid(),id,now,actor.getId(),update ? "修改销售草稿" : "新增销售草稿");
-        dto.setVersion(version(header(id,true),rows(id,true)));
+        dto.setVersion(snapshots.version(id,true));
     }
 }

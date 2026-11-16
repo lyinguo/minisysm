@@ -44,6 +44,10 @@ public class SaleFormServiceImpl implements SaleFormService {
     private com.zeroone.star.sale.service.SalePostingService salePosting;
 
     @Resource
+    private com.zeroone.star.sale.service.SaleSnapshotService snapshots;
+    @Resource
+    private com.zeroone.star.sale.service.SaleCheckService saleChecks;
+    @Resource
     private SaleFormMapper saleFormMapper;
 
     @Resource
@@ -56,6 +60,7 @@ public class SaleFormServiceImpl implements SaleFormService {
     private SaleInfoMapper saleInfoMapper;
 
     @Override
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public JsonVO<PageDTO<SaleListDTO>> getSaleList(SaleQuery query) {
         query.setAuthorizedFrame(saleAccess.frame(saleAccess.authorize("/sale/form/getSaleList")));
         try {
@@ -66,6 +71,8 @@ public class SaleFormServiceImpl implements SaleFormService {
             Page<SaleListDTO> mpPage = new Page<>(pageIndex, pageSize);
             Page<SaleListDTO> resultPage = saleFormMapper.selectSaleList(mpPage, query);
 
+            Map<String,String> versions=snapshots.versions(resultPage.getRecords().stream().map(SaleListDTO::getId).collect(Collectors.toList()));
+            for(SaleListDTO row:resultPage.getRecords())row.setVersion(versions.get(row.getId()));
             PageDTO<SaleListDTO> pageDTO = PageDTO.create(resultPage);
             return JsonVO.success(pageDTO);
 
@@ -201,53 +208,8 @@ public class SaleFormServiceImpl implements SaleFormService {
 
     @Transactional(rollbackFor = Exception.class)
     @Override
-    public Integer checkSales(List<String> ids, boolean check) {
-        com.zeroone.star.project.components.user.UserDTO actor = saleAccess.authorize("/sale/form/check");
-        if (ids == null || ids.isEmpty() || ids.size() > 200 || new HashSet<>(ids).size() != ids.size()) throw new IllegalArgumentException("请选择1到200张不同单据");
-        saleDrafts.lockWrites();
-        /// 先获取到ids列表中所有销售单
-        List<SaleDO> sales = saleMapper.selectBatchIds(ids);
-        for (SaleDO current : sales) saleAccess.requireFrame(actor, current.getFrame());
-        /// 把每一个销售单的详情id存入一个Map中
-        Map<String,SaleDO> saleMap = new HashMap<>();
-        for (SaleDO sale : sales) {
-            saleMap.put(sale.getId(),sale);
-        }
-        /// 允许核对的id
-        List<String> validIds = new ArrayList<>();
-        /// 批量校验
-        for (String id : ids) {
-            SaleDO sale = saleMap.get(id);
-            if(sale == null){
-                throw new IllegalArgumentException("id:" + id + ",销售单不存在");
-            }
-            if(Boolean.TRUE.equals(sale.getExamine())){
-                throw new IllegalArgumentException("id:" + id + ",销售单已审核,不能核对");
-            }
-
-            /// 核对操作校验
-            if(check){
-                if(Boolean.TRUE.equals(sale.getCheck())){
-                    throw new IllegalArgumentException("id:" + id + ",销售单已核对,不能重复核对");
-                }
-                /// 允许核对
-                validIds.add(id);
-            }else{
-                /// 反核对操作校验
-                if(Boolean.TRUE.equals(sale.getCheck())){
-                    /// 只有check为true的时候 才允许反核对
-                    validIds.add(id);
-                }else{
-                    throw new IllegalArgumentException("id:" + id + ",销售单未核对,不能反核对");
-                }
-            }
-        }
-
-        if(validIds.isEmpty()){
-            return 0;
-        }
-        /// 批量更新数据库
-        return saleMapper.updateCheck(validIds,check);
+    public Integer checkSales(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command, boolean check) {
+        return saleChecks.check(command,check);
     }
 
     /**
@@ -259,8 +221,8 @@ public class SaleFormServiceImpl implements SaleFormService {
 
     @Transactional(rollbackFor = Exception.class)
     @Override
-    public Integer examineSales(List<String> ids, boolean examine) {
-        return salePosting.post(ids, examine);
+    public Integer examineSales(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command, boolean examine) {
+        return salePosting.post(command, examine);
     }
 
     /**

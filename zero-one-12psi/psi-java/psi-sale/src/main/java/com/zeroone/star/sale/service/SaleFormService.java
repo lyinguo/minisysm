@@ -34,7 +34,7 @@ public interface SaleFormService {
 
     int batchDeleteSales(List<String> ids);
 
-    Integer checkSales(List<String> ids, boolean check);
+    Integer checkSales(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command, boolean check);
 
-    Integer examineSales(List<String> ids, boolean examine);
+    Integer examineSales(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command, boolean examine);
 }

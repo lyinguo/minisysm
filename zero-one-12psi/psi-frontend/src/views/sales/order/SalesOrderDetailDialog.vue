@@ -3,6 +3,8 @@
     v-model="innerVisible"
     fullscreen
     :close-on-click-modal="false"
+    :close-on-press-escape="!saving"
+    :show-close="!saving"
     class="sb-detail-dialog"
     title="单据详情"
   >
@@ -375,7 +377,7 @@
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="innerVisible = false">关闭</el-button>
+        <el-button :disabled="saving" @click="innerVisible = false">关闭</el-button>
         <el-button type="primary" :loading="saving" :disabled="loading || !!loadError || isApproved || isChecked" @click="save">保存修改</el-button>
       </div>
     </template>
@@ -388,7 +390,7 @@ import { ArrowDown } from '@element-plus/icons-vue'
 import Customer from '@/components/goodSearchConpoent/Customer.vue'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import { Setting, Edit, Delete, Refresh } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { nextTick } from 'vue'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
@@ -481,30 +483,7 @@ function toggleRowPopover(index: number) {
 }
 
 // 核对 / 反核对
-async function toggleCheck() {
-  if (loading.value || saving.value || loadError.value) return
-  const target = !isChecked.value
-  if (target && hasUnsavedChanges.value && !(await persistDraft(false))) return
-  try {
-    if (!props.record?.id) {
-      ElMessage.warning('请先保存单据')
-      return
-    }
-
-    const response = await saleOrderApi.checkSales([props.record.id], target)
-
-    if (response.code === 10000) {
-      await loadDocument()
-      emit('changed')
-      ElMessage.success(target ? '核对单据成功' : '反核对成功')
-    } else {
-      ElMessage.error(response.message || '操作失败')
-    }
-  } catch (error) {
-    console.error('核对操作失败:', error)
-    ElMessage.error('操作失败，请重试')
-  }
-}
+async function toggleCheck() { await reviewCommand(false) }
 
 /** 单行选择确认 */
 function handleWarehouseConfirm(selected: any) {
@@ -533,29 +512,25 @@ const router = useRouter()
 const isApproved = ref(false)
 
 // 审核/反审核
-const toggleApprove = async () => {
-  if (loading.value || saving.value || loadError.value) return
-  const target = !isApproved.value
-  if (target && !isChecked.value) { ElMessage.warning('请先保存并核对单据，再执行审核'); return }
+const toggleApprove = async () => { await reviewCommand(true) }
+async function reviewCommand(audit: boolean) {
+  if (loading.value || saving.value || loadError.value || !currentDocument.value) return
+  if (hasUnsavedChanges.value) { ElMessage.warning('请先保存未提交的修改，再重新打开核对'); return }
+  const reviewed = currentDocument.value
+  const id = String(reviewed.header.id)
+  const version = reviewed.version
+  const target = audit ? !isApproved.value : !isChecked.value
+  if (audit && target && !isChecked.value) { ElMessage.warning('请先核对销售单'); return }
+  try { await ElMessageBox.confirm(audit ? (target ? '审核将实际出库、登记应收并记录本单收款，是否继续？' : '反审核将撤销本单出库、收款和应收，是否继续？') : '将核对或反核对当前已读取版本，单据变化时整批拒绝，是否继续？', '确认销售单操作', { type: 'warning' }) } catch { return }
+  if (saving.value || loading.value || currentDocument.value !== reviewed || String(props.record?.id) !== id || !props.visible) return
+  if (hasUnsavedChanges.value) { ElMessage.warning('确认期间内容发生变化，请先保存后重新核对'); return }
+  saving.value = true
   try {
-    if (!props.record?.id) {
-      ElMessage.warning('请先保存单据')
-      return
-    }
-
-    const response = await saleOrderApi.examineSales([props.record.id], target)
-
-    if (response.code === 10000) {
-      await loadDocument()
-      emit('changed')
-      ElMessage.success(target ? '审核成功' : '反审核成功')
-    } else {
-      ElMessage.error(response.message || '操作失败')
-    }
-  } catch (error) {
-    console.error('审核操作失败:', error)
-    ElMessage.error('操作失败，请重试')
-  }
+    const response = audit ? await saleOrderApi.examineSales([id], target, version) : await saleOrderApi.checkSales([id], target, version)
+    if (response.code !== 10000) throw new Error(response.message || '销售单操作失败')
+    await loadDocument(); emit('changed'); ElMessage.success('销售单操作成功')
+  } catch (error) { ElMessage.error(extractApiErrorMessage(error, '操作失败，请重新打开单据核对')) }
+  finally { saving.value = false }
 }
 
 // 生成：携带数据并跳转到【销售退货单】

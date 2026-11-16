@@ -19,8 +19,9 @@ public class SalePostingService {
     private final SaleDocumentAccess access;
     private final SaleDraftService drafts;
     private final SaleStockSummaryService summaries;
-    public SalePostingService(JdbcTemplate db, SaleDocumentAccess access, SaleDraftService drafts,SaleStockSummaryService summaries) {
-        this.db=db; this.access=access; this.drafts=drafts; this.summaries=summaries;
+    private final SaleSnapshotService snapshots;
+    public SalePostingService(JdbcTemplate db, SaleDocumentAccess access, SaleDraftService drafts,SaleStockSummaryService summaries,SaleSnapshotService snapshots) {
+        this.db=db; this.access=access; this.drafts=drafts; this.summaries=summaries;this.snapshots=snapshots;
     }
     @PostConstruct public void initialize() {
         db.execute("CREATE TABLE IF NOT EXISTS psi_sale_posting (sale_id VARCHAR(32) NOT NULL PRIMARY KEY,fingerprint VARCHAR(32) NOT NULL,created_at DATETIME NOT NULL)");
@@ -36,10 +37,11 @@ public class SalePostingService {
         return DigestUtils.md5DigestAsHex((immutable.toString()+lines.toString()).getBytes(StandardCharsets.UTF_8));
     }
     @Transactional(rollbackFor=Exception.class)
-    public int post(List<String> ids,boolean target) {
+    public int post(com.zeroone.star.project.dto.j4.sale.SaleReviewCommand command,boolean target) {
         UserDTO actor=access.authorize("/sale/form/examine");
-        if(ids==null || ids.isEmpty() || ids.size()>200 || new HashSet<>(ids).size()!=ids.size() || ids.stream().anyMatch(x->x==null || x.trim().isEmpty()))
-            throw new IllegalArgumentException("请选择1到200张不同单据");
+        if(command==null)throw new IllegalArgumentException("Missing reviewed command");
+        List<String> ids=command.getIds();
+        Map<String,String> expected=snapshots.expected(ids,command.getVersion(),command.getVersions());
         drafts.lockWrites();
         List<String> ordered=new ArrayList<>(ids); Collections.sort(ordered);
         int changed=0;
@@ -48,6 +50,7 @@ public class SalePostingService {
             if(found.size()!=1) throw new IllegalArgumentException("销售单不存在");
             Map<String,Object> head=found.get(0);
             access.requireFrame(actor,s(head.get("frame")));
+            snapshots.require(id,expected.get(id));
             List<Map<String,Object>> lines=db.queryForList("SELECT * FROM sell_info WHERE pid=? ORDER BY id FOR UPDATE",id);
             boolean audited=n(head.get("examine"))==1;
             List<String> markers=db.queryForList("SELECT fingerprint FROM psi_sale_posting WHERE sale_id=? FOR UPDATE",String.class,id);

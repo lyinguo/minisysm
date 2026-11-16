@@ -522,6 +522,7 @@ interface InvoiceDetail {
 }
 
 interface RowData {
+  version?: string
   id: string
   org: string
   customer: string
@@ -584,7 +585,7 @@ async function loadSaleList() {
       tableRef.value?.clearSelection?.()
       // 转换后端数据为前端表格格式
       tableData.value = (response.data.rows || []).map((item) => ({
-        id: item.id,
+        id: item.id, version: item.version,
         org: item.frameName || item.frame,
         frame: item.frame, customerId: item.customer,
         customer: item.customerName || item.customer,
@@ -828,65 +829,25 @@ const onDelete = async (row: RowData) => {
 }
 
 /* 批量审核/反审核 */
-const onBatchExamine = async (type: 0 | 1) => {
-  // type: 0=审核, 1=反审核
-  if (selected.value.length === 0) {
-    ElMessage.warning('请选择要操作的单据！')
-    return
-  }
-
+const batchReviewBusy = ref(false)
+const onBatchExamine = async (type: 0 | 1) => { await reviewBatch(true, type === 0) }
+const onBatchCheck = async (type: 0 | 1) => { await reviewBatch(false, type === 0) }
+async function reviewBatch(audit: boolean, target: boolean) {
+  if (batchReviewBusy.value || listLoading.value) return
+  const rows = [...selected.value]
+  if (!rows.length || rows.some(row => !/^[0-9a-f]{64}$/.test(row.version || ''))) { ElMessage.warning('请刷新列表并重新选择要核对的销售单'); return }
+  const ids = rows.map(row => row.id)
+  const versions = Object.fromEntries(rows.map(row => [row.id, row.version!]))
+  const sequence = querySequence
+  try { await ElMessageBox.confirm(`将处理当前选中的 ${ids.length} 张销售单。审核会变更真实库存与资金，任一单据已变化则整批取消，是否继续？`, '确认销售单操作', { type: 'warning' }) } catch { return }
+  if (batchReviewBusy.value || listLoading.value || sequence !== querySequence) return
+  batchReviewBusy.value = true
   try {
-    const ids = selected.value.map((row) => row.id)
-    const response = await saleOrderApi.examineSales(ids, type === 0)
-
-    if (response.code === 10000) {
-      await loadSaleList()
-
-      // 清空选中项
-      selected.value = []
-      if (tableRef.value) {
-        tableRef.value.clearSelection()
-      }
-
-      ElMessage.success(`操作成功！共处理 ${ids.length} 条单据`)
-    } else {
-      ElMessage.error(response.message || '操作失败')
-    }
-  } catch (error) {
-    console.error('批量操作失败:', error)
-    ElMessage.error('操作失败，请重试')
-  }
-}
-
-/* 批量核对/反核对 */
-const onBatchCheck = async (type: 0 | 1) => {
-  // type: 0=核对, 1=反核对
-  if (selected.value.length === 0) {
-    ElMessage.warning('请选择要操作的单据！')
-    return
-  }
-
-  try {
-    const ids = selected.value.map((row) => row.id)
-    const response = await saleOrderApi.checkSales(ids, type === 0)
-
-    if (response.code === 10000) {
-      await loadSaleList()
-
-      // 清空选中项
-      selected.value = []
-      if (tableRef.value) {
-        tableRef.value.clearSelection()
-      }
-
-      ElMessage.success(`操作成功！共处理 ${ids.length} 条单据`)
-    } else {
-      ElMessage.error(response.message || '操作失败')
-    }
-  } catch (error) {
-    console.error('批量操作失败:', error)
-    ElMessage.error('操作失败，请重试')
-  }
+    const response = audit ? await saleOrderApi.examineSales(ids, target, versions) : await saleOrderApi.checkSales(ids, target, versions)
+    if (response.code !== 10000) throw new Error(response.message || '销售单操作失败')
+    await loadSaleList(); ElMessage.success(`操作成功，共处理 ${ids.length} 张单据`)
+  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作失败，请刷新后重新核对') }
+  finally { batchReviewBusy.value = false }
 }
 
 /* 批量删除 */

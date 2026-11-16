@@ -14,6 +14,11 @@ import type {
  */
 export class SaleOrderApi {
   private http = useHttp()
+  private reviewCommand(ids: string[], reviewed: string | Record<string,string>) {
+    const versions = typeof reviewed === 'string' && ids.length === 1 ? { [ids[0]]: reviewed } : reviewed
+    if (!ids.length || ids.length > 200 || new Set(ids).size !== ids.length || !versions || typeof versions !== 'object' || Object.keys(versions).length !== ids.length || ids.some(id => !id || !/^[0-9a-f]{64}$/.test(versions[id] || ''))) throw new Error('请刷新并核对全部选中销售单后再操作')
+    return { ids: [...ids], versions: { ...versions } }
+  }
   async getDocument(id: string): Promise<JsonVO<import('./type').SaleDocumentDetail>> {
     return this.http.get('/sale/form/document/' + encodeURIComponent(id))
   }
@@ -42,10 +47,10 @@ export class SaleOrderApi {
   /**
    * 审核/反审核(支持批量)
    */
-  async examineSales(ids: string[], examine: boolean): Promise<JsonVO<number>> {
+  async examineSales(ids: string[], examine: boolean, reviewed: string | Record<string,string>): Promise<JsonVO<number>> {
     return this.http.post<number>(
       '/sale/form/examine',
-      ids,
+      this.reviewCommand(ids, reviewed),
       {
         params: { examine }
       }
@@ -55,10 +60,10 @@ export class SaleOrderApi {
   /**
    * 核对/反核对(支持批量)
    */
-  async checkSales(ids: string[], check: boolean): Promise<JsonVO<number>> {
+  async checkSales(ids: string[], check: boolean, reviewed: string | Record<string,string>): Promise<JsonVO<number>> {
     return this.http.post<number>(
       '/sale/form/check',
-      ids,
+      this.reviewCommand(ids, reviewed),
       {
         params: { check }
       }

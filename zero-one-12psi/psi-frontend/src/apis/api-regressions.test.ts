@@ -42,14 +42,22 @@ describe('unfinished API actions', () => {
     await expect(PurchaseNoteAPI.addPurchaseNote(body)).rejects.toThrow('填写实付金额时请选择结算账户')
     expect(mocks.post).toHaveBeenCalledTimes(1)
   })
-  it.each([true, false])('sends sales audit and check IDs as JSON arrays (target=%s)', async target => {
+  it.each([true, false])('sends exact reviewed sales versions with every selected ID (target=%s)', async target => {
     const api = new SaleOrderApi()
     const ids = ['1234567890123456789', 'sale-uuid']
     mocks.post.mockResolvedValue({ code: 10000, data: 2 })
-    await api.examineSales(ids, target)
-    expect(mocks.post).toHaveBeenCalledWith('/sale/form/examine', ids, { params: { examine: target } })
-    await api.checkSales(ids, target)
-    expect(mocks.post).toHaveBeenCalledWith('/sale/form/check', ids, { params: { check: target } })
+    const versions = Object.fromEntries(ids.map(id => [id, 'a'.repeat(64)]))
+    await api.examineSales(ids, target, versions)
+    expect(mocks.post).toHaveBeenCalledWith('/sale/form/examine', { ids, versions }, { params: { examine: target } })
+    await api.checkSales(ids, target, versions)
+    expect(mocks.post).toHaveBeenCalledWith('/sale/form/check', { ids, versions }, { params: { check: target } })
+  })
+  it('refuses incomplete or extra sales versions before transport', async () => {
+    const api = new SaleOrderApi()
+    await expect(api.checkSales(['a', 'b'], true, { a: 'a'.repeat(64) })).rejects.toThrow()
+    await expect(api.examineSales(['a'], true, { a: 'a'.repeat(64), b: 'b'.repeat(64) })).rejects.toThrow()
+    await expect(api.checkSales(['a', 'a'], true, { a: 'a'.repeat(64) })).rejects.toThrow()
+    expect(mocks.post).not.toHaveBeenCalled()
   })
   it('sends sales deletion IDs in the array expected by the existing controller', async () => {
     mocks.delete.mockResolvedValue({ code: 10000, data: 1 })

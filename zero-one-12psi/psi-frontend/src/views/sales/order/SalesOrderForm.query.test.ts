@@ -1,21 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
-import ElementPlus, { ElDatePicker } from 'element-plus'
+import ElementPlus, { ElDatePicker, ElTable, ElMessageBox } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-const api = vi.hoisted(() => ({ getSaleList: vi.fn() }))
+const api = vi.hoisted(() => ({ getSaleList: vi.fn(),checkSales:vi.fn(),examineSales:vi.fn() }))
 vi.mock('@/apis/sales/order', () => ({ saleOrderApi: api }))
 vi.mock('./SalesOrderDetailDialog.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/components/operationbuttons/OperationButtons.vue', () => ({ default: { template: '<div />' } }))
 import SalesOrderForm from './SalesOrderForm.vue'
 
 function page(name = '真实销售客户', total = 12) {
-  return { code: 10000, data: { total, rows: [{ id: name, customer: 'customer-id', customerName: name, frame: 'frame-id', frameName: '测试组织', number: name + '-单据', time: '2026-11-15 12:00:00', total: 100, actual: 100, money: 0, cost: 0, examine: 0, check: 0, nucleus: 0, cse: 3, invoice: 3 }] } }
+  return { code: 10000, data: { total, rows: [{ id: name, version: 'a'.repeat(64), customer: 'customer-id', customerName: name, frame: 'frame-id', frameName: '测试组织', number: name + '-单据', time: '2026-11-15 12:00:00', total: 100, actual: 100, money: 0, cost: 0, examine: 0, check: 0, nucleus: 0, cse: 3, invoice: 3 }] } }
 }
-function render() { return mount(SalesOrderForm, { global: { plugins: [createPinia(), [ElementPlus, { locale: zhCn }]] } }) }
+function render() { return mount(SalesOrderForm, { global: { plugins: [createPinia(), [ElementPlus, { locale: zhCn }]], stubs: {ElPopover:{template:'<div><slot name="reference" /><slot /></div>'}} } }) }
 
 describe('sales document queries', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.spyOn(ElMessageBox,'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    api.checkSales.mockReset().mockResolvedValue({code:10000})
+    api.examineSales.mockReset().mockResolvedValue({code:10000})
     api.getSaleList.mockReset().mockResolvedValue(page())
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
   })
@@ -89,4 +93,26 @@ describe('sales document queries', () => {
       expect(wrapper.text()).toContain('剩余单据')
     } finally { wrapper.unmount() }
   })
+  it('submits the complete displayed selection and its versions, including mixed states', async () => {
+    const data=page();data.data.rows.push({...data.data.rows[0],id:'second-sale',version:'b'.repeat(64),check:1})
+    api.getSaleList.mockResolvedValue(data)
+    const wrapper=render()
+    try {await flushPromises();const table=wrapper.findComponent(ElTable);table.vm.$emit('selection-change',table.props('data'));await flushPromises();await wrapper.findAll('li').find(li=>li.text()==='核对')!.trigger('click');await flushPromises();expect(api.checkSales).toHaveBeenCalledWith(['真实销售客户','second-sale'],true,{'真实销售客户':'a'.repeat(64),'second-sale':'b'.repeat(64)})}finally{wrapper.unmount()}
+  })
+  it('refuses the complete selection when one displayed version is missing', async () => {
+    const data=page();data.data.rows.push({...data.data.rows[0],id:'missing-version',version:''});api.getSaleList.mockResolvedValue(data)
+    const wrapper=render()
+    try {await flushPromises();const table=wrapper.findComponent(ElTable);table.vm.$emit('selection-change',table.props('data'));await flushPromises();await wrapper.findAll('li').find(li=>li.text()==='审核')!.trigger('click');await flushPromises();expect(api.examineSales).not.toHaveBeenCalled();expect(ElMessageBox.confirm).not.toHaveBeenCalled()}finally{wrapper.unmount()}
+  })
+  it('does not reread and bless versions after a stale batch refusal', async () => {
+    api.checkSales.mockResolvedValue({code:9995,message:'stale selected sales'})
+    const wrapper=render()
+    try {await flushPromises();const table=wrapper.findComponent(ElTable);table.vm.$emit('selection-change',table.props('data'));await flushPromises();api.getSaleList.mockClear();await wrapper.findAll('li').find(li=>li.text()==='核对')!.trigger('click');await flushPromises();expect(api.checkSales).toHaveBeenCalledTimes(1);expect(api.getSaleList).not.toHaveBeenCalled()}finally{wrapper.unmount()}
+  })
+  it('cancels a delayed batch confirmation when the list refreshes', async () => {
+    let confirm!:(v:any)=>void;vi.mocked(ElMessageBox.confirm).mockImplementation(()=>new Promise(resolve=>{confirm=resolve}))
+    const wrapper=render()
+    try {await flushPromises();const table=wrapper.findComponent(ElTable);table.vm.$emit('selection-change',table.props('data'));await flushPromises();await wrapper.findAll('li').find(li=>li.text()==='核对')!.trigger('click');await wrapper.findAll('button').find(b=>b.text()==='刷新')!.trigger('click');await flushPromises();confirm('confirm');await flushPromises();expect(api.checkSales).not.toHaveBeenCalled()}finally{wrapper.unmount()}
+  })
+
 })
