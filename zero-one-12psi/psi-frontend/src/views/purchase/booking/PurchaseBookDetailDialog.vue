@@ -7,6 +7,7 @@
     title="采购订单详情"
   >
     <el-alert v-if="auditError" :title="auditError" type="error" :closable="false" show-icon />
+    <el-alert v-if="hasUnsavedChanges && !auditError" title="有未保存的修改。请先保存，再重新打开订单核对审核。" type="warning" :closable="false" show-icon />
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <div class="left">
@@ -427,6 +428,8 @@ const purchaseStore = usePurchaseStore()
 const documentFormRef = ref<ComponentPublicInstance<{ formdata: any }> | null>(null)
 const saveBusy = ref(false)
 const originalFile = ref('')
+const documentVersion = ref('')
+const savedSnapshot = ref<string | null>(null)
 
 /* v-model:visible */
 const innerVisible = computed({
@@ -471,7 +474,7 @@ function handleClearSupplier() {
 const footer = reactive({
   documentCost: '',
   actualAmount: '',
-  relatedPerson: 'NTJK_test_DD001',
+  relatedPerson: '',
   arrivalDate: '',
   logistics: '',
   remark: ''
@@ -572,20 +575,29 @@ function handleBatchWarehouseSelect(selected: any) {
 }
 
 /* 审核状态 */
+function editableSnapshot() {
+  const f = documentFormRef.value?.formdata
+  return JSON.stringify({header, supplier:supplierModel.id, rows:tableData.value.filter(r=>r.productName || r.goodsId).map(r=>({goods:r.goodsId,warehouse:r.warehouseId,attr:r.attr,unit:r.unit,price:Number(r.price),quantity:Number(r.quantity),discount:Number(r.discount || 0),amount:Number(r.amount),discountAmount:Number(r.discountAmount || 0),taxRate:Number(r.taxRate),taxAmount:Number(r.taxAmount),total:Number(r.total),remark:r.remark})),people:f?.relatedPerson || '',arrival:f?.arrivalDate || '',logistics:typeof f?.logistics==='object'?f.logistics?.number || '':f?.logistics || '',remark:f?.remarks || ''})
+}
+const hasUnsavedChanges = computed(() => savedSnapshot.value !== null && editableSnapshot() !== savedSnapshot.value)
 const isApproved = ref(false)
 const auditBusy = ref(false)
 const auditError = ref('')
 const toggleApprove = async () => {
-  if (auditBusy.value) return
+  if (auditBusy.value || saveBusy.value) return
   auditError.value = ''
+  if (hasUnsavedChanges.value) { auditError.value = '请先保存修改，再重新打开订单核对审核'; return }
   if (!orderId.value) { auditError.value = '请先保存并重新打开实际订单'; return }
+  if (!/^[0-9a-f]{64}$/.test(documentVersion.value)) { auditError.value = '请重新打开详情取得当前订单版本'; return }
   auditBusy.value = true
   try {
-    const result = await PurchaseOrderAPI.auditPurchaseOrders([String(orderId.value)], isApproved.value ? 0 : 1)
+    const result = await PurchaseOrderAPI.auditPurchaseOrders([String(orderId.value)], isApproved.value ? 0 : 1, documentVersion.value)
     if (result.code !== 10000) throw new Error(result.message || '审核操作失败')
     const actual = await PurchaseOrderAPI.orderStatus(orderId.value)
     if (actual.code !== 10000 || !actual.data) throw new Error(actual.message || '状态读取失败，请关闭详情重新查询')
     isApproved.value = Number(actual.data.examine) === 1
+    documentVersion.value = actual.data.version || ''
+    if (!/^[0-9a-f]{64}$/.test(documentVersion.value)) throw new Error('已提交操作，但当前版本读取失败，请关闭详情重新核对')
     emit('audit')
     ElMessage.success(isApproved.value ? '采购订单已审核，尚未收货入库' : '采购订单已反审核')
   } catch (error) { auditError.value = error instanceof Error ? error.message : '审核操作失败' }
@@ -622,6 +634,7 @@ function convertDetailItemToTableRow(item: PurchaseOrderDetailItem): TableRowDat
  * 填充详情数据到表单和表格
  */
 function fillDetailData(detailData: PurchaseOrderDetailResponse) {
+  savedSnapshot.value = null
   if (!detailData) return
 
   // 将详情数据转换为数组（处理单个对象或数组的情况）
@@ -640,6 +653,7 @@ function fillDetailData(detailData: PurchaseOrderDetailResponse) {
     supplierModel.name = otherDetail.supplierName || (otherDetail.supplier ? '供应商资料缺失，请重新选择' : '')
     supplierModel.id = otherDetail.supplier || ''
     originalFile.value = otherDetail.file ?? ''
+    documentVersion.value = otherDetail.version || ''
     
     // 填充底部表单数据到 footer（用于保存时使用）
     footer.actualAmount = otherDetail.actual ? String(otherDetail.actual) : ''
@@ -668,6 +682,7 @@ function fillDetailData(detailData: PurchaseOrderDetailResponse) {
         formdata.relatedPerson = otherDetail.people || ''
         formdata.relatedPersonName = otherDetail.peopleName || (otherDetail.people ? '人员资料缺失，请重新选择' : '')
       }
+      nextTick(() => { savedSnapshot.value = editableSnapshot() })
     })
   }
 
@@ -746,6 +761,8 @@ onBeforeUnmount(() => { if (resetTimer) clearTimeout(resetTimer) })
  * 重置表单数据
  */
 function resetForm() {
+  savedSnapshot.value = null
+  documentVersion.value = ''
   originalFile.value = ''
   supplierModel.name = ''
   supplierModel.id = ''
@@ -1035,6 +1052,7 @@ function deleteRow(index: number) {
 
   // 👇 同步把这一行的 popover 状态也删掉
   rowPopoverVisible.value.splice(index, 1)
+  updateStatusBar()
 
   ElMessage.success('已删除该行')
 }
@@ -1088,6 +1106,7 @@ function convertTableRowToOrderInfo(row: TableRowData): any {
 /* 保存 */
 const save = async () => {
   if (saveBusy.value || isApproved.value || auditBusy.value) return
+  auditError.value = ''
   try {
     // 验证必填字段
     if (!header.documentNumber) {
@@ -1153,6 +1172,7 @@ const save = async () => {
 
     // 构建更新数据
     const updateData: PurchaseOrderUpdateDTO = {
+      version: documentVersion.value,
       id: orderId.value ? String(orderId.value) : undefined,
       number: header.documentNumber,
       supplier: supplierModel.id,
@@ -1186,11 +1206,13 @@ const save = async () => {
       // 关闭对话框
       innerVisible.value = false
     } else {
+      auditError.value = response.message || '订单修改失败'
       ElMessage.error(response.message || '订单修改失败')
     }
   } catch (error: any) {
     console.error('保存订单失败:', error)
     const errorMessage = error?.message || error?.response?.data?.message || '订单修改失败，请稍后重试'
+    auditError.value = errorMessage
     ElMessage.error(errorMessage)
   } finally { saveBusy.value = false }
 }

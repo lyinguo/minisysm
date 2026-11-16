@@ -19,7 +19,7 @@ class OrderDetailSuite(OrderAuditSuite):
             body['file']=json.dumps([dict(name='QA attachment metadata',url='qa-reference-only')])
             id=self.create_order(body);data=self.document(id)['data'];head=data['header'];item=data['items'][0]
             assert Decimal(str(item['total']))==Decimal('.4501') and Decimal(str(item['tpt']))==Decimal('.5086')
-            body.update(id=id,total=head['total'],actual=head['actual'],file=head['file'],data='QA actual detail edit')
+            body.update(id=id,version=data['version'],total=head['total'],actual=head['actual'],file=head['file'],data='QA actual detail edit')
             line.update({key:item[key] for key in ['price','nums','discount','dsc','total','tax','tat','tpt']})
             result=self.request('PUT','/purchase-order/update',body,service='purchase');assert result.get('code')==10000,'Actual full-detail edit rejected'
             after=self.document(id)['data'];assert after['header']['data']=='QA actual detail edit' and after['header']['people']==self.person and after['header']['file']==body['file']
@@ -30,7 +30,7 @@ class OrderDetailSuite(OrderAuditSuite):
         def optional():
             self.fixture();body=self.order_body();body.update(people='',logistics='QA-OLD-TRACK');id=self.create_order(body)
             data=self.document(id)['data'];head=data['header'];item=data['items'][0]
-            body.update(id=id,total=head['total'],actual=head['actual'],logistics='',data='',file='[]')
+            body.update(id=id,version=data['version'],total=head['total'],actual=head['actual'],logistics='',data='',file='[]')
             body['purchaseOrderInfoDTOList'][0].update({key:item[key] for key in ['price','nums','discount','dsc','total','tax','tat','tpt']})
             assert self.request('PUT','/purchase-order/update',body,service='purchase').get('code')==10000
             after=self.document(id)['data']['header'];assert not after['people'] and not after['logistics'] and not after['data'] and after.get('peopleName') is None

@@ -100,13 +100,16 @@ class OrderAuditSuite(BookingDraftSuite):
         self.case('booking.audit_full_review_and_read_scope',full_read)
         def update_guard():
             self.fixture();body=self.order_body();id=self.create_order(body);body.update(id=id,total=200,actual=226);body['purchaseOrderInfoDTOList'][0].update(total=200,tat=26,tpt=226)
+            body['version']=self.request('GET','/purchase-order/document?id='+id,service='purchase')['data']['version']
             assert self.request('PUT','/purchase-order/update',body,service='purchase').get('code')==10000
             assert sql(self.state,'SELECT `user` FROM bor WHERE id='+literal(id)+';')==self.actor
             assert self.audit([id]).get('code')==10000
             body['purchaseOrderInfoDTOList'][0]['nums']=3
+            body['version']=self.request('GET','/purchase-order/document?id='+id,service='purchase')['data']['version']
             assert self.request('PUT','/purchase-order/update',body,service='purchase').get('code')!=10000 and self.state_of(id)=='1'
             assert sql(self.state,'SELECT nums FROM bor_info WHERE pid='+literal(id)+';')=='2.0000'
             assert self.audit([id],0).get('code')==10000
+            body['version']=self.request('GET','/purchase-order/document?id='+id,service='purchase')['data']['version']
             assert self.request('PUT','/purchase-order/update',body,service='purchase').get('code')!=10000
             return ['Actual valid draft update preserves creator; approved order cannot be overwritten through legacy update and bad draft monetary totals reject without changing persisted quantities']
         self.case('booking.audit_legacy_update_cannot_bypass',update_guard)

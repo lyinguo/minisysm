@@ -64,6 +64,7 @@ export interface PurchaseOrderAddDTO {
 
 // 修改采购订单请求参数
 export interface PurchaseOrderUpdateDTO {
+  version: string
   /** 实际金额 */
   actual: number
   /** 到货时间 */
@@ -164,6 +165,7 @@ export interface PurchaseOrderListItem {
 
 // 采购订单其他部分详情
 export interface PurchaseOrderOtherDetailDTO {
+  version?: string
   supplierName?: string
   peopleName?: string
   userName?: string
@@ -301,6 +303,15 @@ export interface PurchaseOrderGenerateDataDTO {
  */
 export class PurchaseOrderAPI {
   private static http = useHttp()
+  private static orderError(error: any, fallback: string): Error {
+    const payload = error?.response?.data ?? error?.data ?? error?.responseData
+    const message = typeof payload?.data === 'string' && payload.data.trim()
+      ? payload.data
+      : typeof payload?.message === 'string' && payload.message.trim()
+        ? payload.message
+        : typeof error?.message === 'string' && error.message.trim() ? error.message : fallback
+    return new Error(message)
+  }
 
   static receivePreview(id:string) {
     return this.http.get<{header:Record<string,any>;items:Record<string,any>[];drafts:Array<{id:string;number:string}>}>(`${currBaseUrl}/receive-preview?id=${encodeURIComponent(id)}`)
@@ -593,7 +604,8 @@ export class PurchaseOrderAPI {
    */
   static async auditPurchaseOrders(
     ids: (number | string)[],
-    type: 0 | 1
+    type: 0 | 1,
+    version?: string
   ): Promise<ApiResponse<string[]>> {
     try {
       if (!ids || ids.length === 0) {
@@ -611,11 +623,13 @@ export class PurchaseOrderAPI {
         return value
       })
       if (new Set(validIds).size !== validIds.length || validIds.length > 200 || (type !== 0 && type !== 1)) throw new Error('请选择1到200张不同订单和有效审核操作')
+      if (version !== undefined && (validIds.length !== 1 || !/^[0-9a-f]{64}$/.test(version))) throw new Error('订单版本无效，请重新打开详情')
 
       // 按照接口文档，参数名是 ids 和 type（type: 1=审核，0=反审核）
       const requestData = {
         ids: validIds,
-        type: type
+        type: type,
+        ...(version !== undefined ? {version} : {})
       }
 
       const result = await this.http.put<string[]>(
@@ -633,12 +647,12 @@ export class PurchaseOrderAPI {
         console.error('响应数据:', error.response.data)
         console.error('响应状态:', error.response.status)
       }
-      throw error
+      throw this.orderError(error, '订单审核失败，请重新打开详情核对')
     }
   }
 
   static orderStatus(id: string | number) {
-    return this.http.get<{id:string;frame:string;examine:number;state:number}>(`${currBaseUrl}/status?id=${encodeURIComponent(String(id))}`)
+    return this.http.get<{id:string;frame:string;examine:number;state:number;version:string}>(`${currBaseUrl}/status?id=${encodeURIComponent(String(id))}`)
   }
 
   /**
@@ -703,10 +717,10 @@ export class PurchaseOrderAPI {
       // 将 ID 转换为字符串
       const idStr = String(id)
 
-      const result = await this.http.get<{header:Record<string,any>;items:Record<string,any>[]}>(`${currBaseUrl}/document?id=${encodeURIComponent(idStr)}`, undefined, {showLoading:true})
+      const result = await this.http.get<{version:string;header:Record<string,any>;items:Record<string,any>[]}>(`${currBaseUrl}/document?id=${encodeURIComponent(idStr)}`, undefined, {showLoading:true})
       if(result.code!==10000 || !result.data)return {code:result.code,message:result.message,data:undefined}
       const head=result.data.header
-      const header={...head,arrivalTime:head.arrival}
+      const header={...head,arrivalTime:head.arrival,version:result.data.version}
       return {...result,data:result.data.items.map(item=>({...item,amount:item.total,purchaseOrderOtherDetailDTO:header}))}
     } catch (error: any) {
       console.error('获取采购订单详情失败:', error)
@@ -841,7 +855,7 @@ export class PurchaseOrderAPI {
         console.error('响应数据:', error.response.data)
         console.error('响应状态:', error.response.status)
       }
-      throw error
+      throw this.orderError(error, '订单修改失败，请重新打开详情核对')
     }
   }
 
@@ -849,6 +863,7 @@ export class PurchaseOrderAPI {
    * 验证更新必填字段
    */
   private static validateUpdateRequiredFields(data: PurchaseOrderUpdateDTO): void {
+    if (!/^[0-9a-f]{64}$/.test(data.version || '')) throw new Error('请重新打开订单取得当前版本后再保存')
     // 验证主对象必填字段
     if (!data.number || (typeof data.number === 'string' && data.number.trim() === '')) {
       throw new Error('单据编号不能为空')

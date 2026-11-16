@@ -29,6 +29,9 @@ import java.util.List;
 @NoArgsConstructor
 @ApiModel("修改采购订单对象")
 public class PurchaseOrderUpdateDTO {
+    @NotBlank(message = "请重新打开订单取得当前版本后再保存")
+    @javax.validation.constraints.Pattern(regexp = "[0-9a-f]{64}", message = "订单版本无效，请重新打开详情")
+    private String version;
 
     /**
      * 采购订单编号

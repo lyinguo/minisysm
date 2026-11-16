@@ -1,5 +1,11 @@
 # 系统业务验收
 
+## 采购订单并发修改与详情审核版本
+
+`python qa/booking_conflict_acceptance.py run`执行8项真实HTTP/OAuth/MySQL专项：稳定版本、过期编辑、同版本并发仅一成功、带版本详情审核及反审核、禁止省略/伪造版本、实际存储故障回滚重试、资料改名不误报冲突及当前角色/组织/撤权保护。修改接口必须先读取`GET /purchase-order/document?id=...`的顶层version并在PUT /purchase-order/update提交；审核详情可携带单据version，审核后从status读取新版本用于下一次操作。版本由真实单据、明细及操作记录计算，不是授权凭据，仍需原资源权限和组织归属。无版本的原批量审核仍处理当前单据，其陈旧列表阅读一致性尚未验收。
+
+运行`prepare`后，在18030隔离页面按打印单号打开详情，改备注为`QA local unsaved`，点击审核应阻止，执行`verify-dirty`；保存后执行`verify-saved`。重新打开并确认该备注，再执行`external-edit`模拟另一真实请求更新。在旧窗口审核应提示重新打开，执行`verify-stale-audit`；改备注为`QA local preserved`并保存也应拒绝，窗口和输入保留，执行`verify-stale-save`。关闭重新打开后必须看到`QA external newer`，人工核对改为`QA resolved after review`并保存，执行`verify-resolved`。重新打开审核、同窗口反审核，分别执行`verify-approved`、`verify-reversed`；操作记录应累计到6，库存/应付0、现金100。失败不自动覆盖或合并他人修改；关闭窗口后的自动恢复/合并、批量审核快照和附件冲突仍待验收。
+
 ## 采购订单详情修改与真实名称
 
 `python qa/booking_detail_acceptance.py run`执行真实详情资料名称、四位折扣/税额修改及审核、可选人员/物流三项专项。新增与修改的人员均可留空；填写时保留实际ID并继续校验归属。详情补充真实名称，页面修改保留原折扣、税额及已有附件字段，未税/含税合计分别由明细计算。减免20表示扣减20%，不是支付20%。空物流不能被写成“自动识别”。已审核详情只读，返回未审核需先按业务规则反审核。
