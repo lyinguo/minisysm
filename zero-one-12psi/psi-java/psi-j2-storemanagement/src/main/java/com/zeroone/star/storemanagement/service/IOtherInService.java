@@ -16,17 +16,12 @@ import java.util.List;
 public interface IOtherInService extends IService<EntryDO> {
     void updateOtherInList(OtherInListDetailDTO otherInListDetailDTO);
 
-    void examine(List<Integer> ids);
 
-    void check(List<Integer> ids);
 
-    OtherInListDetailDTO getOtherInListDetail(String id);
 
     JsonVO<String> saveOtherInList(OtherInListAddDTO dto);
 
-    List<String> removeOtherInList(List<Integer> ids);
 
-    JsonVO<PageDTO<OtherInListDTO>> getOtherInList(OtherInQuery query);
 
     JsonVO<String> importExcel(MultipartFile file);
 

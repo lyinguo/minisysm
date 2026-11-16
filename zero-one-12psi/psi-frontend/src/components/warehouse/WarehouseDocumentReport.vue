@@ -49,8 +49,19 @@
     >
       <div v-loading="detailLoading">
         <template v-if="draft">
-          <el-alert v-if="!draft.items.length" title="该单据缺少商品明细，不能保存或审核。请先在单据管理中补全数据。" type="warning" :closable="false" />
-          <el-form label-width="90px" :disabled="audited || busy">
+          <el-alert
+            v-if="!draft.items.length"
+            title="该单据缺少商品明细，不能保存或审核。请先在单据管理中补全数据。"
+            type="warning"
+            :closable="false"
+          />
+          <el-alert
+            v-if="checked"
+            title="单据已核对，修改前请在入库开单页反核对；可以直接审核当前版本。"
+            type="info"
+            :closable="false"
+          />
+          <el-form label-width="90px" :disabled="editingLocked">
             <el-form-item label="单据编号"><el-input v-model="draft.header.number" /></el-form-item>
             <el-form-item label="单据时间"
               ><el-date-picker
@@ -68,15 +79,21 @@
             <el-table-column prop="unit" label="单位" width="80" />
             <el-table-column :label="kind === 'swap' ? '调出仓库' : '仓库'" min-width="160"
               ><template #default="{ row }">
-                <el-select v-model="row.warehouse" :disabled="audited || busy" filterable
-                  ><el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id"
-                /></el-select> </template
+                <el-select-v2
+                  v-model="row.warehouse"
+                  :disabled="editingLocked"
+                  filterable
+                  :options="warehouseOptions"
+                /> </template
             ></el-table-column>
             <el-table-column v-if="kind === 'swap'" label="调入仓库" min-width="160"
               ><template #default="{ row }">
-                <el-select v-model="row.storehouse" :disabled="audited || busy" filterable
-                  ><el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id"
-                /></el-select> </template
+                <el-select-v2
+                  v-model="row.storehouse"
+                  :disabled="editingLocked"
+                  filterable
+                  :options="warehouseOptions"
+                /> </template
             ></el-table-column>
             <el-table-column label="数量" min-width="160"
               ><template #default="{ row }"
@@ -84,7 +101,7 @@
                   v-model="row.nums"
                   :precision="4"
                   :min="0.0001"
-                  :disabled="audited || busy" /></template
+                  :disabled="editingLocked" /></template
             ></el-table-column>
             <el-table-column label="单位成本" min-width="160"
               ><template #default="{ row }"
@@ -92,7 +109,7 @@
                   v-model="row.price"
                   :precision="4"
                   :min="0"
-                  :disabled="audited || busy" /></template
+                  :disabled="editingLocked" /></template
             ></el-table-column>
             <el-table-column label="总成本" width="120"
               ><template #default="{ row }">{{
@@ -109,12 +126,12 @@
                 ><el-input
                   v-model="row.serial"
                   type="textarea"
-                  :disabled="audited || busy"
+                  :disabled="editingLocked"
                   placeholder='["SN001"]' /></template
             ></el-table-column>
             <el-table-column label="备注" min-width="160"
               ><template #default="{ row }"
-                ><el-input v-model="row.data" :disabled="audited || busy" /></template
+                ><el-input v-model="row.data" :disabled="editingLocked" /></template
             ></el-table-column>
           </el-table>
           <p>单据费用和商品资料保持原值；审核前可修改现有明细的仓库、数量、成本及备注。</p>
@@ -122,7 +139,7 @@
       </div>
       <template #footer>
         <el-button :disabled="busy" @click="visible = false">关闭</el-button>
-        <el-button v-if="draft && !audited" type="primary" :loading="busy" @click="save"
+        <el-button v-if="draft && !audited && !checked" type="primary" :loading="busy" @click="save"
           >保存</el-button
         >
         <el-button v-if="draft && !audited" type="success" :loading="busy" @click="audit(1)"
@@ -155,11 +172,20 @@ const size = 20
 const total = ref(0)
 const number = ref('')
 const warehouses = ref<Array<{ id: string; name: string }>>([])
+const warehouseOptions = computed(() =>
+  warehouses.value.map((w) => ({ value: String(w.id), label: w.name }))
+)
 const draft = ref<Detail | null>(null)
 const visible = ref(false)
 const busy = ref(false)
 const detailLoading = ref(false)
 const audited = computed(() => Number(draft.value?.header.examine) === 1)
+const checked = computed(() => props.kind === 'entry' && Number(draft.value?.header.check) === 1)
+const editingLocked = computed(() => audited.value || checked.value || busy.value)
+let original = ''
+function content() {
+  return JSON.stringify([draft.value?.header, draft.value?.items])
+}
 let active = true
 let requestId = 0
 let detailRequestId = 0
@@ -220,6 +246,7 @@ function applyDetail(data: Detail) {
     if (item.storehouse != null) item.storehouse = String(item.storehouse)
   })
   draft.value = data
+  original = content()
 }
 async function openDetail(id: string) {
   const seq = ++detailRequestId
@@ -268,7 +295,7 @@ async function audit(target: 0 | 1) {
       '确认操作',
       { type: 'warning' }
     )
-    if (target === 1) await persist()
+    if (target === 1 && content() !== original) await persist()
     const id = encodeURIComponent(String(draft.value!.header.id))
     const data = unwrap(
       await http.post<Detail>(`${base}/${id}/audit`, { target, version: draft.value!.version })

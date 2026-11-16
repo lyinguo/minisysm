@@ -7,7 +7,14 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), post: vi.fn() }))
 vi.mock('@/plugins/http', () => ({ useHttp: () => mocks }))
 const detail = () => ({
   version: 'v1',
-  header: { id: 'd1', number: 'IN001', time: '2026-11-14 10:00:00', examine: 0, data: '' },
+  header: {
+    id: 'd1',
+    number: 'IN001',
+    time: '2026-11-14 10:00:00',
+    examine: 0,
+    check: 0,
+    data: ''
+  },
   items: [{ id: 'i1', goods: 'g1', nums: 2, price: 5, warehouse: 'w1', data: '' }],
   goods: [{ id: 'g1', name: '测试商品', serial: 0 }]
 })
@@ -81,6 +88,11 @@ describe('warehouse document actions', () => {
   it('saves before auditing and passes the latest document version', async () => {
     const wrapper = await open()
     try {
+      const inputs = document.querySelectorAll('.el-dialog .el-input__inner')
+      const number = inputs[0] as HTMLInputElement
+      number.value = 'IN002'
+      number.dispatchEvent(new Event('input', { bubbles: true }))
+      await flushPromises()
       await wrapper
         .findAll('button')
         .find((b) => b.text() === '保存并审核')!
@@ -100,6 +112,10 @@ describe('warehouse document actions', () => {
     mocks.put.mockRejectedValueOnce(new Error('单据已被其他操作修改'))
     const wrapper = await open()
     try {
+      const number = document.querySelector('.el-dialog .el-input__inner') as HTMLInputElement
+      number.value = 'IN002'
+      number.dispatchEvent(new Event('input', { bubbles: true }))
+      await flushPromises()
       await wrapper
         .findAll('button')
         .find((b) => b.text() === '保存并审核')!
@@ -107,6 +123,32 @@ describe('warehouse document actions', () => {
       await flushPromises()
       expect(mocks.post).not.toHaveBeenCalled()
       expect(wrapper.findAll('button').some((b) => b.text() === '保存并审核')).toBe(true)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+  it('audits an unchanged checked document without an implicit edit permission', async () => {
+    mocks.get.mockImplementation(async (url: string) => ({
+      code: 10000,
+      data: url.endsWith('/d1')
+        ? { ...detail(), header: { ...detail().header, check: 1 } }
+        : url.includes('getWarehouseNameList')
+          ? []
+          : { rows: [{ id: 'd1', number: 'IN001' }], total: 1 }
+    }))
+    const wrapper = await open()
+    try {
+      expect(wrapper.findAll('button').some((b) => b.text() === '保存')).toBe(false)
+      await wrapper
+        .findAll('button')
+        .find((b) => b.text() === '保存并审核')!
+        .trigger('click')
+      await flushPromises()
+      expect(mocks.put).not.toHaveBeenCalled()
+      expect(mocks.post).toHaveBeenCalledWith('/transfer/report-documents/entry/d1/audit', {
+        target: 1,
+        version: 'v1'
+      })
     } finally {
       wrapper.unmount()
     }

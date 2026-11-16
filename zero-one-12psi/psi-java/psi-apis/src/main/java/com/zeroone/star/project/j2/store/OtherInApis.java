@@ -7,6 +7,8 @@ import com.zeroone.star.project.vo.JsonVO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
+import java.util.Map;
+import com.zeroone.star.project.dto.j2.store.StockDocumentCommand;
 import com.zeroone.star.project.dto.PageDTO;
 import com.zeroone.star.project.query.j2.store.OtherInQuery;
 
@@ -31,21 +33,21 @@ public interface OtherInApis {
      * @param ids 审核id列表
      * @return 修改结果
      */
-    JsonVO<String> examine(List<Integer> ids);
+    JsonVO<Integer> examine(StockDocumentCommand command);
 
     /**
      * 核对或反核对
      * @param ids 核对id列表
      * @return 修改结果
      */
-    JsonVO<String> check(List<Integer> ids);
+    JsonVO<Integer> check(StockDocumentCommand command);
 
     /**
      * 获取指定其他入库单详细
      * @param id
      * @return
      */
-    JsonVO<OtherInListDetailDTO> queryOtherInListDetail(String id);
+    JsonVO<Map<String,Object>> queryOtherInListDetail(String id);
 
     /**
      * 新增其他入库单
@@ -59,7 +61,7 @@ public interface OtherInApis {
      * @param ids
      * @return
      */
-    JsonVO<List<String>> removeOtherInList(Integer[] ids);
+    JsonVO<Integer> removeOtherInList(StockDocumentCommand command);
 
     /**
      *  导入数据
@@ -87,5 +89,5 @@ public interface OtherInApis {
      * @param query 查询参数
      * @return
      */
-    JsonVO<PageDTO<OtherInListDTO>> listOtherIn(OtherInQuery query);
+    JsonVO<Map<String,Object>> listOtherIn(OtherInQuery query);
 }

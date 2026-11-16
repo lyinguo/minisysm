@@ -18,7 +18,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Arrays;
+import java.util.Map;
+import com.zeroone.star.project.dto.j2.store.StockDocumentCommand;
+import com.zeroone.star.storemanagement.service.InboundDocumentService;
 import java.util.List;
 
 /**
@@ -36,6 +38,7 @@ public class OtherInController implements OtherInApis {
 
     @Autowired
     IOtherInService otherInListService;
+    @Autowired private InboundDocumentService inbound;
 
 
     @PutMapping("/update")
@@ -49,25 +52,27 @@ public class OtherInController implements OtherInApis {
     @PutMapping("/examine")
     @ApiOperation(value = "审核/反审核入库单")
     @Override
-    public JsonVO<String> examine(@RequestBody List<Integer> ids) {
-        otherInListService.examine(ids);
-        return JsonVO.success(ids.toString());
+    public JsonVO<Integer> examine(@RequestBody StockDocumentCommand command) {
+        return JsonVO.success(inbound.audit(command));
     }
 
     @PutMapping("/check")
     @ApiOperation(value = "核对/反核对入库单")
     @Override
-    public JsonVO<String> check(@RequestBody List<Integer> ids) {
-        otherInListService.check(ids);
-        return JsonVO.success(ids.toString());
+    public JsonVO<Integer> check(@RequestBody StockDocumentCommand command) {
+        return JsonVO.success(inbound.check(command));
     }
 
     @GetMapping("/detail")
     @ApiOperation(value = "获取指定其他入库单详情")
     @ApiImplicitParam(name = "id", value = "其他入库单编号", required = true, example = "1d7b0520e93e72715d5d6af1fb7d9a37")
     @Override
-    public JsonVO<OtherInListDetailDTO> queryOtherInListDetail(String id) {
-        return JsonVO.success(otherInListService.getOtherInListDetail(id));
+    public JsonVO<Map<String,Object>> queryOtherInListDetail(@RequestParam String id) {
+        return JsonVO.success(inbound.detail(id));
+    }
+    @GetMapping("/options")
+    public JsonVO<Map<String,Object>> options(@RequestParam(required=false) String id) {
+        return JsonVO.success(inbound.options(id));
     }
 
     @PostMapping("/add")
@@ -79,11 +84,8 @@ public class OtherInController implements OtherInApis {
 
     @DeleteMapping("/delete")
     @ApiOperation("删除其他入库单")
-    public JsonVO<List<String>> removeOtherInList(
-            @RequestParam("ids") Integer[] ids) {
-        // 将数组转换为 List
-        List<Integer> idList = Arrays.asList(ids);
-        return JsonVO.success(otherInListService.removeOtherInList(idList));
+    public JsonVO<Integer> removeOtherInList(@RequestBody StockDocumentCommand command) {
+        return JsonVO.success(inbound.remove(command));
     }
 
     @PostMapping("/import")
@@ -116,8 +118,8 @@ public class OtherInController implements OtherInApis {
     @GetMapping("")
     @ApiOperation(value = "获取其他入库单列表（条件+分页）")
     @Override
-    public JsonVO<PageDTO<OtherInListDTO>> listOtherIn(OtherInQuery query) {
+    public JsonVO<Map<String,Object>> listOtherIn(OtherInQuery query) {
         // 调用service查询数据
-        return otherInListService.getOtherInList(query);
+        return JsonVO.success(inbound.list(query));
     }
 }

@@ -148,6 +148,10 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
         stockAccess.creationFrame(actor, String.valueOf(original.get("frame")));
         if (Boolean.TRUE.equals(original.get("examine")) || "1".equals(String.valueOf(original.get("examine"))))
             throw new IllegalStateException("已审核单据不能修改，请先反审核");
+        if (Boolean.TRUE.equals(original.get("check")) || "1".equals(String.valueOf(original.get("check"))))
+            throw new IllegalStateException("已核对单据不能修改，请先反核对");
+        if(stockDb.queryForObject("SELECT COUNT(*) FROM period WHERE date>=CAST(? AS DATE)",Integer.class,original.get("time"))>0)
+            throw new IllegalStateException("已结账期间的入库单不能修改");
         if (dto.getVersion() == null || !dto.getVersion().equals(reportDocuments.lockedVersion("entry", dto.getId())))
             throw new IllegalStateException("单据已被其他操作修改，请重新打开详情");
         if (stockDb.queryForObject("SELECT COUNT(*) FROM cost WHERE `class`=? AND type='entry' AND (settle<>0 OR state<>0)", Integer.class, dto.getId()) > 0)
@@ -161,264 +165,6 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
         stockDb.update("DELETE FROM cost WHERE `class`=? AND type='entry'", dto.getId());
         persistDetails(dto.getId(), dto);
         persistOperation(dto.getId(), actor, "修改入库单");
-    }
-
-    @Override
-    @Transactional
-    public void examine(List<Integer> ids) {
-        //1.判断入库单是否存在
-        //查询id在ids中的入库单总数
-        List<Integer> exmineStatusList = otherInMapper.getExamineByIds(ids);
-        //判断入库单总数是否等于ids的长度
-        if (exmineStatusList.size() != ids.size()) {
-            throw new RuntimeException("有入库单不存在");
-        }
-        int status = exmineStatusList.get(0)^1;
-
-        //获取所有id对应的entry表和entry_info表信息
-        List<EntryDO> entryList = otherInMapper.getByIds(ids);
-        Map<String, EntryDO> entryMap = entryList.stream()
-                .collect(Collectors.toMap(EntryDO::getId, entryDO -> entryDO));
-        List<EntryInfoDO> entryInfoList = otherInInfoMapper.getByPids(ids);
-        //2.审核入库单
-        if(status==1) {
-            for (EntryInfoDO entryInfoDO : entryInfoList) {
-                GoodsDO goodsDO = goodsMapper.selectById(entryInfoDO.getGoods());
-                //3.审核服务
-                if (goodsDO.getType().equals(1)) {
-                    //4.获取服务，若服务不存在，则插入，否则更新
-                    ServeDO serveDO = serveMapper.getByGoodsAndAttr(entryInfoDO.getGoods(), entryInfoDO.getAttr());
-                    if (serveDO == null) {
-                        serveDO = new ServeDO();
-                        serveDO.setId(snowflake.nextIdStr());
-                        serveDO.setGoods(entryInfoDO.getGoods());
-                        serveDO.setAttr(entryInfoDO.getAttr());
-                        serveDO.setNums(entryInfoDO.getNums());
-                        serveMapper.insert(serveDO);
-                    } else {
-                        serveDO.setNums(serveDO.getNums().add(entryInfoDO.getNums()));
-                        serveMapper.updateById(serveDO);
-                    }
-                    //5.插入服务详细信息
-                    ServeInfoDO serveInfoDO = new ServeInfoDO();
-                    serveInfoDO.setId(snowflake.nextIdStr());
-                    serveInfoDO.setPid(serveDO.getId());
-                    serveInfoDO.setType("entry");
-                    serveInfoDO.setCls(entryInfoDO.getPid());
-                    serveInfoDO.setInfo(entryInfoDO.getId());
-                    serveInfoDO.setTime(entryMap.get(entryInfoDO.getPid()).getTime());
-                    serveInfoDO.setPrice(entryInfoDO.getPrice());
-                    serveInfoDO.setNums(entryInfoDO.getNums());
-                    serveInfoMapper.insert(serveInfoDO);
-                } else {//6.审核库存
-                    //7.获取库存，若库存不存在，则插入，否则更新
-                    RoomDO roomDO = roomMapper.getByGoodsAndWarehouseAndAttr(entryInfoDO.getWarehouse(), entryInfoDO.getGoods(), entryInfoDO.getAttr());
-                    if (roomDO == null) {
-                        roomDO = new RoomDO();
-                        roomDO.setId(snowflake.nextIdStr());
-                        roomDO.setWarehouse(entryInfoDO.getWarehouse());
-                        roomDO.setGoods(entryInfoDO.getGoods());
-                        roomDO.setAttr(entryInfoDO.getAttr());
-                        roomDO.setNums(entryInfoDO.getNums());
-                        roomMapper.insert(roomDO);
-                    } else {
-                        roomDO.setNums(roomDO.getNums().add(entryInfoDO.getNums()));
-                        roomMapper.updateById(roomDO);
-                    }
-                    //8.插入库存详细信息
-                    RoomInfoDO roomInfoDO = new RoomInfoDO();
-                    roomInfoDO.setId(snowflake.nextIdStr());
-                    roomInfoDO.setPid(String.valueOf(roomDO.getId()));
-                    roomInfoDO.setType("entry");
-                    roomInfoDO.setCls(entryInfoDO.getPid());
-                    roomInfoDO.setInfo(entryInfoDO.getId());
-                    roomInfoDO.setTime(entryMap.get(entryInfoDO.getPid()).getTime());
-                    roomInfoDO.setDirection(1);
-                    roomInfoDO.setPrice(entryInfoDO.getPrice());
-                    roomInfoDO.setNums(entryInfoDO.getNums());
-                    roomInfoMapper.insert(roomInfoDO);
-
-                    if(goodsDO.getBatch().equals(1)){
-                        BatchDO batchDO = batchMapper.getByRoomAndNumber(roomDO.getId(), entryInfoDO.getBatch());
-                        if (batchDO == null) {
-                            batchDO = new BatchDO();
-                            batchDO.setId(snowflake.nextIdStr());
-                            batchDO.setRoom(roomDO.getId());
-                            batchDO.setWarehouse(roomDO.getWarehouse());
-                            batchDO.setGoods(roomDO.getGoods());
-                            batchDO.setNumber(entryInfoDO.getBatch());
-                            batchDO.setTime(entryMap.get(entryInfoDO.getPid()).getTime());
-                            batchDO.setNums(entryInfoDO.getNums());
-                            batchMapper.insert(batchDO);
-                        }else{
-                            batchDO.setNums(batchDO.getNums().add(entryInfoDO.getNums()));
-                            batchMapper.updateById(batchDO);
-                        }
-                        BatchInfoDO batchInfoDO = new BatchInfoDO();
-                        batchInfoDO.setPid(batchDO.getId());
-                        batchInfoDO.setType("entry");
-                        batchInfoDO.setCls(entryInfoDO.getPid());
-                        batchInfoDO.setInfo(entryInfoDO.getId());
-                        batchInfoDO.setDirection(1);
-                        batchInfoDO.setNums(entryInfoDO.getNums());
-                        batchInfoDO.setId(snowflake.nextIdStr());
-                        batchInfoMapper.insert(batchInfoDO);
-                    }
-
-                    //9.插入收发统计信息
-                    SummaryDO summaryDO = new SummaryDO();
-                    BeanUtils.copyProperties(roomInfoDO, summaryDO);
-                    summaryDO.setId(snowflake.nextIdStr());
-                    summaryDO.setPid(summaryDO.getId());
-                    summaryDO.setGoods(String.valueOf(roomDO.getGoods()));
-                    summaryDO.setAttr(roomDO.getAttr());
-                    summaryDO.setWarehouse(String.valueOf(roomDO.getWarehouse()));
-                    summaryDO.setBatch(entryInfoDO.getBatch());
-                    summaryDO.setMfd(entryInfoDO.getMfd());
-                    summaryDO.setUct(summaryDO.getPrice());
-                    summaryDO.setBct(summaryDO.getPrice().multiply(summaryDO.getNums()));
-                    summaryDO.setExist("[" + roomDO.getNums() +","+ roomDO.getNums() +","+ roomDO.getNums() +","+ roomDO.getNums() + "]");
-                    int temp = roomDO.getNums().multiply(roomInfoDO.getPrice()).intValue();
-                    summaryDO.setBalance("[" + temp+"," + temp +","+ temp +","+ temp + "]");
-                    summaryDO.setHandle("0.0000");
-                    summaryMapper.insert(summaryDO);
-                }
-            }
-        }else{//10.反审核入库单
-            for(EntryInfoDO entryInfoDO : entryInfoList){
-                GoodsDO goodsDO = goodsMapper.selectById(entryInfoDO.getGoods());
-                //11.获取服务并更新
-                if(goodsDO.getType().equals(1)){
-                    ServeDO serveDO = serveMapper.getByGoodsAndAttr(entryInfoDO.getGoods(), entryInfoDO.getAttr());
-                    if(serveDO.getNums().equals(entryInfoDO.getNums())){
-                        serveMapper.deleteById(serveDO.getId());
-                    }else{
-                        serveDO.setNums(serveDO.getNums().subtract(entryInfoDO.getNums()));
-                        serveMapper.updateById(serveDO);
-                    }
-                    //12.删除服务详细信息
-                    serveInfoMapper.deleteByInfo(entryInfoDO.getId());
-                }else{
-                    //13.获取库存并更新
-                    RoomDO roomDO = roomMapper.getByGoodsAndWarehouseAndAttr(entryInfoDO.getWarehouse(), entryInfoDO.getGoods(), entryInfoDO.getAttr());
-                    if(goodsDO.getBatch().equals(1)){
-                        BatchDO batchDO = batchMapper.getByRoomAndNumber(roomDO.getId(), entryInfoDO.getBatch());
-                        if(batchDO.getNums().equals(entryInfoDO.getNums())){
-                            batchMapper.deleteById(batchDO.getId());
-                        }else{
-                            batchDO.setNums(batchDO.getNums().subtract(entryInfoDO.getNums()));
-                            batchMapper.updateById(batchDO);
-                        }
-                        batchInfoMapper.deleteByInfo(entryInfoDO.getId());
-                    }
-                    if(roomDO.getNums().equals(entryInfoDO.getNums())){
-                        roomMapper.deleteById(roomDO.getId());
-                    }else{
-                        roomDO.setNums(roomDO.getNums().subtract(entryInfoDO.getNums()));
-                        roomMapper.updateById(roomDO);
-                    }
-                    //14.删除库存详细信息
-                    roomInfoMapper.deleteByInfo(entryInfoDO.getId());
-                    //15.删除收发统计信息
-                    summaryMapper.deleteByInfo(entryInfoDO.getId());
-                }
-            }
-        }
-        //16.更新审核状态
-        otherInMapper.updateExamine(ids,status);
-        //17.更新日志表和单据记录表
-        UserDTO userDTO = null;
-        try {
-            userDTO = userHolder.getCurrentUser();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        List<LogDO> logList = new ArrayList<>();
-        for(EntryDO entry : entryList){
-            LogDO log = new LogDO();
-            log.setId(snowflake.nextIdStr());
-            log.setUser(userDTO.getUsername());
-            log.setTime(entry.getTime());
-            log.setInfo("审核其他入库单"+"["+entry.getNumber()+"]");
-            logList.add(log);
-        }
-        logMapper.insertBatch(logList);
-        List<RecordDO> recordList = new ArrayList<>();
-        for(EntryDO entry : entryList){
-            RecordDO record = new RecordDO();
-            record.setId(snowflake.nextIdStr());
-            record.setUser(userDTO.getUsername());
-            record.setType("entry");
-            record.setSource(entry.getId());
-            record.setTime(entry.getTime());
-            record.setInfo("审核单据");
-            recordList.add(record);
-        }
-        recordMapper.insertBatch(recordList);
-    }
-
-    @Override
-    @Transactional
-    public void check(List<Integer> ids) {
-        //1.判断入库单是否存在并获取核对状态
-        List<Integer> checkStatusList = otherInMapper.getCheckByIds(ids);
-        if (checkStatusList.size() != ids.size()) {
-            throw new RuntimeException("有入库单不存在");
-        }
-        int status = checkStatusList.get(0);
-        //2.更新核对状态
-        otherInMapper.updateCheck(ids, status ^ 1);
-
-        //3.更新日志表和单据记录表
-        UserDTO userDTO = null;
-        try {
-            userDTO = userHolder.getCurrentUser();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        List<EntryDO> entryList = otherInMapper.getByIds(ids);
-        List<LogDO> logList = new ArrayList<>();
-        for(EntryDO entry : entryList){
-            LogDO log = new LogDO();
-            log.setId(snowflake.nextIdStr());
-            log.setUser(userDTO.getUsername());
-            log.setTime(entry.getTime());
-            log.setInfo("核对其他入库单"+"["+entry.getNumber()+"]");
-            logList.add(log);
-        }
-        logMapper.insertBatch(logList);
-        List<RecordDO> recordList = new ArrayList<>();
-        for(EntryDO entry : entryList){
-            RecordDO record = new RecordDO();
-            record.setId(snowflake.nextIdStr());
-            record.setUser(userDTO.getUsername());
-            record.setType("entry");
-            record.setSource(entry.getId());
-            record.setTime(entry.getTime());
-            record.setInfo("核对单据");
-            recordList.add(record);
-        }
-        recordMapper.insertBatch(recordList);
-    }
-
-    @Override
-    @Transactional
-    public OtherInListDetailDTO getOtherInListDetail(String id) {
-        // TODO 单个查询操作
-        // 1.检查用户权限 权限校验可以定义AOP切面实现
-        if (!checkPermission()) {
-            log.info("用户无操作权限");
-        }
-        // 2.判断入库单是否存在
-        EntryDO exist =  otherInMapper.selectById(id);
-        if (exist == null) {
-            log.info("入库单不存在");
-        }
-        // 3.查询入库单详细
-        OtherInListDetailDTO dto = msEntryMapper.entryToOtherInListDetailDTO(exist);
-        // 4.记录操作日志
-        logOperation(dto.getId(), "查询入库单详细");
-        return dto;
     }
 
     @Override
@@ -459,6 +205,14 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
                     stockDb.queryForObject("SELECT COUNT(*) FROM warehouse WHERE id=?", Integer.class, item.getWarehouse()) != 1)
                 throw new IllegalArgumentException("商品或仓库不存在");
             com.zeroone.star.storemanagement.service.WarehouseScope.require(stockDb,dto.getFrame(),item.getWarehouse());
+            Map<String,Object> units=stockDb.queryForMap("SELECT unit,units FROM goods WHERE id=?",item.getGoods());
+            String baseUnit=String.valueOf(units.get("unit"));
+            if("-1".equals(baseUnit)){
+                cn.hutool.json.JSONArray choices=new cn.hutool.json.JSONArray(String.valueOf(units.get("units")));
+                if(choices.isEmpty())throw new IllegalArgumentException("商品缺少基础单位配置");
+                baseUnit=choices.getJSONObject(0).getStr("source");
+            }
+            if(baseUnit==null || !baseUnit.equals(item.getUnit()))throw new IllegalArgumentException("其他入库必须使用商品的基础单位，请重新选择商品并核对数量");
             if (item.getNums() == null || item.getNums().signum() <= 0 || item.getPrice() == null || item.getPrice().signum() < 0)
                 throw new IllegalArgumentException("数量必须大于零，单价不能为负数");
             try {
@@ -502,74 +256,6 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
     private void persistOperation(String id, UserDTO actor, String action) {
         stockDb.update("INSERT INTO `log`(id,time,`user`,info) VALUES(?,?,?,?)", IdUtil.fastSimpleUUID(), LocalDateTime.now(), actor.getId(), action + "[" + id + "]");
         stockDb.update("INSERT INTO record(id,type,source,time,`user`,info) VALUES(?,'entry',?,?,?,?)", IdUtil.fastSimpleUUID(), id, LocalDateTime.now(), actor.getId(), action);
-    }
-
-    @Override
-    @Transactional
-    public List<String> removeOtherInList(List<Integer> ids) {
-        System.out.println(ids);
-        // 用于记录成功删除的入库单编号
-        List<String> deletedList = new ArrayList<>();
-
-        // 1.判断入库单是否存在
-        List<EntryDO> existingLists = otherInMapper.selectBatchIds(ids);
-        if (existingLists.size() != ids.size()) {
-            log.info("部分入库单不存在");
-            return deletedList;
-        }
-
-        // 2.检查用户权限
-        if (!checkPermission()) {
-            log.info("用户无操作权限");
-            return deletedList;
-        }
-
-        // 3.判断入库单是否审核并删除未审核的
-        int count = 0;
-        for (EntryDO entryDO : existingLists) {
-            if (entryDO.getExamine() == 1) {
-                log.info("入库单已审核，不能删除，单号: {}", entryDO.getNumber());
-            } else {
-                // 4.删除入库单
-                otherInInfoMapper.deleteById(entryDO.getId());
-                // 5.删除入库单详细
-                otherInMapper.deleteById(entryDO.getId());
-                count++;
-                // 记录成功删除的入库单编号
-                deletedList.add(entryDO.getNumber());
-            }
-        }
-        // 5.记录删除结果
-        if (count != ids.size()) {
-            log.info("删除入库单完成，预期删除{}条，实际删除{}条", ids.size(), count);
-        } else {
-            log.info("成功删除{}条入库单", count);
-        }
-        return deletedList;
-    }
-
-
-    /**
-     * 获取其他入库单列表（条件查询+分页）
-     * @param query 查询参数对象
-     * @return 包含分页数据的JsonVO对象
-     */
-    @Override
-    public JsonVO<PageDTO<OtherInListDTO>> getOtherInList(OtherInQuery query) {
-        // 创建分页对象
-        Page<EntryDO> doPage = new Page<>(query.getPageIndex(), query.getPageSize());
-        // 调用mapper进行分页查询
-        Page<EntryDO> doResult = otherInListMapper.selectOtherInListPage(doPage, query);
-        // 使用MapStruct 转换器进行批量转换
-        List<OtherInListDTO> dtoList = entryConverter.toDTOList(doResult.getRecords());
-        // 构建返回的分页数据对象
-        PageDTO<OtherInListDTO> pageDTO = new PageDTO<>();
-        pageDTO.setTotal(doResult.getTotal());
-        pageDTO.setRows(dtoList);
-        pageDTO.setPageSize(doResult.getSize());
-        log.info("查询其他入库单列表成功, 共{}条记录", doResult.getTotal());
-        // 返回成功响应
-        return JsonVO.success(pageDTO);
     }
 
     /**
@@ -708,18 +394,6 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
             return "费用金额不能为负数";
         }
         return null;
-    }
-
-    private boolean checkPermission() {
-        return true;
-    }
-
-    /**
-     * 记录操作日志
-     */
-    private void logOperation(String transferId, String operation) {
-        // TODO: 实现操作日志记录
-        log.info("操作日志：入库单ID: {}, 操作: {}", transferId, operation);
     }
 
     @Override

@@ -91,6 +91,8 @@ public class WarehouseReportDocumentService {
     public Map<String, Object> save(String kind, String id, Edit edit, String actor) {
         String t = table(kind);
         Map<String, Object> head = header(t, id, true);
+        if("entry".equals(t) && num(head.get("check"))!=0)throw new IllegalStateException("已核对单据不能修改，请先反核对");
+        proofs.requireOpenPeriod(head.get("time"));
         if (num(head.get("examine")) != 0) throw new IllegalStateException("已审核单据不能修改，请先反审核");
         List<Map<String, Object>> oldItems = items(t, id);
         assertVersion(edit.getVersion(), head, oldItems);
