@@ -229,7 +229,7 @@ const handleDetailSave = (payload: any) => {
   // 这里只需要关闭对话框并刷新列表
   detailVisible.value = false
   // 保存成功后刷新列表
-  purchaseSearchRef.value?.search?.({})
+  purchaseSearchRef.value?.search?.()
 }
 
 interface RowData {
@@ -346,12 +346,8 @@ const onRefresh = async () => {
   if (refreshing.value) return
   refreshing.value = true
   try {
-    // 重置分页
-    currentPage.value = 1
-    // 重置搜索组件
-    purchaseSearchRef.value?.resetForm?.()
-    // 重新加载数据（通过搜索组件触发）
-    purchaseSearchRef.value?.search?.({})
+    // Refresh the current query/page; resetting filters is a separate user action.
+    await purchaseSearchRef.value?.search?.()
     ElMessage.success('已刷新')
   } catch (error) {
     console.error('刷新失败:', error)
@@ -383,7 +379,7 @@ const onImportData = async (data: any) => {
       // 导入成功
       ElMessage.success(data.result?.message || '导入成功')
       // 重新加载列表
-      purchaseSearchRef.value?.search?.({})
+      purchaseSearchRef.value?.search?.()
     } else {
       // 导入失败（错误信息已经在 API 层显示）
       console.error('导入失败:', data.error)
@@ -402,7 +398,7 @@ const onImportData = async (data: any) => {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }))
       if (response.code !== 10000) throw new Error(response.message || '导入失败')
-      purchaseSearchRef.value?.search?.({})
+      purchaseSearchRef.value?.search?.()
       ElMessage.success(response.message || '导入成功')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '导入失败')
@@ -422,7 +418,7 @@ const onDelete = (row: RowData) => {
       const response = await PurchaseOrderAPI.deletePurchaseOrders([row.id])
       if (response.code !== 10000) throw new Error(response.message || '删除失败')
       // 删除成功后重新加载列表
-      purchaseSearchRef.value?.search?.({})
+      purchaseSearchRef.value?.search?.()
       ElMessage.success('删除成功')
     })
     .catch((error) => {
@@ -512,7 +508,7 @@ const onBatchExamine = async (type: 0 | 1) => {
     }
 
     // 重新加载列表
-    purchaseSearchRef.value?.search?.({})
+    purchaseSearchRef.value?.search?.()
 
     const actionName = type === 0 ? '审核' : '反审核'
     ElMessage.success(`${actionName}成功！共处理 ${orderIds.length} 条单据`)
@@ -567,7 +563,7 @@ const onBatchDelete = () => {
         }
 
         // 重新加载列表
-        purchaseSearchRef.value?.search?.({})
+        purchaseSearchRef.value?.search?.()
 
         ElMessage.success(`删除成功！共删除 ${orderIds.length} 条单据`)
       } catch (error: any) {
@@ -626,7 +622,7 @@ const handleSizeChange = (size: number) => {
 onMounted(async () => {
   // 初始化加载数据（通过搜索组件触发）
   await nextTick()
-  purchaseSearchRef.value?.search?.({})
+  purchaseSearchRef.value?.search?.()
 
   await nextTick()
   const tableEl = (tableRef.value?.$el ?? null) as HTMLElement | null

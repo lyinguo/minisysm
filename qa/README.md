@@ -1,5 +1,13 @@
 # 系统业务验收
 
+## 采购订单页面实际上传下载
+
+运行`python qa/booking_browser_acceptance.py prepare`新建专用账号、供货资料和有效/独立错误单号的XLSX，`verify-session`核验真实QA用户服务接受有效令牌、拒绝伪造签名和空令牌。启动`vite.qa.config.ts`的18030本机服务，打开`http://127.0.0.1:18030/qa-browser-login`并点击进入采购订单验收。此入口使用实际OAuth签发的QA会话，当前用户经18091验证；菜单留空，不代表菜单或生产登录流程验收。生产配置没有这个入口。
+
+在`/purchase-booking-report`的“批量”中实际下载模板，先上传`qa/runtime/order-browser-invalid.xlsx`，页面应显示第4行错误，执行`verify-rejected`；上传valid文件，执行`verify-saved`。按打印单号筛选、勾选订单并实际下载简单及详细报表，将下载的模板/简单/详细文件分别复制为`qa/runtime/browser-template.xlsx`、`browser-export-simple.xlsx`、`browser-export-detail.xlsx`，执行`verify-files`独立核对XLSX内容及SQL。
+
+执行`prepare-extra`生成second/third文件。页面上传second，按原单号前缀筛选为2条；保留该筛选上传third后仍只显示3条。仅勾选原单和second，实际下载两个报表，复制为`browser-export-multi-simple.xlsx`和`browser-export-multi-detail.xlsx`，运行`verify-multi-files`，应仅含2单4明细、540/610.2，不能含未勾选third。会话、资料ID、XLSX、截图和数据库结果都只在私有runtime/reports，不发布。上述普通商品场景已实际操作通过；不能外推到所有资料组合及全系统。
+
 ## 采购订单Excel导出
 
 `python qa/booking_export_acceptance.py baseline`执行最初5项基线检查，`run`执行9项真实HTTP/XLSX内容、精度、权限/当前组织、选择完整性、全部选中订单合计、异常状态和文本单元格及只读不变量验收。仅导出本次新建的专用QA订单，数据和下载文件不得发布。
