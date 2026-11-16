@@ -4,7 +4,7 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <!-- 左上角搜索组件 -->
-        <DocumentListSearch kind="sale" @search="onGoodSearch" />
+        <DocumentListSearch kind="sale" :initial-number="routeNumber" @search="onGoodSearch" />
       </div>
       <div class="toolbar-right">
         <div class="btn-join">
@@ -486,7 +486,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
+import { routeLocationKey } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import SalesOrderDetailDialog from './SalesOrderDetailDialog.vue'
@@ -688,7 +689,9 @@ type SearchFormData = {
   [k: string]: any
 }
 const searchModel = reactive<SearchFormData>({})
-const appliedSearch = ref<SearchFormData>({})
+const route = inject(routeLocationKey, undefined)
+const routeNumber = computed(() => typeof route?.query.number === 'string' ? route.query.number : '')
+const appliedSearch = ref<SearchFormData>(routeNumber.value ? { number: routeNumber.value } : {})
 
 const originalAllData = ref<RowData[]>([])
 
@@ -735,6 +738,7 @@ const onGoodSearch = (payload: SearchFormData) => {
   if (currentPage.value !== 1) currentPage.value = 1
   else void loadSaleList()
 }
+watch(routeNumber, number => { onGoodSearch({ number }) })
 
 /* 刷新 */
 const refreshing = ref(false)

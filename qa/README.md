@@ -1,5 +1,19 @@
 # 系统业务验收
 
+## 客户收款、完整模板与结算验收
+
+最终整组入口为`python qa/receipt_workflow_acceptance.py`，串行执行46项不同实际HTTP/OAuth/MySQL检查，比较候选JAR、完整根源码/QA镜像和关键共享权限/API/DTO编译类。启动端仍需核实记录PID与实际运行包一致；正常环境只能认证和业务只读检查，不能运行这些写入用例。
+
+也可单独运行`python qa/receipt_import_acceptance.py`，实际验证业务编号解析、整单分组、预览版本、整批存储回滚重试、即时权限、并发重复确认、结账和实际操作人绑定；`python qa/receipt_file_import_acceptance.py`实际下载后填写服务端Excel模板，再通过multipart预览/确认导入，独立检查真实主从、金额和流水，包含2MiB、接近5MiB和超过5MiB的真实上传。`python qa/receipt_export_acceptance.py`独立用openpyxl解析真实下载的汇总及账户明细，核对选中范围、业务名称、筛选、组织和即时撤权。`receipt_import_legacy_acceptance.py`检查旧原始ID模板不能跳过核对写入或留下部分单据。测试串行运行，组件/路由测试和构建不等于真实业务完成。
+
+`GET /fund/receipt/import-template`下载带填写说明的空模板；客户编号从客户管理查找，账户编号从账户管理查找。每行是账户明细，同一单据编号合并为一张单。上传`POST /fund/receipt/import`不传version时仅预览，显示实际解析的名称和合计；将同一原文件和预览version再次上传才保存整批草稿。修改文件或资料后必须重新预览。JSON调用分别使用`/import-preview`与`/import-confirm`的`{rows,version}`，不能上传孤立的账户行。保存草稿不增加余额、不核销销售，仍需进入收款单核对并明确确认入账。
+
+收款单和收款报表共用ReceiptWorkspace：客户、完整收款时间和实际到账账户明细→保存草稿→核对原销售应收及退货抵扣→明确确认收款；原单可跳转实际销售/退货，已入账单只读，按本次凭据反审核后可纠错。上线前应用`database/migrations/20261116_receipt_settlement.sql`，保留213/214/216功能ID和已有角色选择，仅拆分原重复的新增/删除资源路径及修改资源，建立InnoDB入账证明表；绝不根据历史审核标记补造流水或证明。其他依赖旧Redis资源缓存的业务不因收款改为数据库实时权限而自动完成授权修复。
+
+浏览器运行`python qa/receipt_browser_acceptance.py prepare`，打开打印的18030专用URL。备注改为`QA browser receipt revised`后保存，依次运行`verify-edited`、实际核对并确认收款后运行`verify-posted`、实际反审核后运行`verify-reversed`。真实数据库应验证库存6、资金1171→1322→1171、客户应收151→0→151和供应商应付0。再实际下载模板，按打印业务编号填写两行10/15、指定导入单号和14:30时间，上传预览后运行`verify-import-preview`，明确确认导入并刷新后运行`verify-imported`。手工按打印客户/账户编号新建打印单号、金额3.1256、15:00时间和备注`QA browser manual receipt`后运行`verify-manual`。按导入单号筛选并实际下载账户明细，运行`verify-export --download-path "浏览器实际下载文件的绝对路径"`；它独立解析下载原件，不能用API另生成的文件代替浏览器下载证据。实际浏览器操作、截图及核验报告不发布，放在私有runtime/reports。
+
+旧FundReceiptServiceImplTest只模拟Mapper并断言任意客户端制单人和附件地址可被直接插入，已随被替代的实现移除。它的新增持久化覆盖改由receipt_draft_acceptance.py的8项真实HTTP/MySQL检查承担，包括真实操作人/组织、派生金额、多行、非法引用、并发、故障回滚和元数据；不能把Java无单元测试的构建通过当作业务完成。QA源码镜像会移除已从根源码删除的文件，最终构建仍需clean，避免旧测试/旧实现残留。
+
 ## 用户与角色维护授权
 
 `python qa/role_write_access_acceptance.py`实际检查普通账号无法新增、修改或删除角色，无法通过账号维护接口创建用户、删除他人或修改自己的角色；当前管理员可正常维护，已降权账号的原令牌即时失去角色写权限。用户与角色六个写入口只允许数据库中当前role为保留管理员值0的账号；不能只信任旧令牌内的权限声明。普通用户个人资料维护应使用个人中心接口，不是系统账号维护接口。

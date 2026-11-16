@@ -41,7 +41,7 @@ const config = mergeConfig(base, defineConfig({
           } catch {response.statusCode=401;response.end(JSON.stringify({code:401,message:'隔离验收会话无效，请重新准备QA会话'}))}
           return
         }
-        if (['/c1-systemparameters/', '/j7-sysargs/', '/store/', '/goods/', '/basic_information/', '/sale/', '/j3-purchase/', '/homepage/', '/payment-order/'].some(prefix => request.url?.startsWith(prefix))) { next(); return }
+        if (request.url === '/fund/receipt' || ['/c1-systemparameters/', '/j7-sysargs/', '/store/', '/goods/', '/basic_information/', '/sale/', '/j3-purchase/', '/homepage/', '/payment-order/', '/fund/receipt/'].some(prefix => request.url?.startsWith(prefix))) { next(); return }
         response.statusCode = 503
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.end(JSON.stringify({ code: 9998, message: '隔离验收环境尚未启动此业务服务' }))
@@ -56,6 +56,7 @@ const config = mergeConfig(base, defineConfig({
   }]
 }))
 config.server!.proxy = {
+  '/api/fund/receipt': { target: 'http://127.0.0.1:18026', rewrite: path => path.replace('/api', '') },
   '/api/payment-order': { target: 'http://127.0.0.1:18024', rewrite: path => path.replace('/api', '') },
   '/api/homepage': { target: 'http://127.0.0.1:18025', rewrite: path => path.replace('/api', '') },
   '/api/c1-systemparameters': { target: 'http://127.0.0.1:18091', rewrite: path => path.replace('/api/c1-systemparameters', '') },

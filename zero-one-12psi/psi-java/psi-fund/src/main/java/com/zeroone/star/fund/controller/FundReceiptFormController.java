@@ -52,6 +52,12 @@ public class FundReceiptFormController implements FundReceiptFormApis {
 
     @Autowired
     private FundReceiptService fundReceiptService;
+    @Autowired
+    private com.zeroone.star.fund.service.ReceiptDraftService receiptDrafts;
+    @Autowired
+    private com.zeroone.star.fund.service.ReceiptExportService receiptExports;
+    @Autowired
+    private com.zeroone.star.fund.service.ReceiptImportService receiptImports;
 
     /**
      * 新增收款单
@@ -95,31 +101,12 @@ public class FundReceiptFormController implements FundReceiptFormApis {
      */
     @PostMapping("/import")
     @ApiOperation(value = "导入资金收款单数据")
-    public JsonVO<ImportResultVO> importSaleCollection(
+    public JsonVO<java.util.Map<String,Object>> importSaleCollection(
             @ApiParam(value = "Excel文件", required = true)
-            @RequestPart("file") MultipartFile file) {
-        try {
-            // 检查文件是否为空
-            if (file.isEmpty()) {
-                return JsonVO.create(null, 9999, "请选择要导入的Excel文件");
-            }
-
-            // 检查文件类型
-            String fileName = file.getOriginalFilename();
-            if (fileName == null || (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls"))) {
-                return JsonVO.create(null, 9999, "请上传Excel文件(.xlsx或.xls格式)");
-            }
-
-            // 调用服务层处理导入
-            ImportResultVO result = fundReceiptService.importReceiptData(file);
-            return JsonVO.success(result);
-
-        } catch (Exception e) {
-            String errorMsg = "导入失败：" + (e.getMessage() != null ? e.getMessage() : "未知错误");
-            ImportResultVO errorResult = new ImportResultVO();
-            errorResult.setSummary(errorMsg);
-            return JsonVO.fail(errorResult);
-        }
+            @RequestPart("file") MultipartFile file,@RequestParam(required=false) String version) {
+        com.zeroone.star.fund.service.ReceiptImportService.Command command=receiptImports.read(file);
+        if(version==null || version.trim().isEmpty())return JsonVO.success(receiptImports.preview(command));
+        command.version=version;return JsonVO.success(receiptImports.save(command));
     }
     @PostMapping()
     @ApiOperation("新增收款单")
@@ -127,13 +114,7 @@ public class FundReceiptFormController implements FundReceiptFormApis {
         if(receiptAddDTO == null){
             return JsonVO.fail("请求参数不能为空");
         }
-        try {
-            fundReceiptService.addReceipt(receiptAddDTO);
-            return JsonVO.success("收款单创建成功");
-        } catch (Exception e) {
-            String errorMsg = "创建收款单失败：" + (e.getMessage() != null ? e.getMessage() : "未知错误");
-            return JsonVO.fail(errorMsg);
-        }
+        return JsonVO.success(receiptDrafts.createLegacy(receiptAddDTO));
     }
 
     /**
@@ -169,22 +150,11 @@ public class FundReceiptFormController implements FundReceiptFormApis {
      */
     @GetMapping("/export/simple")
     @ApiOperation(value = "导出资金收款单简单报表")
-    public ResponseEntity<byte[]> exportSimpleSaleCollection() {
-        try {
-            // 调用服务层生成简单报表字节数组
-            byte[] excelBytes = fundReceiptService.exportSimpleReceiptReport();
-
-            // 设置响应头
-            HttpHeaders headers = new HttpHeaders();
-            String filename = "receipt-simple-" + DateTime.now().toString("yyyyMMddHHmmssS") + ".xlsx";
-            headers.setContentDispositionFormData("attachment", filename);
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentLength(excelBytes.length);
-
-            return new ResponseEntity<>(excelBytes, headers, HttpStatus.CREATED);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+    public ResponseEntity<byte[]> exportSimpleSaleCollection(@RequestParam java.util.Map<String,String> query) {
+        byte[] bytes=receiptExports.file("simple",query);
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=receipt-simple.xlsx")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .contentLength(bytes.length).body(bytes);
     }
 
     /**
@@ -193,22 +163,11 @@ public class FundReceiptFormController implements FundReceiptFormApis {
      */
     @GetMapping("/export/detail")
     @ApiOperation(value = "导出资金收款单详细报表")
-    public ResponseEntity<byte[]> exportDetailSaleCollection() {
-        try {
-            // 调用服务层生成详细报表字节数组
-            byte[] excelBytes = fundReceiptService.exportDetailReceiptReport();
-
-            // 设置响应头
-            HttpHeaders headers = new HttpHeaders();
-            String filename = "receipt-detail-" + DateTime.now().toString("yyyyMMddHHmmssS") + ".xlsx";
-            headers.setContentDispositionFormData("attachment", filename);
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentLength(excelBytes.length);
-
-            return new ResponseEntity<>(excelBytes, headers, HttpStatus.CREATED);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+    public ResponseEntity<byte[]> exportDetailSaleCollection(@RequestParam java.util.Map<String,String> query) {
+        byte[] bytes=receiptExports.file("detail",query);
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=receipt-detail.xlsx")
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .contentLength(bytes.length).body(bytes);
     }
 
 

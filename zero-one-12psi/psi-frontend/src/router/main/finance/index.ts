@@ -11,7 +11,7 @@ const routes: RouteRecordRaw[] = [
       label: '收款单',
       icon: 'mdi:cash-plus'
     },
-    component: () => import('@/views/finance/receipt/receipt.vue')
+    component: () => import('@/views/finance/receipt/ReceiptWorkspace.vue')
   },
   {
     path: 'receipt-order-report',
@@ -20,7 +20,7 @@ const routes: RouteRecordRaw[] = [
       label: '收款单报表',
       icon: 'mdi:file-chart'
     },
-    component: () => import('@/views/finance/receipt/receiptForm.vue')
+    component: () => import('@/views/finance/receipt/ReceiptWorkspace.vue')
   },
   {
     path: 'payment-order',

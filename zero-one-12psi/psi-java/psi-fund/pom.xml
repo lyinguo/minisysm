@@ -10,6 +10,10 @@
     </parent>
     <artifactId>psi-fund</artifactId>
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <!-- spring mvc -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -63,11 +67,7 @@
             <artifactId>mapstruct</artifactId>
         </dependency>
 
-        <!-- seata -->
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
-        </dependency>
+        <!-- Receipt cash and original-document allocation use one local database transaction. -->
 
         <!-- openfeign -->
         <dependency>

@@ -1,6 +1,6 @@
-param([ValidateSet('store','basic','sale','purchase','payment','homepage')][string]$Service='store', [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')][string]$BackupContainer)
+param([ValidateSet('store','basic','sale','purchase','payment','homepage','fund')][string]$Service='store', [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')][string]$BackupContainer)
 $ErrorActionPreference='Stop'
-$definition=@{store=@{Module='psi-j2-storemanagement';Port=18020};basic=@{Module='psi-j6-basic_Information';Port=18021};sale=@{Module='psi-sale';Port=18022};purchase=@{Module='psi-j3-purchase';Port=18023};payment=@{Module='psi-j6-payment_order';Port=18024};homepage=@{Module='psi-j1-homepage';Port=18025}}[$Service]
+$definition=@{store=@{Module='psi-j2-storemanagement';Port=18020};basic=@{Module='psi-j6-basic_Information';Port=18021};sale=@{Module='psi-sale';Port=18022};purchase=@{Module='psi-j3-purchase';Port=18023};payment=@{Module='psi-j6-payment_order';Port=18024};homepage=@{Module='psi-j1-homepage';Port=18025};fund=@{Module='psi-fund';Port=18026}}[$Service]
 $statePath=Join-Path $PSScriptRoot '.state.json'
 $state=Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 if ($state.database -notmatch '^psi_qa_[0-9a-f]{12}$') { throw 'Invalid QA database' }

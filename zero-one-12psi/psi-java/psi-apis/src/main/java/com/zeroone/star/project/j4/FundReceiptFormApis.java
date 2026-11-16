@@ -60,9 +60,9 @@ public interface FundReceiptFormApis {
      */
     @ApiOperation(value = "导入资金收款单数据")
     @PostMapping("/import")
-    JsonVO<ImportResultVO> importSaleCollection(
+    JsonVO<java.util.Map<String,Object>> importSaleCollection(
             @ApiParam(value = "Excel文件", required = true)
-            @RequestPart("file") MultipartFile file);
+            @RequestPart("file") MultipartFile file, @org.springframework.web.bind.annotation.RequestParam(required=false) String version);
 
     /**
      * 导出资金收款单简单报表
@@ -70,7 +70,7 @@ public interface FundReceiptFormApis {
      */
     @ApiOperation(value = "导出资金收款单简单报表")
     @GetMapping("/export/simple")
-    ResponseEntity<byte[]> exportSimpleSaleCollection();
+    ResponseEntity<byte[]> exportSimpleSaleCollection(@org.springframework.web.bind.annotation.RequestParam java.util.Map<String,String> query);
 
     /**
      * 导出资金收款单详细报表
@@ -78,7 +78,7 @@ public interface FundReceiptFormApis {
      */
     @ApiOperation(value = "导出资金收款单详细报表")
     @GetMapping("/export/detail")
-    ResponseEntity<byte[]> exportDetailSaleCollection();
+    ResponseEntity<byte[]> exportDetailSaleCollection(@org.springframework.web.bind.annotation.RequestParam java.util.Map<String,String> query);
 
     /**
      * 新增收款单

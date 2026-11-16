@@ -20,5 +20,5 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface ImyMapper extends BaseMapper<Imy> {
 
-    IPage<FundReceiptListDTO> listAll(IPage<FundReceiptListDTO> page, @Param("query") FundReceiptListQuery query);
+    IPage<FundReceiptListDTO> listAll(IPage<FundReceiptListDTO> page, @Param("query") FundReceiptListQuery query,@Param("organization") String organization);
 }
