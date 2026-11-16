@@ -1,5 +1,19 @@
 # 系统业务验收
 
+## 付款草稿、完整模板与核销验收
+
+最终整组运行`python qa/payment_workflow_acceptance.py`，串行执行42项真实检查，比较候选包/源码镜像及记录PID保持一致；还需在启动端核实实际运行包哈希，不能只凭报告宣称运行版本。完整报告payment-workflow-final.json不标记系统全部功能通过。
+
+浏览器运行`python qa/payment_browser_acceptance.py prepare`创建实际完整业务链及私有签名QA会话，打开打印的18030 URL，将备注修改为打印值并保存，运行`edited`；核对采购1130/退货176并确认付款后运行`posted`，反审核后运行`reversed`。每阶段检查实际库存、现金、双方往来、主从ID、原单核销、凭据及操作人历史。模板实际下载后用`fill-template --download <下载绝对路径>`读取原模板另存本例测试数据，浏览器上传并确认后运行`imported`；按该编号实际导出后运行`exported --download <实际导出绝对路径>`核对真实工作簿内容。必须按次序操作，不能重复审核后用旧历史计数验证；私有会话/报告/截图/下载不推送。
+
+真实隔离验收依次运行`python qa/payment_document_acceptance.py`、`python qa/payment_document_scope_acceptance.py`、`python qa/payment_import_acceptance.py`、`python qa/payment_export_acceptance.py`、`python qa/payment_options_acceptance.py`、`python qa/payment_settlement_boundary_acceptance.py`，并回归原payment_draft/settlement/posting专项。全部串行，部分期间/权限/故障夹具会暂时改变该QA环境。导出检查需要Python openpyxl，实际读取下载的XLSX字节，不以HTTP成功代替数据正确。runtime/reports和业务数据不发布。
+
+新`GET /payment-order/documents`和`GET /payment-order/document/{id}`返回规范整数状态及version。`PUT /document/{id}`提交version及带稳定ID的details；`DELETE /document/{id}`提交version。审核付款使用`GET /settlement-preview?id=...`核对原单版本后`POST /settle`提交明确status及version/allocations；反审核status0不能用切换状态或修改时自动付款替代。新增/修改草稿不扣款。
+
+完整模板接口`POST /import-preview`提交`{rows:[{number,date,supplierNumber,accountNumber,money,settle,remark,lineRemark}]}`，业务编号须在当前组织唯一可用；同一number合并为一张草稿，供应商/日期/单据备注须一致。响应含documents、documentCount、lineCount、cash及version。确认`POST /addmore`提交相同rows和该version，整批保存完整草稿，返回实际ids；不再接受没有父单的明细数组。需同时具有原`/payment-order/addmore`和新增权限。前端模板文件带“付款模板”“填写说明”两张工作表，不含可误导入的示例业务单。
+
+`GET /export/simple`及`/export/detail`分别需要当前导出权限，按当前组织限制，支持number/supplier/startTime/endTime及逗号分隔ids（最多200个，筛选参数同时生效）；空结果仍返回有表头的工作簿，超过10000记录要求缩小范围。`GET /options?kind=supplier|account&keyword=...&document=...`按新增或真实修改单据组织查询，超过50条给hasMore，应输入更完整的业务编号继续查找。
+
 ## 销售退货真实草稿
 
 运行`python qa/sale_return_draft_acceptance.py run`执行22项真实HTTP/OAuth/MySQL专项；`baseline`只执行原6项规则检查。来源销售经实际新增、核对、出库及收款应收入账；退货草稿保存、修改、查询和删除只占用/释放数量，不入库、不扣账户、不写退款核销流水。与其他期间、权限及读取门控夹具串行运行。历史附件元数据为明确的自建QA SQL夹具，其余主流程及故障回滚实际通过接口。

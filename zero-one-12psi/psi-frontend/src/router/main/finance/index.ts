@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
       label: '付款单',
       icon: 'mdi:cash-minus'
     },
-    component: () => import('@/views/finance/payment/payment.vue')
+    component: () => import('@/views/finance/payment/PaymentWorkspace.vue')
   },
   {
     path: 'payment-order-report',
@@ -38,7 +38,7 @@ const routes: RouteRecordRaw[] = [
       label: '付款单报表',
       icon: 'mdi:file-chart'
     },
-    component: () => import('@/views/finance/payment/paymentForm.vue')
+    component: () => import('@/views/finance/payment/PaymentWorkspace.vue')
   },
   {
     path: 'writeoff-order',

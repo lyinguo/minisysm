@@ -31,6 +31,10 @@ public class PaymentController {
 
     @Resource
     private IOmyService omyService;
+    @Resource
+    private com.zeroone.star.payment_order.service.PaymentImportService imports;
+    @Resource
+    private com.zeroone.star.payment_order.service.PaymentExportService exports;
 
     @Resource
     private EasyExcelComponent excelComponent;
@@ -39,14 +43,12 @@ public class PaymentController {
      **/
 @PostMapping("/addmore")
 @ApiOperation(value = "批量导入付款单（JSON格式）")
-public JsonVO<String> batchImportOmyInfo(@RequestBody @Valid List<OmyImportDTO> infoList) {
-    try {
-        int successCount = omyService.batchImportOmyInfo(infoList);
-        return JsonVO.success("导入成功，共导入" + successCount + "条数据");
-    } catch (Exception e) {
-        return JsonVO.fail("导入失败：" + e.getMessage());
-    }
+public JsonVO<java.util.Map<String,Object>> batchImportOmyInfo(@RequestBody com.zeroone.star.payment_order.service.PaymentImportService.Command command) {
+    return JsonVO.success(imports.save(command));
 }
+
+    @PostMapping("/import-preview")
+    public JsonVO<java.util.Map<String,Object>> previewImport(@RequestBody com.zeroone.star.payment_order.service.PaymentImportService.Command command){return JsonVO.success(imports.preview(command));}
 
     /**
      * 导出简单报表（付款单+核销单）
@@ -54,13 +56,13 @@ public JsonVO<String> batchImportOmyInfo(@RequestBody @Valid List<OmyImportDTO> 
     @SneakyThrows
     @GetMapping(value = "/export/simple", produces = "application/octet-stream")
     @ApiOperation(value = "导出付款单简单报表")
-    public ResponseEntity<byte[]> exportSimpleReport() {
+    public ResponseEntity<byte[]> exportSimpleReport(@RequestParam java.util.Map<String,String> query) {
         // 1. 查询数据
-        List<OmySimpleVO> dataList = omyService.listAllForSimpleReport();
+        List<OmySimpleVO> dataList = exports.simple(query);
 
         // 2. 生成Excel
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        excelComponent.export("付款单简单报表", out, OmySimpleVO.class, dataList);
+        com.alibaba.excel.EasyExcel.write(out,OmySimpleVO.class).sheet("付款单简单报表").doWrite(dataList);
 
         // 3. 响应给前端
         HttpHeaders headers = new HttpHeaders();
@@ -79,13 +81,13 @@ public JsonVO<String> batchImportOmyInfo(@RequestBody @Valid List<OmyImportDTO> 
     @SneakyThrows
     @GetMapping(value = "/export/detail", produces = "application/octet-stream")
     @ApiOperation(value = "导出付款单详细报表")
-    public ResponseEntity<byte[]> exportDetailReport() {
+    public ResponseEntity<byte[]> exportDetailReport(@RequestParam java.util.Map<String,String> query) {
         // 1. 查询数据
-        List<OmyInfoDetailVO> dataList = omyService.listAllForDetailReport();
+        List<com.zeroone.star.payment_order.service.PaymentExportService.DetailLine> dataList = exports.detail(query);
 
         // 2. 生成Excel
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        excelComponent.export("付款单详细报表", out, OmyInfoDetailVO.class, dataList);
+        com.alibaba.excel.EasyExcel.write(out,com.zeroone.star.payment_order.service.PaymentExportService.DetailLine.class).sheet("付款单详细报表").doWrite(dataList);
 
         // 3. 响应给前端
         HttpHeaders headers = new HttpHeaders();

@@ -36,24 +36,7 @@ public class OmyServiceImpl extends ServiceImpl<OmyMapper2, OmyDO> implements IO
     @Transactional(rollbackFor = Exception.class)
     @Override
     public int batchImportOmyInfo(List<OmyImportDTO> infoList) {
-        int successCount = 0;
-        for (OmyImportDTO infoDTO : infoList) {
-            // 1. 生成主键ID（使用UUID确保唯一性）
-            String id = UUID.randomUUID().toString().replaceAll("-", "");
-            infoDTO.setId(id);
-
-            // 2. 生成pid（用UUID生成唯一值）
-            String pid = UUID.randomUUID().toString().replaceAll("-", "");
-            infoDTO.setPid(pid); // 赋值给DTO的pid字段
-
-            // 3. 转换DTO为DO并插入数据库
-            OmyInfoDO infoDO = new OmyInfoDO();
-            BeanUtils.copyProperties(infoDTO, infoDO);
-            omyInfoMapper2.insert(infoDO);
-
-            successCount++;
-        }
-        return successCount;
+        throw new IllegalArgumentException("请使用完整付款模板预览及导入入口，不能导入没有父单的账户明细");
     }
 
     /**

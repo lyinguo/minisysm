@@ -33,6 +33,8 @@ public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements Pay
 
     @Resource
     private com.zeroone.star.payment_order.service.PaymentDraftValidation draftValidation;
+    @Resource
+    private com.zeroone.star.payment_order.service.PaymentDocumentAccess documentAccess;
 
     @Resource
     private MsPaymentOrderMapper mp;
@@ -170,6 +172,7 @@ public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements Pay
      */
     @Override
     public PageDTO<OmyWithBillDTO> listOmyWithBill(OmyQuery condition) {
+        com.zeroone.star.project.components.user.UserDTO actor=documentAccess.authorize("/payment-order/query-all");
         // 处理分页参数为null的情况
         Long pageIndex = condition.getPageIndex();
         Long pageSize = condition.getPageSize();
@@ -181,24 +184,27 @@ public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements Pay
         }
 
         // 直接使用MyBatis Plus的分页查询
-        Page<Omy> page = new Page<>(pageIndex, pageSize);
+        Page<Omy> page = new Page<>(Math.min(pageIndex,1000000L), Math.min(pageSize,100L));
 
         // 构建查询条件
         QueryWrapper<Omy> queryWrapper = new QueryWrapper<>();
+        if(!actor.getRoles().contains("ROLE_ADMIN"))queryWrapper.eq("frame",actor.getFrameId());
         queryWrapper.like(!StringUtils.isEmpty(condition.getNumber()), "number", condition.getNumber());
         queryWrapper.eq(condition.getSupplier() != null, "supplier", condition.getSupplier());
         queryWrapper.eq(condition.getExamine() != null, "examine", condition.getExamine());
         queryWrapper.eq(condition.getNucleus() != null, "nucleus", condition.getNucleus());
         queryWrapper.eq(condition.getPeople() != null, "people", condition.getPeople());
         queryWrapper.eq(condition.getUser() != null, "user", condition.getUser());
-        queryWrapper.gt(condition.getStartTime() != null, "time", condition.getStartTime());
-        queryWrapper.lt(condition.getEndTime() != null, "time", condition.getEndTime());
+        queryWrapper.ge(condition.getStartTime() != null, "time", condition.getStartTime());
+        queryWrapper.le(condition.getEndTime() != null, "time", condition.getEndTime());
 
         // 处理信息表条件 - 使用EXISTS子查询
         if (condition.getAccount() != null || condition.getData1() != null) {
-            queryWrapper.exists("SELECT 1 FROM omy_info oi WHERE oi.pid = omy.id" +
-                    (condition.getAccount() != null ? " AND oi.account = '" + condition.getAccount() + "'" : "") +
-                    (condition.getData1() != null ? " AND oi.data LIKE '%" + condition.getData1() + "%'" : ""));
+            StringBuilder detailFilter=new StringBuilder("SELECT 1 FROM omy_info oi WHERE oi.pid = omy.id");
+            List<Object> detailArgs=new ArrayList<>();
+            if(condition.getAccount()!=null){detailFilter.append(" AND oi.account={").append(detailArgs.size()).append("}");detailArgs.add(condition.getAccount());}
+            if(condition.getData1()!=null){detailFilter.append(" AND oi.data LIKE {").append(detailArgs.size()).append("}");detailArgs.add("%"+condition.getData1()+"%");}
+            queryWrapper.exists(detailFilter.toString(),detailArgs.toArray());
         }
 
         queryWrapper.orderByDesc("time");
@@ -222,7 +228,7 @@ public class PaymentOrderImpl extends ServiceImpl<OmyMapper, Omy> implements Pay
             List<OmyBill> bills = omyBillMapper.selectList(billQuery);
 
             for (OmyBill bill : bills) {
-                moneyMap.put(bill.getPid(), bill.getMoney());
+                moneyMap.merge(bill.getPid(), bill.getMoney(), BigDecimal::add);
             }
         }
 

@@ -17,7 +17,7 @@ import javax.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.util.*;
 
-/** Payment create gate. Posting, revision, deletion and read scopes are separately pending. */
+/** Shared field validation for creation and reviewed draft revision; posting uses a separate transaction. */
 @Service
 @ComponentScan({"com.zeroone.star.project.components.user","com.zeroone.star.project.components.jwt"})
 @Import(com.zeroone.star.project.config.redis.RedisConfig.class)
@@ -51,6 +51,13 @@ public class PaymentDraftValidation {
             Object allowed=redis.opsForHash().get(RedisConstant.RESOURCE_ROLES_MAP,"/payment-order/add");
             if(!(allowed instanceof Collection) || !((Collection<?>)allowed).contains(role))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有新增付款单权限");
         }
+        fields(request,frame);
+        db.update("INSERT INTO psi_document_write_lock(scope) VALUES('omy') ON DUPLICATE KEY UPDATE scope='omy'");
+        db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='omy' FOR UPDATE",String.class);
+        if(!db.queryForList("SELECT id FROM omy WHERE number=? FOR UPDATE",request.getNumber()).isEmpty())throw new IllegalArgumentException("付款单编号已被使用");
+        return actor;
+    }
+    public void fields(OmyWithInfoAddDTO request,String frame) {
         if(request==null || request.getInfoList()==null || request.getInfoList().isEmpty() || request.getInfoList().size()>200)throw new IllegalArgumentException("请填写1到200条结算账户明细");
         request.setNumber(clean(request.getNumber()));
         if(request.getNumber().isEmpty() || request.getNumber().length()>32)throw new IllegalArgumentException("单据编号必须为1到32个字符");
@@ -73,10 +80,11 @@ public class PaymentDraftValidation {
         }
         if(total.compareTo(new BigDecimal("999999999999.9999"))>0)throw new IllegalArgumentException("付款合计超过允许范围");
         request.setTotal(total);
-        db.update("INSERT INTO psi_document_write_lock(scope) VALUES('omy') ON DUPLICATE KEY UPDATE scope='omy'");
-        db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='omy' FOR UPDATE",String.class);
-        if(!db.queryForList("SELECT id FROM omy WHERE number=? FOR UPDATE",request.getNumber()).isEmpty())throw new IllegalArgumentException("付款单编号已被使用");
-        return actor;
+    }
+    public void validateRevision(OmyWithInfoAddDTO request,String id,String frame) {
+        if(!TransactionSynchronizationManager.isActualTransactionActive())throw new IllegalStateException("付款修改必须在事务中保存");
+        fields(request,frame);
+        if(!db.queryForList("SELECT id FROM omy WHERE number=? AND id<>? FOR UPDATE",request.getNumber(),id).isEmpty())throw new IllegalArgumentException("付款单编号已被使用");
     }
     public void record(String id,String actor,String number) {
         db.update("INSERT INTO record(id,type,source,time,`user`,info) VALUES(?,'omy',?,NOW(),?,?)",UUID.randomUUID().toString().replace("-",""),id,actor,"新增付款单 "+number);

@@ -25,4 +25,14 @@ $process=Start-Process -FilePath 'C:\Program Files\Java\jdk1.8.0_311\bin\java.ex
 $state | Add-Member -NotePropertyName "${Service}_pid" -NotePropertyValue $process.Id -Force
 $state | Add-Member -NotePropertyName "${Service}_port" -NotePropertyValue $definition.Port -Force
 $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding UTF8
-Write-Output "QA $Service starting: port=$($definition.Port) PID=$($process.Id)"
+$readyDeadline=(Get-Date).AddSeconds(50)
+do {
+ if($process.HasExited){throw "QA $Service exited during startup; inspect its private runtime log"}
+ $startupLog=Get-Content -LiteralPath (Join-Path $runtime "$Service.out.log") -Raw -ErrorAction SilentlyContinue
+ if($startupLog -match 'Started .+ in [0-9.]+ seconds'){
+  Write-Output "QA $Service ready: port=$($definition.Port) PID=$($process.Id)"
+  return
+ }
+ Start-Sleep -Milliseconds 250
+}while((Get-Date) -lt $readyDeadline)
+throw "QA $Service readiness not confirmed within 50 seconds; PID=$($process.Id) remains recorded, inspect it before any restart"

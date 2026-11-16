@@ -19,6 +19,41 @@ public class PaymentOrderController implements PaymentOrderApis {
 
     @Autowired
     private PaymentOrderService paymentOrderService;
+    @Autowired
+    private com.zeroone.star.payment_order.service.PaymentSettlementPreviewService settlements;
+    @Autowired
+    private com.zeroone.star.payment_order.service.PaymentSettlementPostingService posting;
+    @Autowired
+    private com.zeroone.star.payment_order.service.PaymentDocumentAccess access;
+    @Autowired
+    private com.zeroone.star.payment_order.service.PaymentDraftDocumentService drafts;
+
+    @GetMapping("/options")
+    public JsonVO<java.util.Map<String,Object>> options(@RequestParam String kind,@RequestParam(defaultValue="") String keyword,@RequestParam(required=false) String document){return JsonVO.success(drafts.options(kind,keyword,document));}
+
+    @GetMapping("/documents")
+    public JsonVO<java.util.Map<String,Object>> documents(@RequestParam java.util.Map<String,String> query) {return JsonVO.success(drafts.list(query));}
+    @GetMapping("/document/{id}")
+    public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id) {return JsonVO.success(drafts.document(id));}
+    @PutMapping("/document/{id}")
+    public JsonVO<String> revise(@PathVariable String id,@RequestBody com.zeroone.star.payment_order.service.PaymentDraftDocumentService.Revision command) {return JsonVO.success(drafts.revise(id,command));}
+    @DeleteMapping("/document/{id}")
+    public JsonVO<String> delete(@PathVariable String id,@RequestBody com.zeroone.star.payment_order.service.PaymentDraftDocumentService.Removal command) {return JsonVO.success(drafts.delete(id,command.version));}
+
+    @PostMapping("/settle")
+    public JsonVO<Integer> settle(@RequestBody com.zeroone.star.payment_order.service.PaymentSettlementPostingService.Command command) {
+        return JsonVO.success(posting.post(command));
+    }
+
+    @GetMapping("/settlement-document/{id}")
+    public JsonVO<java.util.Map<String,Object>> settlementDocument(@PathVariable String id) {
+        return JsonVO.success(drafts.document(id));
+    }
+
+    @GetMapping("/settlement-preview")
+    public JsonVO<java.util.Map<String,Object>> settlementPreview(@RequestParam String id) {
+        return JsonVO.success(settlements.preview(id));
+    }
 
     /**
      * 新增付款单
@@ -41,8 +76,8 @@ public class PaymentOrderController implements PaymentOrderApis {
     @PutMapping("/modify")
     @Override
     public JsonVO<String> modifyOmyAll(@Validated @RequestBody OmyAllDTO dto,String id) {
-        paymentOrderService.updateOmyAll(dto,id);
-        return JsonVO.success("修改付款单成功");
+        access.authorize("/payment-order/modify");
+        throw new IllegalArgumentException("不能在修改时自动反冲并重新付款，请先读取付款单并显式反审核后修改草稿");
     }
 
     /**
@@ -65,6 +100,7 @@ public class PaymentOrderController implements PaymentOrderApis {
     @GetMapping("/query-by-id/{id}")
     @Override
     public JsonVO<OmyWithInfoDTO> queryByIdWithInfo(@PathVariable String id) {
+        drafts.requireScoped(id,"/payment-order/query-by-id");
         OmyWithInfoDTO result = paymentOrderService.getOmyWithInfoById(id);
         return JsonVO.success(result);
     }
@@ -77,8 +113,8 @@ public class PaymentOrderController implements PaymentOrderApis {
     @DeleteMapping("/remove")
     @Override
     public JsonVO<String> removeOmy(@RequestBody List<String> ids) {
-        String result = paymentOrderService.removeOmy(ids);
-        return JsonVO.success(result);
+        access.authorize("/payment-order/remove");
+        throw new IllegalArgumentException("删除付款单需要当前已读版本，请先读取草稿，不能使用无版本删除入口");
     }
 
     /**
@@ -89,7 +125,7 @@ public class PaymentOrderController implements PaymentOrderApis {
     @PutMapping("/modify-examine-status")
     @Override
     public JsonVO<String> modifyExamineStatus(@RequestBody List<String> ids) {
-        String result = paymentOrderService.updateExamineStatus(ids);
-        return JsonVO.success(result);
+        access.authorize("/payment-order/modify-examine-status");
+        throw new IllegalArgumentException("请先核对原采购及退货结算方案，并提交明确的审核目标和已读版本，不能切换状态代替入账");
     }
 }
