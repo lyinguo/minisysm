@@ -12,6 +12,7 @@ assert spring['redis']['port'] == 18379
 spring.setdefault('main', {})['web-application-type'] = 'reactive'
 cloud = spring.setdefault('cloud', {})
 cloud['gateway'] = dict(discovery=dict(locator=dict(enabled=False)), routes=[
+    dict(id='qa-store', uri='http://127.0.0.1:18020', predicates=['Path=/j2-store/**'], filters=['StripPrefix=1']),
     dict(id='qa-sale', uri='http://127.0.0.1:18022', predicates=['Path=/sale/**']),
     dict(id='qa-payment', uri='http://127.0.0.1:18024', predicates=['Path=/payment-order/**']),
     dict(id='qa-receipt', uri='http://127.0.0.1:18026', predicates=['Path=/fund/receipt/**']),
@@ -26,4 +27,4 @@ configuration.setdefault('zo', {}).setdefault('cloud', {}).setdefault('gateway',
 directory = QA / 'runtime/java/gateway-config'
 directory.mkdir(exist_ok=True)
 (directory / 'application.yaml').write_text(yaml.safe_dump(configuration, allow_unicode=True, sort_keys=False), encoding='utf-8')
-print('Private gateway config generated: only QA identity/login/sale/payment/receipt/procurement routes, QA Redis18379, port18001')
+print('Private gateway config generated: only QA identity/login/store/sale/payment/receipt/procurement routes, QA Redis18379, port18001')

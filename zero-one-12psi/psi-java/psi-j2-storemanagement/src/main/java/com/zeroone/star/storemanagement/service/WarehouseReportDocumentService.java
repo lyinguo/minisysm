@@ -99,10 +99,10 @@ public class WarehouseReportDocumentService {
             BigDecimal qty = positive(item.get("nums"));
             BigDecimal price = decimal(item.get("price"));
             if (price.signum() < 0) throw new IllegalArgumentException("成本不能为负数");
-            String warehouse = requireWarehouse(item.get("warehouse"));
+            String warehouse = requireWarehouse(item.get("warehouse"),str(head.get("frame")));
             BigDecimal amount = price.multiply(qty).setScale(4, RoundingMode.HALF_UP);
             if ("swap".equals(t)) {
-                String target = requireWarehouse(item.get("storehouse"));
+                String target = requireWarehouse(item.get("storehouse"),str(head.get("frame")));
                 if (warehouse.equals(target)) throw new IllegalArgumentException("调入和调出仓库不能相同");
                 db.update("UPDATE swap_info SET price=?,nums=?,total=?,warehouse=?,storehouse=?,data=?,serial=? WHERE id=? AND pid=?", price, qty, amount, warehouse, target, item.get("data"), item.get("serial"), itemId, id);
             } else {
@@ -162,7 +162,7 @@ public class WarehouseReportDocumentService {
     }
 
     private void stock(String t, String id, Map<String, Object> head, Map<String, Object> item, Object warehouseValue, int sign, int target, Map<String, Object> product) {
-        String warehouse = requireWarehouse(warehouseValue);
+        String warehouse = requireWarehouse(warehouseValue,str(head.get("frame")));
         String goods = str(item.get("goods"));
         String attr = str(item.get("attr"));
         BigDecimal qty = positive(item.get("nums"));
@@ -284,10 +284,8 @@ public class WarehouseReportDocumentService {
         db.update("UPDATE serial SET room=?,warehouse=?,batch=?,state=0 WHERE id=?", room, warehouse, batch, id);
     }
 
-    private String requireWarehouse(Object id) {
-        String value = str(id);
-        if (value.isEmpty() || db.queryForObject("SELECT COUNT(*) FROM warehouse WHERE id=?", Integer.class, value) != 1) throw new IllegalArgumentException("请选择有效仓库");
-        return value;
+    private String requireWarehouse(Object id,String frame) {
+        return WarehouseScope.require(db,frame,id);
     }
     private void log(String t, String id, String actor, String action) {
         db.update("INSERT INTO `log`(id,time,`user`,info) VALUES(?,?,?,?)", uid(), Timestamp.valueOf(LocalDateTime.now()), actor, action + "[" + id + "]");

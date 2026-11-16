@@ -1,5 +1,11 @@
 # 系统业务验收
 
+## 入库角色与连续进销存
+
+运行`python qa/stock_role_integration_acceptance.py`或加`--gateway`，各执行6项实际检查：C1正常目录授权/撤权、旧管理员标识拒绝、仓库组织引用、审核操作人、列表/详情及禁用权限，以及同一普通账号从库存0入库10件再销售/退货/收款和按依赖顺序撤销。--baseline只用于记录旧候选失败。QA专用目录按静态迁移清理182路径换行；不得操作正常角色和业务数据。
+
+运行`python qa/stock_role_workflow_acceptance.py`串行执行30项真实回归，结果为stock-role-workflow-workflow.json；--resume只接受相同候选和已通过档案前缀。测试网关增加/j2-store/**到18020并去除模块前缀，仍只使用QA服务和QA Redis。仓储现有13项H2测试另用Maven显式设置-DskipTests=false、-Dmaven.test.skip=false执行；它们不替代实际接口/MySQL检查。其他出库、调拨、盘点和所有旧入口仍须独立验收。
+
 ## 组织身份与删除审计
 
 运行`python qa/organization_authority_acceptance.py`和加`--gateway`分别检查四类核心单据的普通角色旧ROLE_ADMIN标识是否越过组织限制。测试只对新QA角色设置明确的旧配置夹具，实际登录、实际C1改变组织、实际主从增改删并核对库存资金和历史，不修改正常角色。角色ID非0时，keyword及原JWT中的管理员文字不得使其成为跨组织管理员。

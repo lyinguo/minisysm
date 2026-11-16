@@ -36,15 +36,15 @@ public class WarehouseReportDocumentController {
         return JsonVO.success(service.list(kind, pageIndex, pageSize, number, frame(user)));
     }
     @GetMapping("/{kind}/{id}")
-    public JsonVO<Map<String, Object>> detail(@PathVariable String kind, @PathVariable String id) throws Exception { UserDTO user = authorize(kind, "read"); checkFrame(kind, id, user); return JsonVO.success(service.detail(kind, id)); }
+    public JsonVO<Map<String, Object>> detail(@PathVariable String kind, @PathVariable String id) throws Exception { UserDTO user = authorize(kind, "detail"); checkFrame(kind, id, user); return JsonVO.success(service.detail(kind, id)); }
     @PutMapping("/{kind}/{id}")
     public JsonVO<Map<String, Object>> save(@PathVariable String kind, @PathVariable String id, @RequestBody WarehouseReportDocumentService.Edit edit) throws Exception {
         UserDTO user = authorize(kind, "save"); checkFrame(kind, id, user);
-        return JsonVO.success(service.save(kind, id, edit, user.getUsername()));
+        return JsonVO.success(service.save(kind, id, edit, user.getId()));
     }
     @PostMapping("/{kind}/{id}/audit")
     public JsonVO<Map<String, Object>> audit(@PathVariable String kind, @PathVariable String id, @RequestBody Map<String, Object> body) throws Exception {
         UserDTO user = authorize(kind, "audit"); checkFrame(kind, id, user);
-        return JsonVO.success(service.audit(kind, id, Integer.parseInt(String.valueOf(body.get("target"))), String.valueOf(body.get("version")), user.getUsername()));
+        return JsonVO.success(service.audit(kind, id, Integer.parseInt(String.valueOf(body.get("target"))), String.valueOf(body.get("version")), user.getId()));
     }
 }

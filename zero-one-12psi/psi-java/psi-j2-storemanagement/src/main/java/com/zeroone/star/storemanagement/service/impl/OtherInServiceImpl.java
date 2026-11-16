@@ -458,6 +458,7 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
             if (stockDb.queryForObject("SELECT COUNT(*) FROM goods WHERE id=?", Integer.class, item.getGoods()) != 1 ||
                     stockDb.queryForObject("SELECT COUNT(*) FROM warehouse WHERE id=?", Integer.class, item.getWarehouse()) != 1)
                 throw new IllegalArgumentException("商品或仓库不存在");
+            com.zeroone.star.storemanagement.service.WarehouseScope.require(stockDb,dto.getFrame(),item.getWarehouse());
             if (item.getNums() == null || item.getNums().signum() <= 0 || item.getPrice() == null || item.getPrice().signum() < 0)
                 throw new IllegalArgumentException("数量必须大于零，单价不能为负数");
             try {
