@@ -14,6 +14,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @ApiModel("销售退货单生成数据对象")
 public class SaleReturnGenerateDTO {
+    private String sourceNumber;
+    private String sourceVersion;
+    private java.util.List<java.util.Map<String,Object>> items;
 
     @ApiModelProperty(value = "退货单ID", example = "sre_123456")
     private String id;

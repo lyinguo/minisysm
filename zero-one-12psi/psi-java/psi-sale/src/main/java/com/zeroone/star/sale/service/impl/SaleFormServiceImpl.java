@@ -107,33 +107,11 @@ public class SaleFormServiceImpl implements SaleFormService {
         }
     }
 
+    @Resource
+    private com.zeroone.star.sale.service.SaleReturnPreviewService returnPreviews;
     @Override
     public JsonVO<SaleReturnGenerateDTO> getGenerateReturnData(String saleId) {
-        try {
-            if (saleId == null || saleId.trim().isEmpty()) {
-                return JsonVO.create(null, ResultStatus.PARAMS_INVALID.getCode(), "销售单ID不能为空");
-            }
-
-            // 获取销售单基础信息 - 使用 selectSaleForReturn 方法
-            SaleForm saleForm = saleFormMapper.selectSaleForReturn(saleId);
-            if (saleForm == null) {
-                return JsonVO.create(null, ResultStatus.FAIL.getCode(), "未找到对应的销售单");
-            }
-
-            // 基于销售单数据构建退货单数据
-            SaleReturnGenerateDTO returnData = new SaleReturnGenerateDTO();
-            BeanUtils.copyProperties(saleForm, returnData);
-
-            // 设置退货单特定字段
-            returnData.setSource(saleForm.getId()); // 关联原销售单
-            returnData.setTime(LocalDateTime.now()); // 退货单时间为当前时间
-
-            return JsonVO.success(returnData);
-
-        } catch (Exception e) {
-            log.error("获取销售退货单生成数据失败, saleId: {}", saleId, e);
-            return JsonVO.fail(null);
-        }
+        return JsonVO.success(returnPreviews.preview(saleId));
     }
 
     /**

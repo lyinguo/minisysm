@@ -212,8 +212,12 @@ export interface SaleQueryParams extends PageQuery {
  * 销售退货单生成数据对象
  */
 export interface SaleReturnGenerateData {
-  /** 退货单ID */
-  id: string
+  /** 预览不创建退货单，不复用来源销售单ID。 */
+  id?: string | null
+  sourceNumber: string
+  /** 来源销售单读取版本；可退数量仍须在实际保存时重新校验。 */
+  sourceVersion: string
+  items: SaleReturnPreviewLine[]
   /** 所属组织 */
   frame: string
   /** 客户 */
@@ -257,6 +261,32 @@ export interface SaleReturnGenerateData {
   cse: number
   /** 发票状态 */
   invoice: number
+}
+
+export interface SaleReturnPreviewLine {
+  source: string
+  goods: string
+  goodsName?: string
+  goodsNumber?: string
+  spec?: string
+  attr?: string
+  unit: string
+  warehouse: string
+  warehouseName?: string
+  price: number
+  sourceQuantity: number
+  returned: number
+  reserved: number
+  available: number
+  nums: number
+  discount: number
+  dsc: number
+  total: number
+  /** 沿用来源销售明细的小数比例，例如0.13表示13%。 */
+  tax: number
+  tat: number
+  tpt: number
+  serial: string
 }
 
 /**

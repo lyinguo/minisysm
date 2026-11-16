@@ -102,17 +102,7 @@
       <div class="right">
         <!-- 审核通过时：显示 生成 + 反审核 -->
         <template v-if="isApproved">
-          <el-dropdown>
-            <el-button type="primary">
-              生成
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="generateSalesReturn"> 销售退货单 </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <el-button type="primary" :loading="returnPreviewLoading" :disabled="loading || saving || !!loadError" @click="generateSalesReturn">查看可退明细</el-button>
 
           <el-button class="ml8" @click="toggleApprove">反审核</el-button>
         </template>
@@ -382,6 +372,24 @@
       </div>
     </template>
   </el-dialog>
+  <el-dialog v-model="returnPreviewVisible" title="销售退货来源预览" width="960px" append-to-body :close-on-click-modal="false" destroy-on-close>
+    <template v-if="returnPreview">
+      <el-alert title="此页仅核对可退明细，尚未保存退货单或办理退款。可退数量需在保存时再次核对。" type="info" :closable="false" show-icon />
+      <p>来源销售单：{{ returnPreview.sourceNumber }}</p>
+      <el-table :data="returnPreview.items" border max-height="420">
+        <el-table-column prop="goodsName" label="商品" min-width="150" />
+        <el-table-column prop="warehouseName" label="仓库" min-width="140" />
+        <el-table-column prop="unit" label="单位" width="80" />
+        <el-table-column prop="sourceQuantity" label="原销售数量" width="110" />
+        <el-table-column prop="returned" label="已退数量" width="100" />
+        <el-table-column prop="reserved" label="退货草稿占用" width="120" />
+        <el-table-column prop="available" label="可退数量" width="100" />
+        <el-table-column prop="tpt" label="可退价税合计" min-width="130" />
+      </el-table>
+      <p>可退金额（含税）：{{ returnPreview.actual }}；本次预览不会自动退款。</p>
+    </template>
+    <template #footer><el-button @click="returnPreviewVisible = false">关闭预览</el-button></template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -394,7 +402,6 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { nextTick } from 'vue'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
-import { useRouter } from 'vue-router'
 import Warehouse from '@/components/goodSearchConpoent/Warehouse.vue'
 import { useCommonStore } from '@/stores/common'
 import { useUserStore } from '@/stores/user'
@@ -402,7 +409,7 @@ import { requiredText, extractApiErrorMessage, validateFormWithFocus } from '@/u
 
 // 导入销售单API
 import { saleOrderApi } from '@/apis/sales/order'
-import type { SaleDocumentDetail, SaleDTO, SaleDetailItem } from '@/apis/sales/order/type'
+import type { SaleDocumentDetail, SaleDTO, SaleDetailItem, SaleReturnGenerateData } from '@/apis/sales/order/type'
 
 import { saleEditorRows, saleEditorPayload } from '@/utils/saleDraft'
 const loading = ref(false)
@@ -506,7 +513,6 @@ function handleBatchWarehouseSelect(selected: any) {
   ElMessage.success(`已批量设置仓库：${selectedName}`)
 }
 
-const router = useRouter()
 
 /* 审核状态 */
 const isApproved = ref(false)
@@ -533,53 +539,24 @@ async function reviewCommand(audit: boolean) {
   finally { saving.value = false }
 }
 
-// 生成：携带数据并跳转到【销售退货单】
-function generateSalesReturn() {
-  // 有效商品行（过滤掉空行）
-  const validRows = tableData.value.filter((r) => r.productName)
-
-  // 要带过去的数据，结构我们保持跟原来一样，方便目标页复用
-  const payload = {
-    from: 'sales-book-detail', // 来源标记，你原来就是这个
-    businessType: 'sales-return', // ✅ 可选：给目标页一个业务类型
-    header: { ...header },
-    customer: customerModel.value,
-    tableData: validRows,
-    footer: { ...footer },
-    isApproved: isApproved.value,
-    timestamp: Date.now()
-  }
-
-  // 存到 sessionStorage 里，目标页去拿
-  sessionStorage.setItem('SB_DETAIL_TRANSFER', JSON.stringify(payload))
-
-  // 跳转到销售退货单页面
-  const targetRoute = {
-    path: '/sales-return', // ✅ 这里按你项目实际路由名称改
-    query: {
-      from: 'sales-booking',
-      dataTransfer: 'true'
-    }
-  }
-
-  console.log('🎯 准备跳转到销售退货单:', targetRoute)
-
-  router
-    .push(targetRoute)
-    .then(() => {
-      console.log('✅ 路由跳转成功')
-      if (validRows.length === 0) {
-        ElMessage.info('正在跳转到销售退货单页面（无商品数据）')
-      } else {
-        ElMessage.success(`正在跳转到销售退货单页面，共 ${validRows.length} 条数据`)
-      }
-    })
-    .catch((error: any) => {
-      console.error('❌ 路由跳转失败:', error)
-      ElMessage.error('路由跳转失败，请检查路由配置或路径 /sales-return 是否存在')
-    })
-
-  console.log('🏁 [generateSalesReturn] 执行完成')
+const returnPreviewLoading = ref(false)
+const returnPreviewVisible = ref(false)
+const returnPreview = ref<SaleReturnGenerateData | null>(null)
+async function generateSalesReturn() {
+  if (loading.value || saving.value || returnPreviewLoading.value || !currentDocument.value || !isApproved.value) return
+  if (hasUnsavedChanges.value) { ElMessage.warning('请先重新打开销售单核对'); return }
+  const reviewed = currentDocument.value
+  returnPreviewLoading.value = true
+  returnPreview.value = null
+  try {
+    const response = await saleOrderApi.getGenerateReturnData(String(reviewed.header.id))
+    if (!props.visible || currentDocument.value !== reviewed) return
+    if (response.code !== 10000 || !response.data) throw new Error(response.message || '退货来源读取失败')
+    if (response.data.source !== String(reviewed.header.id) || response.data.sourceVersion !== reviewed.version) throw new Error('来源销售单已变化，请重新打开后核对')
+    returnPreview.value = response.data
+    returnPreviewVisible.value = true
+  } catch (error) { ElMessage.error(extractApiErrorMessage(error, '退货来源读取失败')) }
+  finally { returnPreviewLoading.value = false }
 }
 
 /** 计算 el 内（纯文本）的光标位置 */
@@ -883,7 +860,7 @@ watch(
 
 watch(() => props.visible, value => {
   if (value) { void loadOrgOptions(); void loadDocument() }
-  else { documentSequence++; loading.value = false }
+  else { documentSequence++; loading.value = false; returnPreviewVisible.value = false }
 }, { immediate: true })
 
 // 客户选择对话框
