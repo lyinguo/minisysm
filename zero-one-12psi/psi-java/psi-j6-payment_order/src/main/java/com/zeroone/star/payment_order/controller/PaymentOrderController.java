@@ -100,7 +100,7 @@ public class PaymentOrderController implements PaymentOrderApis {
     @GetMapping("/query-by-id/{id}")
     @Override
     public JsonVO<OmyWithInfoDTO> queryByIdWithInfo(@PathVariable String id) {
-        drafts.requireScoped(id,"/payment-order/query-by-id");
+        drafts.requireScoped(id,"/payment-order/query-by-id/{id}");
         OmyWithInfoDTO result = paymentOrderService.getOmyWithInfoById(id);
         return JsonVO.success(result);
     }

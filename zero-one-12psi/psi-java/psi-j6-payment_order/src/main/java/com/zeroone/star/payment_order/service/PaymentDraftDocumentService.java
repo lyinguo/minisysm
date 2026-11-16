@@ -51,7 +51,7 @@ public class PaymentDraftDocumentService {
     }
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public Map<String,Object> document(String id){
-        UserDTO actor=access.authorize("/payment-order/query-by-id");Map<String,Object> head=head(id,false);access.requireFrame(actor,s(head.get("frame")));
+        UserDTO actor=access.authorize("/payment-order/query-by-id/{id}");Map<String,Object> head=head(id,false);access.requireFrame(actor,s(head.get("frame")));
         head.put("examine",head.remove("approval_state"));head.put("nucleus",head.remove("settlement_state"));
         head.putAll(db.queryForMap("SELECT DATE_FORMAT(o.time,'%Y-%m-%d') AS timeText,c.name AS supplierName,f.name AS frameName,p.name AS peopleName FROM omy o LEFT JOIN supplier c ON c.id=o.supplier LEFT JOIN frame f ON f.id=o.frame LEFT JOIN people p ON p.id=o.people WHERE o.id=?",id));
         Map<String,Object> result=new LinkedHashMap<>();result.put("header",head);result.put("version",versions.paymentVersion(id));

@@ -4,7 +4,7 @@ import concurrent.futures
 from payment_document_acceptance import PaymentDocumentSuite
 from payment_settlement_posting_acceptance import PaymentPostingSuite
 from purchase_ui_acceptance import PurchaseUiSuite
-from resource_fixture import qa_resource_grants,authority
+from resource_fixture import qa_database_resource_grants as qa_resource_grants,authority
 from acceptance import read_state,sql,literal
 
 class PaymentDocumentScopeSuite(PaymentDocumentSuite):
@@ -24,7 +24,7 @@ class PaymentDocumentScopeSuite(PaymentDocumentSuite):
                 assert read().get('code')==403
                 assert self.edit(identifier,self.revision(initial)).get('code')==403
                 assert self.remove(identifier,initial['version']).get('code')==403
-                with qa_resource_grants(self.state,['/payment-order/query-by-id','/payment-order/query-all'],[role]):
+                with qa_resource_grants(self.state,['/payment-order/query-by-id/{id}','/payment-order/query-all'],[role]):
                     current=self.document(identifier)
                     assert self.request('GET','/payment-order/documents?number='+initial['header']['number'],service='payment').get('code')==10000
                     assert self.edit(identifier,self.revision(current)).get('code')==403
@@ -47,7 +47,7 @@ class PaymentDocumentScopeSuite(PaymentDocumentSuite):
             frame=uuid.uuid4().hex
             sql(self.state,'INSERT INTO frame(id,pid,name) VALUES('+literal(frame)+",'0','QA Foreign Payment');UPDATE omy SET frame="+literal(frame)+' WHERE id='+literal(foreign)+';')
             foreign_document=self.document(foreign);user,token,role=self.role_user();admin=self.token
-            resources=['/payment-order/query-by-id','/payment-order/query-all','/payment-order/modify','/payment-order/remove']
+            resources=['/payment-order/query-by-id/{id}','/payment-order/query-all','/payment-order/modify','/payment-order/remove']
             try:
                 with qa_resource_grants(self.state,resources,[role]):
                     self.token=token

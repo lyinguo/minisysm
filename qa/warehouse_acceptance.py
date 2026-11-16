@@ -7,7 +7,7 @@ import uuid
 import concurrent.futures
 import threading
 from decimal import Decimal
-from acceptance import Suite, QA, read_state, sql, literal
+from acceptance import Suite, QA, read_state, sql, literal, authenticate_registered_login
 
 
 class WarehouseSuite(Suite):
@@ -20,11 +20,14 @@ class WarehouseSuite(Suite):
         client = json.loads((QA / 'runtime/oauth-client.json').read_text(encoding='utf-8'))
         parameters = {'grant_type': 'password', 'client_id': client['mgr-id'], 'client_secret': client['mgr-password'],
                       'username': payload['user'], 'password': payload['pwd']}
-        request = urllib.request.Request('http://127.0.0.1:18002/oauth/token',
-                                        data=urllib.parse.urlencode(parameters).encode())
-        with self.opener.open(request, timeout=20) as response:
-            result = json.load(response)
-        self.token = result.get('token') or result.get('access_token')
+        if getattr(self,'through_gateway',False):
+            self.token=authenticate_registered_login(state,payload['user'],payload['pwd'],self.opener)
+        else:
+            request = urllib.request.Request('http://127.0.0.1:18002/oauth/token',
+                                            data=urllib.parse.urlencode(parameters).encode())
+            with self.opener.open(request, timeout=20) as response:
+                result = json.load(response)
+            self.token = result.get('token') or result.get('access_token')
         assert self.token, 'Isolated stock actor could not actually authenticate'
         self.goods = uuid.uuid4().hex
         self.warehouse = uuid.uuid4().hex

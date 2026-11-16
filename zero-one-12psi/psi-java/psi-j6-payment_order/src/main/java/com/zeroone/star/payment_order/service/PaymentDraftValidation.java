@@ -1,15 +1,11 @@
 package com.zeroone.star.payment_order.service;
 
 import com.zeroone.star.project.components.user.UserDTO;
-import com.zeroone.star.project.components.user.UserHolder;
-import com.zeroone.star.project.components.user.RoleAuthority;
-import com.zeroone.star.project.constant.RedisConstant;
 import com.zeroone.star.project.dto.j6.payment_order.*;
 import org.springframework.stereotype.Service;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -23,9 +19,8 @@ import java.util.*;
 @Import(com.zeroone.star.project.config.redis.RedisConfig.class)
 public class PaymentDraftValidation {
     private final JdbcTemplate db;
-    private final UserHolder users;
-    private final RedisTemplate<String,Object> redis;
-    public PaymentDraftValidation(JdbcTemplate db,UserHolder users,RedisTemplate<String,Object> redis) {this.db=db;this.users=users;this.redis=redis;}
+    private final PaymentDocumentAccess access;
+    public PaymentDraftValidation(JdbcTemplate db,PaymentDocumentAccess access) {this.db=db;this.access=access;}
     @PostConstruct public void initialize() {db.execute("CREATE TABLE IF NOT EXISTS psi_document_write_lock (scope VARCHAR(40) NOT NULL PRIMARY KEY)");}
     private String clean(String value) {return value==null?"":value.trim();}
     private void length(String value,int max,String label) {if(value!=null && value.length()>max)throw new IllegalArgumentException(label+"最多"+max+"个字符");}
@@ -36,21 +31,10 @@ public class PaymentDraftValidation {
     }
     public UserDTO validate(OmyWithInfoAddDTO request) {
         if(!TransactionSynchronizationManager.isActualTransactionActive())throw new IllegalStateException("付款草稿必须在事务中保存");
-        UserDTO actor;
-        try {actor=users.getCurrentUser();}catch(Exception error){throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");}
-        if(actor==null || actor.getId()==null)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
-        List<Map<String,Object>> accounts=db.queryForList("SELECT u.frame,u.role,r.id AS role_id,r.keyword FROM `user` u LEFT JOIN role r ON r.id=u.role WHERE u.id=?",actor.getId());
-        if(accounts.size()!=1)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在");
-        Map<String,Object> account=accounts.get(0);String frame=account.get("frame")==null?"":account.get("frame").toString();
+        UserDTO actor=access.authorize("/payment-order/add");
+        String frame=actor.getFrameId();
         if(frame.isEmpty() || "0".equals(frame) || db.queryForObject("SELECT COUNT(*) FROM frame WHERE id=?",Integer.class,frame)!=1)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号缺少有效制单组织");
-        actor.setFrameId(frame);
-        if(!"0".equals(String.valueOf(account.get("role")))) {
-            if(account.get("role_id")==null)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号角色不存在");
-            String role=RoleAuthority.resolve(account.get("role_id").toString(),(String)account.get("keyword"));
-            Object allowed=redis.opsForHash().get(RedisConstant.RESOURCE_ROLES_MAP,"/payment-order/add");
-            if(!(allowed instanceof Collection) || !((Collection<?>)allowed).contains(role))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有新增付款单权限");
-        }
         fields(request,frame);
         db.update("INSERT INTO psi_document_write_lock(scope) VALUES('omy') ON DUPLICATE KEY UPDATE scope='omy'");
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope='omy' FOR UPDATE",String.class);

@@ -7,7 +7,7 @@ import urllib.parse
 from decimal import Decimal
 from purchase_posting_acceptance import PurchasePostingSuite
 from purchase_ui_acceptance import PurchaseUiSuite
-from resource_fixture import qa_resource_grants
+from resource_fixture import qa_database_resource_grants as qa_resource_grants
 from acceptance import read_state,sql,literal
 
 

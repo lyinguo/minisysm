@@ -1,4 +1,4 @@
-"""Temporary resource grants in the verified disposable QA Redis only."""
+"""Explicit disposable QA DB selections or isolated Redis fixtures, always restored."""
 import base64
 import hashlib
 import json
@@ -38,14 +38,14 @@ def qa_database_resource_grants(state,paths,roles):
     """Explicit disposable DB catalog/role fixtures; does not claim a role-UI lifecycle."""
     from acceptance import sql,literal
     assert re.fullmatch('psi_qa_[0-9a-f]{12}',state['database'])
-    assert paths and all(path.startswith('/fund/receipt/') for path in paths)
+    assert paths and all(path.startswith(('/fund/receipt/','/payment-order/')) for path in paths)
     identifiers=[];previous={};menu=uuid.uuid4().hex;menu_created=False
     try:
-        sql(state,'INSERT INTO menu(id,pid,name,`key`,model,type,resource,sort) VALUES('+','.join(literal(value) for value in [menu,'0','QA receipt permission fixture','qa-receipt-'+menu[:8],0,0,'',0])+');')
+        sql(state,'INSERT INTO menu(id,pid,name,`key`,model,type,resource,sort) VALUES('+','.join(literal(value) for value in [menu,'0','QA business permission fixture','qa-business-'+menu[:8],0,0,'',0])+');')
         menu_created=True
         for path in paths:
             identifier=uuid.uuid4().hex;identifiers.append(identifier)
-            sql(state,'INSERT INTO func_perm(id,mid,name,url,sort,is_enable) VALUES('+','.join(literal(value) for value in [identifier,menu,'QA receipt permission fixture',path,0,'1'])+');')
+            sql(state,'INSERT INTO func_perm(id,mid,name,url,sort,is_enable) VALUES('+','.join(literal(value) for value in [identifier,menu,'QA business permission fixture',path,0,'1'])+');')
         for keyword in roles:
             rows=json.loads(sql(state,'SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT(\'id\',id,\'root_hex\',HEX(COALESCE(root,\'[]\')),\'name\',name)),JSON_ARRAY()) FROM role WHERE keyword='+literal(keyword)+';'))
             assert len(rows)==1 and rows[0]['name'].startswith('QA'),'Refusing to change a non-fixture role'

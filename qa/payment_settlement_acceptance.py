@@ -4,7 +4,7 @@ from decimal import Decimal
 from trade_flow_acceptance import TradeFlowSuite
 from payment_draft_acceptance import PaymentDraftSuite
 from purchase_ui_acceptance import PurchaseUiSuite
-from resource_fixture import qa_resource_grants,authority
+from resource_fixture import qa_database_resource_grants as qa_resource_grants,authority
 from acceptance import read_state,sql,literal,QA
 
 class SettlementPreviewSuite(PaymentDraftSuite):

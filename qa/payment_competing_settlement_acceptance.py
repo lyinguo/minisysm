@@ -2,7 +2,7 @@
 import uuid
 from payment_settlement_posting_acceptance import PaymentPostingSuite
 from payment_document_scope_acceptance import PaymentDocumentScopeSuite
-from resource_fixture import qa_resource_grants
+from resource_fixture import qa_database_resource_grants as qa_resource_grants
 from acceptance import read_state,sql,literal
 
 class PaymentCompetingSuite(PaymentPostingSuite):
@@ -30,7 +30,7 @@ class PaymentCompetingSuite(PaymentPostingSuite):
             f=self.prepare_chain();command=self.command(f['payment']);helper=PaymentDocumentScopeSuite(self.state);user,token,role=helper.role_user();admin=self.token;self.token=token
             try:
                 assert self.post_payment(command).get('code')==403
-                with qa_resource_grants(self.state,['/payment-order/modify-examine-status','/payment-order/query-by-id'],[role]):
+                with qa_resource_grants(self.state,['/payment-order/modify-examine-status','/payment-order/query-by-id/{id}'],[role]):
                     assert self.post_payment(command).get('data')==1;self.balances(1171,0)
                     assert sql(self.state,"SELECT COUNT(*) FROM record WHERE type='omy' AND source="+literal(f['payment'])+' AND `user`='+literal(user)+';')=='1'
                     reverse=dict(id=f['payment'],status=0,version=self.document(f['payment'])['version'])

@@ -59,7 +59,25 @@ def read_state():
     return state
 
 
-def authenticate_isolated(state):
+def verify_qa_gateway_routes(opener,state):
+    if state.get('gateway_port')!=18001 or state.get('login_port')!=18003:
+        raise RuntimeError('Gateway and Login must use dedicated QA ports')
+    with opener.open('http://127.0.0.1:18001/actuator/gateway/routes',timeout=20) as response:routes=json.load(response)
+    expected={'qa-payment':'http://127.0.0.1:18024','qa-receipt':'http://127.0.0.1:18026','qa-identity':'http://127.0.0.1:18091','qa-login':'http://127.0.0.1:18003'}
+    if {row['route_id']:row['uri'] for row in routes}!=expected:
+        raise RuntimeError('Gateway contains unverified routes; refusing writes and credential submission')
+
+
+def authenticate_registered_login(state,username,credential,opener):
+    verify_qa_gateway_routes(opener,state)
+    request=urllib.request.Request('http://127.0.0.1:18001/login/auth-login',data=urllib.parse.urlencode(dict(username=username,password=credential)).encode())
+    with opener.open(request,timeout=20) as response:body=json.load(response)
+    if body.get('code')!=10000 or not body.get('data',{}).get('token'):
+        raise RuntimeError('Actual QA Login->OAuth authentication/token registration failed; code='+str(body.get('code')))
+    return body['data']['token']
+
+
+def authenticate_isolated(state,registered=False):
     """Bootstrap a fresh disposable QA administrator and obtain a real QA token.
 
     Never reuse a normal-environment identity to exercise privileged QA writes.
@@ -75,9 +93,12 @@ def authenticate_isolated(state):
     sql(state,'INSERT INTO `user`('+','.join('`'+key+'`' for key in fields)+') VALUES('+','.join(literal(value) for value in values)+');')
     client=json.loads((QA/'runtime/oauth-client.json').read_text(encoding='utf-8'))
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    request=urllib.request.Request('http://127.0.0.1:18002/oauth/token',data=urllib.parse.urlencode(dict(grant_type='password',client_id=client['mgr-id'],client_secret=client['mgr-password'],username=login,password=credential)).encode())
-    with opener.open(request,timeout=20) as response:body=json.load(response)
-    token=body.get('access_token') or body.get('token')
+    if registered:
+        token=authenticate_registered_login(state,login,credential,opener)
+    else:
+        request=urllib.request.Request('http://127.0.0.1:18002/oauth/token',data=urllib.parse.urlencode(dict(grant_type='password',client_id=client['mgr-id'],client_secret=client['mgr-password'],username=login,password=credential)).encode())
+        with opener.open(request,timeout=20) as response:body=json.load(response)
+        token=body.get('access_token') or body.get('token')
     if not token:raise RuntimeError('Fresh isolated administrator could not authenticate')
     import base64
     payload=token.split('.')[1]
@@ -125,12 +146,12 @@ def bootstrap():
 class Suite:
     def __init__(self, state):
         self.state = state
-        self.opener, self.token, _ = authenticate_isolated(state)
+        self.opener, self.token, _ = authenticate_isolated(state,registered=getattr(self,'through_gateway',False))
         self.results = []
 
     def request(self, method, path, body=None, service='c1'):
         port = self.state[service + '_port']
-        dedicated_ports = {'c1': 18091, 'supportinfo': 18007, 'store': 18020, 'basic': 18021, 'sale': 18022, 'purchase': 18023, 'payment': 18024, 'homepage': 18025, 'fund': 18026}
+        dedicated_ports = {'c1': 18091, 'supportinfo': 18007, 'store': 18020, 'basic': 18021, 'sale': 18022, 'purchase': 18023, 'payment': 18024, 'homepage': 18025, 'fund': 18026, 'gateway': 18001}
         if dedicated_ports.get(service) != port or not path.startswith('/'):
             raise RuntimeError('Refusing writes outside isolated service ports')
         request = urllib.request.Request('http://127.0.0.1:' + str(port) + path, method=method,

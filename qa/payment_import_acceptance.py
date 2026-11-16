@@ -3,7 +3,7 @@ import copy
 import uuid
 import re
 from payment_document_scope_acceptance import PaymentDocumentScopeSuite
-from resource_fixture import qa_resource_grants
+from resource_fixture import qa_database_resource_grants as qa_resource_grants
 from acceptance import read_state,sql,literal
 
 class PaymentImportSuite(PaymentDocumentScopeSuite):

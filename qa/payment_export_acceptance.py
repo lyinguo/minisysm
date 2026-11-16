@@ -2,12 +2,14 @@
 import io,json,urllib.request,urllib.parse,uuid
 from openpyxl import load_workbook
 from payment_import_acceptance import PaymentImportSuite
-from resource_fixture import qa_resource_grants
+from resource_fixture import qa_database_resource_grants as qa_resource_grants
 from acceptance import read_state,sql,literal
 
 class PaymentExportSuite(PaymentImportSuite):
     def export(self,kind,query):
-        request=urllib.request.Request('http://127.0.0.1:18024/payment-order/export/'+kind+'?'+urllib.parse.urlencode(query),headers={'Authorization':'Bearer '+self.token})
+        port=getattr(self,'payment_export_port',18024)
+        assert port in (18024,18001),'Exports must use isolated payment or QA gateway'
+        request=urllib.request.Request('http://127.0.0.1:'+str(port)+'/payment-order/export/'+kind+'?'+urllib.parse.urlencode(query),headers={'Authorization':'Bearer '+self.token})
         with self.opener.open(request,timeout=30) as response:raw=response.read()
         if raw.startswith(b'{'):return json.loads(raw)
         workbook=load_workbook(io.BytesIO(raw),read_only=True,data_only=True)

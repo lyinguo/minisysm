@@ -1,7 +1,7 @@
 """Actual scoped supplier/account chooser used by the payment workflow."""
 import uuid,urllib.parse
 from payment_document_scope_acceptance import PaymentDocumentScopeSuite
-from resource_fixture import qa_resource_grants
+from resource_fixture import qa_database_resource_grants as qa_resource_grants
 from acceptance import read_state,sql,literal
 
 class PaymentOptionsSuite(PaymentDocumentScopeSuite):

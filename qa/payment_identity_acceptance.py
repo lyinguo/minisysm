@@ -1,7 +1,7 @@
 """Actual signed OAuth identity is revalidated against current organization and role."""
 import uuid
 from payment_document_scope_acceptance import PaymentDocumentScopeSuite
-from resource_fixture import qa_resource_grants
+from resource_fixture import qa_database_resource_grants as qa_resource_grants
 from acceptance import read_state,sql,literal
 
 class PaymentIdentitySuite(PaymentDocumentScopeSuite):
@@ -9,7 +9,7 @@ class PaymentIdentitySuite(PaymentDocumentScopeSuite):
         def missing_frame():
             self.fixture();identifier=self.create_payment(self.body());before=self.document(identifier)
             user,token,role=self.role_user();admin=self.token
-            paths=['/payment-order/query-all','/payment-order/query-by-id','/payment-order/modify','/payment-order/remove']
+            paths=['/payment-order/query-all','/payment-order/query-by-id/{id}','/payment-order/modify','/payment-order/remove']
             with qa_resource_grants(self.state,paths,[role]):
                 self.token=token
                 try:

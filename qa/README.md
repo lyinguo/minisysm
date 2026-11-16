@@ -28,7 +28,13 @@
 
 ## 付款草稿、完整模板与核销验收
 
-最终整组运行`python qa/payment_workflow_acceptance.py`，串行执行42项真实检查，比较候选包/源码镜像及记录PID保持一致；还需在启动端核实实际运行包哈希，不能只凭报告宣称运行版本。完整报告payment-workflow-final.json不标记系统全部功能通过。
+最终整组运行`python qa/payment_workflow_acceptance.py`，串行执行50项真实检查：原有42项及付款真实角色联动4项、相同联动经真实网关4项。比较付款候选包/源码镜像、打包的DatabaseResourcePermission编译类、网关与Login包/私有配置及记录PID保持一致；还需在启动端核实实际运行包哈希，不能只凭报告宣称运行版本。完整报告payment-workflow-final.json不标记系统全部功能通过。
+
+新增网关准备：分别`python qa/prepare_oauth_build.py --module psi-login`及`--module psi-gateway`，用Maven对生成的`qa/runtime/java/login-project/pom.xml`和`gateway-project/pom.xml`执行clean package，再运行`qa/start_login_test.ps1`、`qa/start_gateway_test.ps1`。它们仅在18003/18001启动，Login明确使用静态QA OAuth18002、QA Redis18379；网关仅路由到QA Login/角色账号/付款/收款，校验实际路由后才提交凭据或业务写请求。已有记录进程存活时启动脚本会拒绝重启，应先核对该进程，不因观察超时重启。配置含私有环境内容，仅生成在runtime，不发布。
+
+单独运行`python qa/payment_role_integration_acceptance.py`或加`--gateway`。通过真实C1角色保存选择正常目录的220至228功能，验证同一普通令牌新增、完整/旧详情、列表、修改、账户选择、两类实际XLSX导出、预览确认导入、实际954付款/撤销/删除和操作人历史；禁用功能、真实用户角色变更及撤权不能被旧缓存覆盖。禁用功能是明确的QA元数据夹具，不等于菜单管理完整UI验收。其他普通权限回归使用可恢复的QA数据库角色/目录夹具，不能当作实际角色保存的证据；采购等尚依赖Redis的模块保持原Redis夹具，不能因付款修复而宣称通过。
+
+网关用例经过实际`/login/auth-login`→OAuth→登录服务登记凭证，不手工写令牌缓存。Suite默认仍直接获取隔离OAuth令牌；网关模式才让初始管理员、继承的仓库操作人和普通角色都经过Login，防止继承夹具覆盖成未登记令牌。QA Login关闭验证码仅供这组登录夹具，不代表验证码/SMS/完整认证功能已验收。网关配置沿用当前应用将功能授权交由业务服务的策略；缺失/无效令牌请求按真实业务401协议拒绝，错误data可能是说明字符串，不能误判为返回业务记录。
 
 浏览器运行`python qa/payment_browser_acceptance.py prepare`创建实际完整业务链及私有签名QA会话，打开打印的18030 URL，将备注修改为打印值并保存，运行`edited`；核对采购1130/退货176并确认付款后运行`posted`，反审核后运行`reversed`。每阶段检查实际库存、现金、双方往来、主从ID、原单核销、凭据及操作人历史。模板实际下载后用`fill-template --download <下载绝对路径>`读取原模板另存本例测试数据，浏览器上传并确认后运行`imported`；按该编号实际导出后运行`exported --download <实际导出绝对路径>`核对真实工作簿内容。必须按次序操作，不能重复审核后用旧历史计数验证；私有会话/报告/截图/下载不推送。
 
