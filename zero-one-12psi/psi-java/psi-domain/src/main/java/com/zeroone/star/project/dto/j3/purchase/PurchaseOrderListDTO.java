@@ -19,6 +19,12 @@ import javax.validation.constraints.*;
 @Data
 @ApiModel("采购订单列表数据对象")
 public class PurchaseOrderListDTO {
+    @ApiModelProperty("组织名称（frame保留原ID）") private String frameName;
+    @ApiModelProperty("供应商名称（supplier保留原ID）") private String supplierName;
+    @ApiModelProperty("人员名称（people保留原ID）") private String peopleName;
+    @ApiModelProperty("制单人名称（user保留原ID）") private String userName;
+    @ApiModelProperty("审核状态说明") private String examineName;
+    @ApiModelProperty("入库状态说明") private String stateName;
     @NotBlank(message = "商品名称不能为空")
     @Size(max = 32, message = "商品名称长度不能超过32个字符")
     @ApiModelProperty(value = "商品名称", example = "小刀")

@@ -1,5 +1,5 @@
 """Independent checkpoints after real browser upload/download actions; dedicated QA only."""
-import argparse,io,json,uuid,urllib.request,urllib.error
+import argparse,io,json,uuid,urllib.request,urllib.error,urllib.parse
 from decimal import Decimal
 from openpyxl import load_workbook
 from booking_import_acceptance import OrderImportSuite,HEADERS
@@ -72,6 +72,19 @@ def session():
         assert status==expected
         if status==200:assert data['data']['id']==f['actor']
     report('qa_session_validated_against_real_backend')
+def list_state(target):
+    state,f=fixture();assert state['purchase_port']==18023
+    id=sql(state,'SELECT id FROM bor WHERE number='+literal(f['secondNumber'])+';')
+    assert sql(state,'SELECT CAST(examine AS SIGNED) FROM bor WHERE id='+literal(id)+';')==str(target)
+    assert sql(state,"SELECT COUNT(*) FROM record WHERE type='bor' AND source="+literal(id)+';')==str(2 if target else 3)
+    token=json.loads((QA/'runtime/browser-session.json').read_text())['token'];url='http://127.0.0.1:18023/purchase-order/list?'+urllib.parse.urlencode(dict(pageIndex=1,pageSize=10,number=f['number'],examine=target))
+    request=urllib.request.Request(url,headers={'Authorization':'Bearer '+token});opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request,timeout=25) as response:result=json.load(response)
+    assert result['code']==10000 and result['data']['total']==(1 if target else 3)
+    for row in result['data']['rows']:
+        assert row['supplierName']=='QA Posting Supplier' and row['peopleName']=='QA Booking Person' and row['userName'] and row['frameName']
+        assert row['documentTime']=='2026-11-15 00:00:00' and row['arrivalTime']=='2026-11-16' and row['examineName']==('已审核' if target else '未审核') and row['stateName']=='未入库'
+    balances(state,f);report('list_approved_filter' if target else 'list_reversed_filter')
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['prepare','prepare-extra','verify-rejected','verify-saved','verify-files','verify-session','verify-multi-files']);action=parser.parse_args().action
-    {'prepare':prepare,'prepare-extra':prepare_extra,'verify-rejected':rejected,'verify-saved':saved,'verify-files':files,'verify-session':session,'verify-multi-files':multi_files}[action]()
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['prepare','prepare-extra','verify-rejected','verify-saved','verify-files','verify-session','verify-multi-files','verify-list-approved','verify-list-reversed']);action=parser.parse_args().action
+    {'prepare':prepare,'prepare-extra':prepare_extra,'verify-rejected':rejected,'verify-saved':saved,'verify-files':files,'verify-session':session,'verify-multi-files':multi_files,'verify-list-approved':lambda:list_state(1),'verify-list-reversed':lambda:list_state(0)}[action]()

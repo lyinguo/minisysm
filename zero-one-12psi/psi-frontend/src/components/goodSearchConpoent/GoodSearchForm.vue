@@ -611,7 +611,7 @@
     <!-- 触发按钮 -->
     <template #reference>
       <div class="search-trigger-group">
-        <el-button>
+        <el-button aria-label="展开筛选条件" :aria-expanded="popoverVisible" @click.stop="popoverVisible = !popoverVisible">
           <el-icon><MoreFilled /></el-icon>
         </el-button>
         <el-button type="primary" @click.stop="handleSearch">

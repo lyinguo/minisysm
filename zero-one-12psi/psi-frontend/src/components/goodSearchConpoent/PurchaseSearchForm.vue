@@ -84,7 +84,7 @@ const hasInitialized = ref(false)
 const toText = (v: any): string => {
   if (v == null) return ''
   if (typeof v === 'object') {
-    return v.label || v.name || v.text || String(v.id ?? '')
+    return String(v.id ?? v.value ?? v.label ?? v.name ?? v.text ?? '')
   }
   return String(v)
 }
@@ -93,18 +93,18 @@ const toText = (v: any): string => {
  * 审核状态映射：数字 -> 文本
  */
 const examineMap: Record<string | number, string> = {
-  1: '未审核',
-  2: '已审核'
+  1: '0',
+  2: '1'
 }
 
 /**
  * 入库状态映射：数字 -> 文本
  */
 const stateMap: Record<string | number, string> = {
-  1: '未入库',
-  2: '部分入库',
-  3: '已入库',
-  4: '关闭'
+  1: '0',
+  2: '1',
+  3: '2',
+  4: '3'
 }
 
 /**

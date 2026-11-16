@@ -97,6 +97,7 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
     private com.zeroone.star.purchase.service.PurchaseOrderImportService orderImports;
     @Resource
     private com.zeroone.star.purchase.service.PurchaseOrderExportService orderExports;
+    @Resource private com.zeroone.star.purchase.service.PurchaseOrderListView orderListView;
 
     /**
      * 新增采购订单
@@ -162,7 +163,9 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
      * @return
      */
     @Override
+    @Transactional(readOnly=true)
     public PageDTO<PurchaseOrderListDTO> listPurchaseOrders(PurchaseOrderQuery query) {
+        if(query.getPageSize()<1 || query.getPageSize()>200 || query.getPageIndex()<1)throw new IllegalArgumentException("页码必须大于0，每页1到200条");
         String allowedFrame=orderAccess.frame(orderAccess.authorize("/purchase-order/list"));
         // 分页插件对象
         IPage<BorDO> ipage = new Page<>(query.getPageIndex(), query.getPageSize());
@@ -170,14 +173,18 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
         // 条件
         LambdaQueryWrapper<BorDO> w = new LambdaQueryWrapper<>();
         if(allowedFrame!=null)w.eq(BorDO::getFrame,allowedFrame);
-        w.likeRight(StringUtils.isNotBlank(query.getNumber()), BorDO::getNumber, query.getNumber())
-                .eq(StringUtils.isNotBlank(query.getSupplier()), BorDO::getSupplier, query.getSupplier())
-                .eq(StringUtils.isNotBlank(query.getPeople()), BorDO::getPeople, query.getPeople())
-                .eq(StringUtils.isNotBlank(query.getUser()), BorDO::getUser, query.getUser())
-                .eq(StringUtils.isNotBlank(query.getExamine()), BorDO::getExamine, query.getExamine())
-                .eq(StringUtils.isNotBlank(query.getState()), BorDO::getState, query.getState());
+        w.likeRight(StringUtils.isNotBlank(query.getNumber()), BorDO::getNumber, query.getNumber());
+        if(StringUtils.isNotBlank(query.getSupplier()))w.apply("(supplier={0} OR EXISTS(SELECT 1 FROM supplier s WHERE s.id=bor.supplier AND s.name LIKE {1}))",query.getSupplier(),"%"+query.getSupplier()+"%");
+        if(StringUtils.isNotBlank(query.getPeople()))w.apply("(people={0} OR EXISTS(SELECT 1 FROM people p WHERE p.id=bor.people AND p.name LIKE {1}))",query.getPeople(),"%"+query.getPeople()+"%");
+        if(StringUtils.isNotBlank(query.getUser()))w.apply("(`user`={0} OR EXISTS(SELECT 1 FROM `user` u WHERE u.id=bor.`user` AND u.name LIKE {1}))",query.getUser(),"%"+query.getUser()+"%");
+        if(StringUtils.isNotBlank(query.getExamine()))w.eq(BorDO::getExamine,com.zeroone.star.purchase.service.PurchaseOrderListView.filter(query.getExamine(),true));
+        if(StringUtils.isNotBlank(query.getState()))w.eq(BorDO::getState,com.zeroone.star.purchase.service.PurchaseOrderListView.filter(query.getState(),false));
+        if(StringUtils.isNotBlank(query.getName()))w.apply("EXISTS(SELECT 1 FROM bor_info i JOIN goods g ON g.id=i.goods WHERE i.pid=bor.id AND g.name LIKE {0})","%"+query.getName()+"%");
+        w.like(StringUtils.isNotBlank(query.getData()),BorDO::getData,query.getData());
 
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        DateTimeFormatter fmt = DateTimeFormatter.ISO_LOCAL_DATE;
+        if(StringUtils.isNotBlank(query.getDocumentStartTime()) && StringUtils.isNotBlank(query.getDocumentEndTime()) && LocalDate.parse(query.getDocumentStartTime()).isAfter(LocalDate.parse(query.getDocumentEndTime())))throw new IllegalArgumentException("单据开始日期不能晚于结束日期");
+        if(StringUtils.isNotBlank(query.getArrivalStartTime()) && StringUtils.isNotBlank(query.getArrivalEndTime()) && LocalDate.parse(query.getArrivalStartTime()).isAfter(LocalDate.parse(query.getArrivalEndTime())))throw new IllegalArgumentException("到货开始日期不能晚于结束日期");
         if (StringUtils.isNotBlank(query.getDocumentStartTime())) {
             LocalDateTime start = LocalDate.parse(query.getDocumentStartTime(), fmt).atStartOfDay();
             w.ge(BorDO::getTime, start);
@@ -194,12 +201,12 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
             LocalDateTime end = LocalDate.parse(query.getArrivalEndTime(), fmt).atTime(23, 59, 59);
             w.le(BorDO::getArrival, end);
         }
-        w.orderByDesc(BorDO::getTime);
+        w.orderByDesc(BorDO::getTime).orderByAsc(BorDO::getId);
 
         // 执行分页
         ipage = this.page(ipage, w);
 
-        return PageDTO.create((Page<BorDO>)ipage, PurchaseOrderListDTO.class);
+        return orderListView.enrich(PageDTO.create((Page<BorDO>)ipage, PurchaseOrderListDTO.class),ipage.getRecords());
     }
 
     @Resource

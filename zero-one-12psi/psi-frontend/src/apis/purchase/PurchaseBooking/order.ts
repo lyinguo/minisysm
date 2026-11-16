@@ -127,7 +127,13 @@ export interface PurchaseOrderListQuery {
 // 采购订单列表数据对象
 export interface PurchaseOrderListItem {
   /** 订单ID */
-  id?: number
+  id?: string | number
+  frameName?: string
+  supplierName?: string
+  peopleName?: string
+  userName?: string
+  examineName?: string
+  stateName?: string
   /** 实际金额 */
   actual: string | number
   /** 到货日期 */

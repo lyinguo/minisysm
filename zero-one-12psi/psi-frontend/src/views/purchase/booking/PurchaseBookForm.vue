@@ -124,7 +124,7 @@
                       <el-dropdown-item>单据号：{{ scope.row.orderNo }}</el-dropdown-item>
                       <el-dropdown-item>供应商：{{ scope.row.supplier }}</el-dropdown-item>
                       <el-dropdown-item
-                        >金额：{{ scope.row.amount.toLocaleString() }}</el-dropdown-item
+                        >金额：{{ scope.row.amount.toLocaleString('zh-CN', { maximumFractionDigits: 4 }) }}</el-dropdown-item
                       >
                     </el-dropdown-menu>
                   </template>
@@ -155,8 +155,8 @@
           />
         </div>
         <div class="status-right">
-          <span>总单据金额：{{ totalAmount.toLocaleString() }}</span>
-          <span class="ml-24">总实际金额：{{ totalRealAmount.toLocaleString() }}</span>
+          <span>本页单据金额：{{ totalAmount.toLocaleString('zh-CN', { maximumFractionDigits: 4 }) }}</span>
+          <span class="ml-24">本页实际金额：{{ totalRealAmount.toLocaleString('zh-CN', { maximumFractionDigits: 4 }) }}</span>
         </div>
       </div>
     </div>
@@ -313,17 +313,17 @@ const purchaseSearchRef = ref<InstanceType<typeof PurchaseSearchForm> | null>(nu
 const convertToRowData = (item: PurchaseOrderListItem): RowData => {
   return {
     id: item.id,
-    org: item.frame || '默认组织',
-    supplier: item.supplier || '',
+    org: item.frameName || item.frame || '—',
+    supplier: item.supplierName || item.supplier || '—',
     date: item.documentTime || '',
     orderNo: item.number || '',
     amount: typeof item.total === 'string' ? parseFloat(item.total) || 0 : item.total || 0,
     realAmount: typeof item.actual === 'string' ? parseFloat(item.actual) || 0 : item.actual || 0,
     arrivalDate: item.arrivalTime || '',
-    contact: item.people || '',
-    auditStatus: item.examine || '未审核',
-    stockStatus: item.state || '未入库',
-    maker: item.user || '',
+    contact: item.peopleName || item.people || '—',
+    auditStatus: item.examineName || (({'0':'未审核','1':'已审核'} as Record<string,string>)[String(item.examine)] ?? `异常(${item.examine ?? '空'})`),
+    stockStatus: item.stateName || (({'0':'未入库','1':'部分入库','2':'已入库','3':'关闭'} as Record<string,string>)[String(item.state)] ?? `异常(${item.state ?? '空'})`),
+    maker: item.userName || item.user || '—',
     remark: item.data || ''
   }
 }

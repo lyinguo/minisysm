@@ -1,5 +1,11 @@
 # 系统业务验收
 
+## 采购订单列表名称、日期与筛选
+
+`python qa/booking_list_acceptance.py baseline`重现最初4项失败，`run`执行8项真实HTTP/OAuth/MySQL专项。保留原ID并补充实际名称、日期和明确状态；异常枚举显示异常。供应商/人员/制单人支持ID或名称，商品名称及备注可过滤；状态传0起真实值并兼容旧中文。严格日期、范围及分页校验，同日期按ID稳定排序，金额明确标注为本页合计。
+
+隔离浏览器审核第二张夹具订单，已审核仅1条；反审核后已审核0条、未审核3条。分别执行`python qa/booking_browser_acceptance.py verify-list-approved`与`verify-list-reversed`独立核对状态、历史及库存/应付不变。旧孤儿资料名称分支尚无真实验证；详情人员ID及其他选择器体验继续待修复，不代表订单模块或全系统完成。
+
 ## 采购订单页面实际上传下载
 
 运行`python qa/booking_browser_acceptance.py prepare`新建专用账号、供货资料和有效/独立错误单号的XLSX，`verify-session`核验真实QA用户服务接受有效令牌、拒绝伪造签名和空令牌。启动`vite.qa.config.ts`的18030本机服务，打开`http://127.0.0.1:18030/qa-browser-login`并点击进入采购订单验收。此入口使用实际OAuth签发的QA会话，当前用户经18091验证；菜单留空，不代表菜单或生产登录流程验收。生产配置没有这个入口。
