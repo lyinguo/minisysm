@@ -14,7 +14,7 @@ describe('role save', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     vi.clearAllMocks()
     api.getRoleList.mockResolvedValue({ code: 10000, data: { rows: [], total: 0 } })
-    api.getRolePermission.mockResolvedValue({ code: 10000, data: { functionPermissions: [{ id: 'menu', name: '菜单' }] } })
+    api.getRolePermission.mockResolvedValue({ code: 10000, data: { functionPermissions: [{ id: 'menu', name: '菜单', children: [{ id: 'sub', name: '采购', children: [{ id: 'grant', name: '新增采购订单' }] }] }] } })
     api.getRoleDetail.mockResolvedValue({ code: 10000, data: {
       id: 'role', name: '角色', data: '旧备注', root: '{"legacy-permission":true}', auth: '{"customer":"custom","extra":true}'
     } })
@@ -59,7 +59,7 @@ describe('role save', () => {
   it('saves permissions when the user explicitly changes the permission controls', async () => {
     const { wrapper, state } = await open()
     try {
-      state.treeRef.setCheckedKeys(['menu'])
+      state.treeRef.setCheckedKeys(['function:grant'])
       wrapper.findAllComponents({ name: 'ElTree' })[0].vm.$emit('check', {})
       const select = wrapper.findAllComponents({ name: 'ElSelect' }).find(select => select.props('modelValue') === 'custom')!
       select.vm.$emit('update:modelValue', 'org')
@@ -67,7 +67,7 @@ describe('role save', () => {
       await flushPromises()
       await state.handleSave()
       const payload = api.modifyRole.mock.calls[0][0]
-      expect(JSON.parse(payload.root)).toEqual({ menu: true })
+      expect(JSON.parse(payload.root)).toEqual([{ id: 'menu', children: [{ id: 'sub', fun: [{ id: 'grant' }] }] }])
       expect(JSON.parse(payload.auth)).toMatchObject({ customer: 'org', extra: true })
     } finally { wrapper.unmount() }
   })

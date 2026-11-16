@@ -6,7 +6,7 @@ import re
 import subprocess
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager,ExitStack
 
 
 def authority(identifier,keyword):
@@ -17,7 +17,7 @@ def authority(identifier,keyword):
 
 
 @contextmanager
-def qa_resource_grants(state,paths,roles):
+def _qa_redis_resource_grants(state,paths,roles):
     assert re.fullmatch('psi_qa_[0-9a-f]{12}',state['database'])
     container='psi-qa-redis-'+state['database'][len('psi_qa_'):]
     actual=subprocess.run(['docker','ps','--filter','publish=18379','--format','{{.Names}}'],capture_output=True,text=True,check=True).stdout.strip()
@@ -34,11 +34,22 @@ def qa_resource_grants(state,paths,roles):
 
 
 @contextmanager
+def qa_resource_grants(state,paths,roles):
+    """Procurement uses committed DB fixtures; unchanged modules retain QA Redis fixtures."""
+    purchase=[path for path in paths if path.startswith(('/purchase-order/','/purchase-note/','/purchase-return-form/','/j3-purchase/'))]
+    legacy=[path for path in paths if path not in purchase]
+    with ExitStack() as stack:
+        if purchase:stack.enter_context(qa_database_resource_grants(state,[path if path.startswith('/j3-purchase/') else '/j3-purchase'+path for path in purchase],roles))
+        if legacy:stack.enter_context(_qa_redis_resource_grants(state,legacy,roles))
+        yield
+
+
+@contextmanager
 def qa_database_resource_grants(state,paths,roles):
     """Explicit disposable DB catalog/role fixtures; does not claim a role-UI lifecycle."""
     from acceptance import sql,literal
     assert re.fullmatch('psi_qa_[0-9a-f]{12}',state['database'])
-    assert paths and all(path.startswith(('/fund/receipt/','/payment-order/')) for path in paths)
+    assert paths and all(path.startswith(('/fund/receipt/','/payment-order/','/j3-purchase/')) for path in paths)
     identifiers=[];previous={};menu=uuid.uuid4().hex;menu_created=False
     try:
         sql(state,'INSERT INTO menu(id,pid,name,`key`,model,type,resource,sort) VALUES('+','.join(literal(value) for value in [menu,'0','QA business permission fixture','qa-business-'+menu[:8],0,0,'',0])+');')
@@ -53,12 +64,27 @@ def qa_database_resource_grants(state,paths,roles):
             assert isinstance(root,list)
             root.append(dict(id=menu,fun=[dict(id=identifier) for identifier in identifiers]))
             sql(state,'UPDATE role SET root='+literal(json.dumps(root))+' WHERE id='+literal(row['id'])+';')
-        yield
+        yield dict(zip(paths,identifiers))
     finally:
         for identifier,root in previous.items():
             sql(state,'UPDATE role SET root='+literal(root)+' WHERE id='+literal(identifier)+';')
         if identifiers:sql(state,'DELETE FROM func_perm WHERE mid='+literal(menu)+' AND id IN ('+','.join(literal(identifier) for identifier in identifiers)+');')
         if menu_created:sql(state,'DELETE FROM menu WHERE id='+literal(menu)+';')
+
+
+@contextmanager
+def qa_purchase_permission_switches(state,paths,roles):
+    """Toggle only this fixture's enabled catalog IDs; restore all role selections."""
+    from acceptance import sql,literal
+    canonical=[path if path.startswith('/j3-purchase/') else '/j3-purchase'+path for path in paths]
+    assert all(path.startswith('/j3-purchase/') for path in canonical)
+    with qa_database_resource_grants(state,canonical,roles) as functions:
+        mapping={path:functions[resource] for path,resource in zip(paths,canonical)}
+        def switch(path,enabled):
+            assert path in mapping
+            sql(state,"UPDATE func_perm SET is_enable="+literal('1' if enabled else '0')+' WHERE id='+literal(mapping[path])+';')
+        for path in paths:switch(path,False)
+        yield switch
 
 
 @contextmanager

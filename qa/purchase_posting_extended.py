@@ -1,3 +1,4 @@
+from resource_fixture import qa_purchase_permission_switches
 """Extended real procurement posting gates; no business inventory is inserted by fixtures."""
 import concurrent.futures
 import threading
@@ -157,26 +158,22 @@ class PurchasePostingExtended(PurchasePostingSuite):
             request=urllib.request.Request('http://127.0.0.1:18002/oauth/token',data=urllib.parse.urlencode(dict(grant_type='password',client_id=client['mgr-id'],client_secret=client['mgr-password'],username=user['user'],password=user['pwd'])).encode())
             with self.opener.open(request,timeout=20) as response: login=json.load(response)
             token=login.get('access_token') or login.get('token');assert token
-            container='psi-qa-redis-'+self.state['database'][len('psi_qa_'):]
-            actual=subprocess.run(['docker','ps','--filter','publish=18379','--format','{{.Names}}'],capture_output=True,text=True,check=True).stdout.strip()
-            assert actual==container,'Refusing to alter unverified Redis'
-            def redis(*args):
-                return subprocess.run(['docker','exec',container,'redis-cli','--raw']+list(args),capture_output=True,text=True,check=True).stdout.rstrip('\r\n')
-            resource='/purchase-note/audit'
-            existed,value=redis('HEXISTS','AUTH:RESOURCE_ROLES',resource),redis('HGET','AUTH:RESOURCE_ROLES',resource)
+            context=qa_purchase_permission_switches(self.state,['/purchase-note/audit'],[keyword])
+            switch=context.__enter__()
+            resource=['/purchase-note/audit'][0]
             admin=self.token
             reviewed=self.review_versions([identifier])
             try:
-                self.token=token;redis('HDEL','AUTH:RESOURCE_ROLES',resource)
+                self.token=token;switch(resource,False)
                 assert self.post([identifier]).get('code')==403;self.empty([identifier])
                 grant=json.dumps(['java.util.ArrayList',[keyword]])
-                redis('HSET','AUTH:RESOURCE_ROLES',resource,grant)
+                switch(resource,True)
                 assert self.post([identifier],versions=reviewed).get('code')==10000 and self.inventory()==2
                 self.token=admin;reverse_version=self.review_versions([identifier]);self.token=token
                 assert int(sql(self.state,"SELECT COUNT(*) FROM record WHERE type='buy' AND source="+literal(identifier)+' AND `user`='+literal(user_id)+';'))>0
-                redis('HDEL','AUTH:RESOURCE_ROLES',resource)
+                switch(resource,False)
                 assert self.post([identifier],0).get('code')==403 and self.inventory()==2
-                redis('HSET','AUTH:RESOURCE_ROLES',resource,grant)
+                switch(resource,True)
                 assert self.post([identifier],0,reverse_version).get('code')==10000;self.empty([identifier])
                 other=uuid.uuid4().hex
                 sql(self.state,'INSERT INTO frame(id,name,pid) VALUES('+literal(other)+",'QA Foreign Audit','0');")
@@ -184,9 +181,8 @@ class PurchasePostingExtended(PurchasePostingSuite):
                 assert self.post([identifier]).get('code')==403;self.empty([identifier])
             finally:
                 self.token=admin
-                if existed=='1': redis('HSET','AUTH:RESOURCE_ROLES',resource,value)
-                else: redis('HDEL','AUTH:RESOURCE_ROLES',resource)
-            return ['Actual new role/user OAuth login: no grant denied, grant permits posting, revoked grant denies reversal, restored grant permits reversal', 'Same token with granted role still denies another organization; new actor recorded, QA Redis restored']
+                context.__exit__(None,None,None)
+            return ['Actual new role/user OAuth login: no grant denied, grant permits posting, revoked grant denies reversal, restored grant permits reversal', 'Same token with granted role still denies another organization; new actor recorded, QA DB grants restored']
         self.case('purchase.posting_actual_role_and_scope',permissions)
         self.write_report()
 

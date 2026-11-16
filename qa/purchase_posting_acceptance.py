@@ -1,3 +1,4 @@
+from resource_fixture import qa_purchase_permission_switches
 """Procurement check/posting gates using actual dedicated HTTP and independent MySQL."""
 import argparse
 import uuid
@@ -122,33 +123,28 @@ class PurchasePostingSuite(PurchaseRevisionSuite):
             request=urllib.request.Request('http://127.0.0.1:18002/oauth/token',data=urllib.parse.urlencode(dict(grant_type='password',client_id=client['mgr-id'],client_secret=client['mgr-password'],username=user['user'],password=user['pwd'])).encode())
             with self.opener.open(request,timeout=20) as response: login=json.load(response)
             token=login.get('access_token') or login.get('token');assert token
-            container='psi-qa-redis-'+self.state['database'][len('psi_qa_'):]
-            actual=subprocess.run(['docker','ps','--filter','publish=18379','--format','{{.Names}}'],capture_output=True,text=True,check=True).stdout.strip()
-            assert actual==container,'Refusing to change unverified Redis'
-            def redis(*args):
-                return subprocess.run(['docker','exec',container,'redis-cli','--raw']+list(args),capture_output=True,text=True,check=True).stdout.rstrip('\r\n')
-            resource='/purchase-note/verification'
-            existed,value=redis('HEXISTS','AUTH:RESOURCE_ROLES',resource),redis('HGET','AUTH:RESOURCE_ROLES',resource)
+            context=qa_purchase_permission_switches(self.state,['/purchase-note/verification'],[keyword])
+            switch=context.__enter__()
+            resource=['/purchase-note/verification'][0]
             admin=self.token
             reviewed=self.review_versions([identifier])
             try:
                 self.token=token
-                redis('HDEL','AUTH:RESOURCE_ROLES',resource)
+                switch(resource,False)
                 assert self.check([identifier]).get('code')==403 and self.checked(identifier)=='0'
-                redis('HSET','AUTH:RESOURCE_ROLES',resource,json.dumps(['java.util.ArrayList',[keyword]]))
+                switch(resource,True)
                 assert self.check([identifier],versions=reviewed).get('code')==10000 and self.checked(identifier)=='1'
-                redis('HDEL','AUTH:RESOURCE_ROLES',resource)
+                switch(resource,False)
                 assert self.check([identifier],0).get('code')==403 and self.checked(identifier)=='1','Revoked grant remained effective'
-                redis('HSET','AUTH:RESOURCE_ROLES',resource,json.dumps(['java.util.ArrayList',[keyword]]))
+                switch(resource,True)
                 other=uuid.uuid4().hex
                 sql(self.state,'INSERT INTO frame(id,name,pid) VALUES('+literal(other)+",'QA Foreign Granted Check','0');")
                 sql(self.state,'UPDATE `user` SET frame='+literal(other)+' WHERE id='+literal(user_id)+';')
                 assert self.check([identifier],0).get('code')==403 and self.checked(identifier)=='1','Granted role bypassed organization restriction'
             finally:
                 self.token=admin
-                if existed=='1': redis('HSET','AUTH:RESOURCE_ROLES',resource,value)
-                else: redis('HDEL','AUTH:RESOURCE_ROLES',resource)
-            return ['Actual new role/user OAuth login: denied before grant, allowed after grant, denied immediately after revoke', 'Same signed token with a granted role still cannot check another organization; only QA Redis changed and restored']
+                context.__exit__(None,None,None)
+            return ['Actual new role/user OAuth login: denied before grant, allowed after grant, denied immediately after revoke', 'Same signed token with a granted role still cannot check another organization; only disposable QA DB grants changed and restored']
         self.case('purchase.check_real_permission_and_scope',authorization)
 
     def run_posting(self):

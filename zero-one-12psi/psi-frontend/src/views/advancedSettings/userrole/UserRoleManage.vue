@@ -101,11 +101,13 @@
 
         <!-- 功能权限 -->
         <el-tab-pane label="功能权限" name="function">
+          <el-alert v-if="permissionNotice" :title="permissionNotice" type="warning" :closable="false" show-icon />
+          <el-button v-if="permissionNotice" :disabled="saving || functionPermissionsEdited" @click="functionPermissionsEdited = true">确认按当前勾选更新权限</el-button>
           <div class="permission-tree-container">
             <el-tree
               ref="treeRef"
               :data="permissionTree"
-              :props="{ label: 'name', children: 'children' }"
+              :props="{ label: 'name', children: 'children', disabled: 'disabled' }"
               show-checkbox
               node-key="id"
               :default-checked-keys="checkedKeys"
@@ -218,6 +220,7 @@
 import { ref, reactive, onMounted, nextTick, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { extractErrorMessage } from '@/apis/utils/jsonResponse'
+import { permissionCatalog, readPermissionSelection, writePermissionSelection } from './permissionTree'
 import { Plus, Refresh, MoreFilled, Search } from '@element-plus/icons-vue'
 import { 
   getRolePermission, 
@@ -321,6 +324,7 @@ const orgTreeRef = ref()
 
 // 权限树数据
 const permissionTree = ref<any[]>([])
+const permissionNotice = ref('')
 
 // 权限树引用
 const treeRef = ref()
@@ -434,7 +438,7 @@ const fetchPermissionTree = () => {
       if (res.code === 10000) {
         const data = res.data
         if (data && data.functionPermissions) {
-          permissionTree.value = data.functionPermissions
+          permissionTree.value = permissionCatalog(data.functionPermissions)
           console.log('权限树数据结构:', permissionTree.value)
           
           // 打印所有权限节点的ID，用于调试
@@ -551,6 +555,7 @@ const handleAdd = () => {
     dataPermissions: createDefaultDataPermissions()
   })
   checkedKeys.value = []
+  permissionNotice.value = ''
   orgCheckedKeys.value = []
   dialogVisible.value = true
   
@@ -602,36 +607,10 @@ const handleDetail = async (row: any) => {
         // 重置选中节点
         checkedKeys.value = []
         
-        // 解析功能权限（root字段可能是JSON字符串）
-        if (data.root) {
-          try {
-            const rootData = typeof data.root === 'string' ? JSON.parse(data.root) : data.root
-            formData.functionPermissions = rootData
-            
-            // 直接从解析后的对象中提取权限ID
-            const permissionIds: string[] = []
-            if (typeof rootData === 'object' && rootData !== null) {
-              Object.keys(rootData).forEach(key => {
-                if (rootData[key] === true) {
-                  permissionIds.push(key)
-                }
-              })
-            }
-            
-            checkedKeys.value = permissionIds
-            
-            console.log('=== 权限解析调试信息 ===')
-            console.log('原始root数据:', data.root)
-            console.log('解析后的root数据:', rootData)
-            console.log('解析到的权限ID:', permissionIds)
-            console.log('权限树数据:', permissionTree.value)
-            
-          } catch (e) {
-            console.warn('解析功能权限失败:', e)
-            console.log('原始root数据:', data.root)
-          }
-        }
-        
+        const selection = readPermissionSelection(data.root, permissionTree.value)
+        checkedKeys.value = selection.keys
+        permissionNotice.value = selection.notice
+
         // 解析数据权限
         if (data.auth) {
           try {
@@ -744,8 +723,7 @@ const handleSave = async () => {
   saving.value = true
   try {
     if (treeRef.value && (!editing || functionPermissionsEdited.value)) {
-      const keys = [...treeRef.value.getCheckedKeys(), ...treeRef.value.getHalfCheckedKeys()]
-      formData.functionPermissions = Object.fromEntries(keys.map((key: string) => [key, true]))
+      formData.functionPermissions = writePermissionSelection(treeRef.value.getCheckedKeys(), permissionTree.value)
     }
     if (orgTreeRef.value && (!editing || dataPermissionsEdited.value)) {
       formData.dataPermissions.org = orgTreeRef.value.getCheckedKeys()

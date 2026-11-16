@@ -3,12 +3,11 @@ package com.zeroone.star.purchase.service;
 import com.zeroone.star.project.components.user.UserDTO;
 import com.zeroone.star.project.components.user.UserHolder;
 import com.zeroone.star.project.components.user.RoleAuthority;
+import com.zeroone.star.project.components.user.DatabaseResourcePermission;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.data.redis.core.RedisTemplate;
-import com.zeroone.star.project.constant.RedisConstant;
 import java.util.*;
 
 /** Live account/role grants and organization scope; dynamic detail paths use the legacy info resource. */
@@ -17,18 +16,16 @@ import java.util.*;
 public class PurchaseDocumentAccess {
     private final UserHolder users;
     private final JdbcTemplate db;
-    private final RedisTemplate<String,Object> redis;
-    public PurchaseDocumentAccess(UserHolder users,JdbcTemplate db,RedisTemplate<String,Object> redis) { this.users=users;this.db=db;this.redis=redis; }
+    public PurchaseDocumentAccess(UserHolder users,JdbcTemplate db) { this.users=users;this.db=db; }
     public UserDTO authorize(String resource) {
-        UserDTO actor=current();
-        if(!actor.getRoles().contains("ROLE_ADMIN")) {
-            Object allowed=redis.opsForHash().get(RedisConstant.RESOURCE_ROLES_MAP,resource);
-            if(!(allowed instanceof Collection) || Collections.disjoint(actor.getRoles(),(Collection<?>)allowed))
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有采购单操作权限");
-        }
-        return actor;
+        if(resource==null || !(resource.startsWith("/purchase-order/") || resource.startsWith("/purchase-note/") || resource.startsWith("/purchase-return-form/")))
+            throw new IllegalArgumentException("采购权限资源无效");
+        return current("/j3-purchase"+resource);
     }
     public UserDTO current() {
+        return current(null);
+    }
+    private UserDTO current(String resource) {
         UserDTO actor;
         try { actor=users.getCurrentUser(); } catch(Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }
         if(actor==null || actor.getId()==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
@@ -41,6 +38,8 @@ public class PurchaseDocumentAccess {
             if(row.get("role_id")==null) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号角色不存在");
             actor.setRoles(Collections.singletonList(RoleAuthority.resolve(row.get("role_id").toString(),(String)row.get("keyword"))));
             frame(actor);
+            if(resource!=null && !DatabaseResourcePermission.allowed(db,row.get("role_id").toString(),resource))
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有采购单操作权限");
         }
         return actor;
     }

@@ -1,4 +1,5 @@
-"""Procurement function grants/data scope gates using real OAuth, HTTP, Excel and dedicated QA Redis."""
+from resource_fixture import qa_purchase_permission_switches
+"""Procurement function grants/data scope gates using real OAuth, HTTP, Excel and dedicated QA database permissions."""
 import json
 import uuid
 import subprocess
@@ -54,14 +55,11 @@ class PurchaseSecuritySuite(PurchaseUiSuite):
         role=self.success('POST','/role/add-role',dict(name='QA Purchase Resource '+uuid.uuid4().hex[:7],data='',root='[]',auth='{}'))
         keyword=sql(self.state,'SELECT keyword FROM role WHERE id='+literal(role)+';')
         user_id,user,_=self.new_user(role=role);token=self.login(user)
-        container='psi-qa-redis-'+self.state['database'][len('psi_qa_'):]
-        actual=subprocess.run(['docker','ps','--filter','publish=18379','--format','{{.Names}}'],capture_output=True,text=True,check=True).stdout.strip()
-        assert actual==container,'Refusing to alter unverified Redis'
-        def redis(*args):return subprocess.run(['docker','exec',container,'redis-cli','--raw']+list(args),capture_output=True,text=True,check=True).stdout.rstrip('\r\n')
-        previous={path:(redis('HEXISTS','AUTH:RESOURCE_ROLES',path),redis('HGET','AUTH:RESOURCE_ROLES',path)) for path in self.resources}
+        context=qa_purchase_permission_switches(self.state,self.resources,[keyword])
+        switch=context.__enter__()
         admin=self.token
         try:
-            for path in self.resources:redis('HDEL','AUTH:RESOURCE_ROLES',path)
+            for path in self.resources:switch(path,False)
             self.token=token
 
             def no_query():
@@ -102,7 +100,7 @@ class PurchaseSecuritySuite(PurchaseUiSuite):
             self.case('purchase.security_export_and_import_require_grants',no_export_import)
 
             grant=json.dumps(['java.util.ArrayList',[keyword]])
-            for path in self.resources:redis('HSET','AUTH:RESOURCE_ROLES',path,grant)
+            for path in self.resources:switch(path,True)
 
             def scope_and_exports():
                 listing=self.request('GET','/purchase-note/list?number='+number+'&frame='+foreign,service='purchase')
@@ -126,7 +124,7 @@ class PurchaseSecuritySuite(PurchaseUiSuite):
             self.case('purchase.security_granted_scope_and_actual_export',scope_and_exports)
 
             def grant_revoke():
-                for path in ['/purchase-note/list','/purchase-note/info','/purchase-note/export/simple']:redis('HDEL','AUTH:RESOURCE_ROLES',path)
+                for path in ['/purchase-note/list','/purchase-note/info','/purchase-note/export/simple']:switch(path,False)
                 assert self.request('GET','/purchase-note/list?number='+number,service='purchase').get('code')==403
                 assert self.request('GET','/purchase-note/document/'+own,service='purchase').get('code')==403
                 assert self.binary('/purchase-note/export/simple?ids='+own)[0]==403
@@ -134,9 +132,7 @@ class PurchaseSecuritySuite(PurchaseUiSuite):
             self.case('purchase.security_revocation_immediate',grant_revoke)
         finally:
             self.token=admin
-            for path,(exists,value) in previous.items():
-                if exists=='1':redis('HSET','AUTH:RESOURCE_ROLES',path,value)
-                else:redis('HDEL','AUTH:RESOURCE_ROLES',path)
+            context.__exit__(None,None,None)
         self.write_report()
 
 
