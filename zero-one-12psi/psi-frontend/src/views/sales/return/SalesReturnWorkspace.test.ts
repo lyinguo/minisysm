@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import ElementPlus, { ElSelect } from 'element-plus'
-const mocks = vi.hoisted(() => ({ sourceList: vi.fn(), sourceDocument: vi.fn(), preview: vi.fn(), list: vi.fn(), document: vi.fn(), save: vi.fn(), remove: vi.fn(), accounts: vi.fn() }))
+import ElementPlus, { ElSelect, ElMessageBox } from 'element-plus'
+const mocks = vi.hoisted(() => ({ sourceList: vi.fn(), sourceDocument: vi.fn(), preview: vi.fn(), list: vi.fn(), document: vi.fn(), save: vi.fn(), remove: vi.fn(), accounts: vi.fn(), review: vi.fn() }))
 vi.mock('@/apis/sales/order', () => ({ saleOrderApi: { getSaleList: mocks.sourceList, getDocument: mocks.sourceDocument, getGenerateReturnData: mocks.preview } }))
 vi.mock('@/apis/sales/returnDraft', () => ({ returnDraftApi: mocks }))
 import Workspace from './SalesReturnWorkspace.vue'
@@ -17,6 +17,7 @@ async function render(query = '') {
 async function button(wrapper: Awaited<ReturnType<typeof render>>, label: string) { await wrapper.findAll('button').find(item => item.text() === label)!.trigger('click'); await flushPromises() }
 describe('actual sales return draft workspace', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     vi.clearAllMocks()
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} unobserve() {} })
     mocks.sourceList.mockResolvedValue({ code: 10000, data: { total: 1, rows: [{ id: source, number: 'QA-SOURCE', customerName: 'QA customer', actual: 226 }] } })
@@ -26,6 +27,40 @@ describe('actual sales return draft workspace', () => {
     mocks.document.mockResolvedValue(document())
     mocks.save.mockResolvedValue(identifier)
     mocks.accounts.mockResolvedValue([])
+    mocks.review.mockResolvedValue(1)
+  })
+  it('reviews the displayed saved version and rereads only after successful mutation', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const wrapper = await render('?draft=' + identifier)
+    try {
+      await button(wrapper, '核对退货单')
+      expect(mocks.review).toHaveBeenCalledWith([identifier], 1, 'd'.repeat(64))
+      expect(mocks.document).toHaveBeenCalledTimes(2)
+      expect(mocks.save).not.toHaveBeenCalled()
+    } finally { wrapper.unmount() }
+  })
+  it('refuses to review unsaved edits without silently saving them', async () => {
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const wrapper = await render('?draft=' + identifier)
+    try {
+      await wrapper.find('input[aria-label="退货单编号"]').setValue('CHANGED')
+      await button(wrapper, '核对退货单')
+      expect(wrapper.text()).toContain('请先保存未提交的修改')
+      expect(confirm).not.toHaveBeenCalled()
+      expect(mocks.review).not.toHaveBeenCalled()
+      expect(mocks.save).not.toHaveBeenCalled()
+    } finally { wrapper.unmount() }
+  })
+  it('keeps a rejected frozen review visible without automatically blessing a newer version', async () => {
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    mocks.review.mockRejectedValueOnce(new Error('退货版本已变化'))
+    const wrapper = await render('?draft=' + identifier)
+    try {
+      await button(wrapper, '核对退货单')
+      expect(wrapper.text()).toContain('退货版本已变化')
+      expect(mocks.document).toHaveBeenCalledTimes(1)
+      expect(mocks.save).not.toHaveBeenCalled()
+    } finally { wrapper.unmount() }
   })
   it('submits selected source IDs and quantities, then actually rereads the persisted draft', async () => {
     const wrapper = await render()

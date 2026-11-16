@@ -10,7 +10,8 @@ import java.security.MessageDigest;
 @Service
 public class SaleReturnSnapshotService {
     private final JdbcTemplate db;
-    public SaleReturnSnapshotService(JdbcTemplate db){this.db=db;}
+    private final SaleSnapshotService sources;
+    public SaleReturnSnapshotService(JdbcTemplate db,SaleSnapshotService sources){this.db=db;this.sources=sources;}
     private String digest(List<Map<String,Object>> rows){
         StringBuilder text=new StringBuilder();
         for(Map<String,Object> row:rows){text.append('{');for(String key:new TreeSet<>(row.keySet())){
@@ -25,9 +26,11 @@ public class SaleReturnSnapshotService {
         rows.addAll(db.queryForList("SELECT * FROM sre WHERE id=?"+suffix,id));
         rows.addAll(db.queryForList("SELECT * FROM sre_info WHERE pid=? ORDER BY id"+suffix,id));
         rows.addAll(db.queryForList("SELECT id FROM record WHERE type='sre' AND source=? ORDER BY id"+suffix,id));
+        String source=rows.isEmpty() || rows.get(0).get("source")==null?"":rows.get(0).get("source").toString();
+        rows.add(Collections.singletonMap("sourceVersion",sources.versions(Collections.singletonList(source)).get(source)));
         return digest(rows);
     }
-    /** Three batch reads inside the caller's repeatable-read list transaction. */
+    /** Three return and three source batch reads inside the caller's repeatable-read list transaction. */
     public Map<String,String> versions(List<String> ids){
         Map<String,String> result=new HashMap<>();if(ids.isEmpty())return result;
         if(ids.size()>200)throw new IllegalArgumentException("每页最多200张销售退货单");
@@ -36,7 +39,12 @@ public class SaleReturnSnapshotService {
         for(Map<String,Object> head:db.queryForList("SELECT * FROM sre WHERE id IN ("+placeholders+")",args)){List<Map<String,Object>> rows=new ArrayList<>();rows.add(head);documents.put(head.get("id").toString(),rows);}
         for(Map<String,Object> line:db.queryForList("SELECT * FROM sre_info WHERE pid IN ("+placeholders+") ORDER BY pid,id",args)){List<Map<String,Object>> rows=documents.get(line.get("pid").toString());if(rows!=null)rows.add(line);}
         for(Map<String,Object> history:db.queryForList("SELECT id,source FROM record WHERE type='sre' AND source IN ("+placeholders+") ORDER BY source,id",args)){List<Map<String,Object>> rows=documents.get(history.get("source").toString());if(rows!=null)rows.add(Collections.singletonMap("id",history.get("id")));}
-        for(Map.Entry<String,List<Map<String,Object>>> entry:documents.entrySet())result.put(entry.getKey(),digest(entry.getValue()));
+        Set<String> sourceIds=new HashSet<>();for(List<Map<String,Object>> rows:documents.values())sourceIds.add(rows.get(0).get("source")==null?"":rows.get(0).get("source").toString());
+        Map<String,String> sourceVersions=sources.versions(new ArrayList<>(sourceIds));
+        for(Map.Entry<String,List<Map<String,Object>>> entry:documents.entrySet()){
+            Object source=entry.getValue().get(0).get("source");entry.getValue().add(Collections.singletonMap("sourceVersion",sourceVersions.get(source==null?"":source.toString())));
+            result.put(entry.getKey(),digest(entry.getValue()));
+        }
         return result;
     }
     public Map<String,String> expected(List<String> ids,String single,Map<String,String> batch){

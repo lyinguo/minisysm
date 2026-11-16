@@ -50,6 +50,8 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     @Resource
     private com.zeroone.star.sale.service.SaleReturnDraftService drafts;
     @Resource
+    private com.zeroone.star.sale.service.SaleReturnReviewService reviews;
+    @Resource
     private SaleReturnFormService saleReturnFormService;
 
     @Resource
@@ -127,12 +129,8 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     }
     @PostMapping("/return/check")
     @ApiOperation(value = "核对退货单(支持批量)")
-    public JsonVO<Integer> salereturncheck(@RequestBody @ApiParam(value = "退货单ID对象",required = true) SaleReturnIdsDTO saleReturnIdsDTO) {
-        Integer status = saleReturnIdsDTO.getStatus();
-        if (status == 1) {
-            return saleReturnFormplusService.check(saleReturnIdsDTO);
-        }
-        return saleReturnFormplusService.uncheck(saleReturnIdsDTO);
+    public JsonVO<Integer> salereturncheck(@RequestBody SaleReturnReviewCommand command) {
+        return JsonVO.success(reviews.check(command));
     }
     @PostMapping("/return/examine")
     @ApiOperation(value = "审核退货单(支持批量)")

@@ -50,5 +50,13 @@ export const returnDraftApi = {
     if (response.code !== 10000) throw new Error(extractErrorMessage(response) || '退款账户读取失败')
     if (!Array.isArray(response.data)) throw new Error('退款账户数据不完整，请重新查询')
     return response.data
+  },
+  async review(ids: string[], status: 0 | 1, reviewed: string | Record<string, string>) {
+    const versions = typeof reviewed === 'string' && ids.length === 1 ? { [ids[0]]: reviewed } : reviewed
+    if (!ids.length || ids.length > 200 || new Set(ids).size !== ids.length || !versions || typeof versions !== 'object' || Object.keys(versions).length !== ids.length || ids.some(id => !id || !/^[0-9a-f]{64}$/.test(versions[id] || ''))) throw new Error('请重新读取全部选中退货单并核对版本')
+    const response = await useHttp().post('/sale/return/return/check', { ids: [...ids], status, versions: { ...versions } })
+    if (response.code !== 10000) throw new Error(extractErrorMessage(response) || '退货核对失败')
+    if (!Number.isInteger(response.data) || response.data < 0 || response.data > ids.length) throw new Error('服务未返回有效核对结果，请重新读取单据核实')
+    return response.data as number
   }
 }

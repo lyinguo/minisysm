@@ -48,8 +48,12 @@ public class SaleReturnDraftService {
         if(rows.size()!=1)throw new IllegalArgumentException("销售退货单不存在");return rows.get(0);
     }
     private void free(Map<String,Object> head){
+        mutable(head,false);
+    }
+    private void mutable(Map<String,Object> head,boolean allowChecked){
         String id=s(head.get("id"));
-        if(state(head.get("approval_state"))!=0 || state(head.get("check_state"))!=0 || state(head.get("settlement_state"))!=0
+        int checked=state(head.get("check_state"));
+        if(state(head.get("approval_state"))!=0 || (checked!=0 && !(allowChecked && checked==1)) || state(head.get("settlement_state"))!=0
                 || (state(head.get("cost_state"))!=0 && state(head.get("cost_state"))!=3) || (state(head.get("invoice_state"))!=0 && state(head.get("invoice_state"))!=3))
             throw new IllegalArgumentException("已核对、审核或存在核销、费用、发票状态的退货单不能直接修改或删除");
         if(db.queryForObject("SELECT COUNT(*) FROM period WHERE date>=DATE(?)",Integer.class,head.get("time"))>0)
@@ -63,6 +67,35 @@ public class SaleReturnDraftService {
                 || db.queryForObject("SELECT COUNT(*) FROM invoice WHERE LOWER(type)='sre' AND `class`=?",Integer.class,id)>0
                 || db.queryForObject("SELECT COUNT(*) FROM cost WHERE LOWER(type)='sre' AND `class`=?",Integer.class,id)>0)
             throw new IllegalArgumentException("退货单已有核销、发票或费用关联，不能直接修改或删除");
+    }
+    public Map<String,Object> lockForReview(String id){return head(id,true);}
+    public void validateForReview(Map<String,Object> head){
+        mutable(head,true);String id=s(head.get("id"));
+        SaleReturnGenerateDTO preview=previews.previewForDraft(s(head.get("source")),id);
+        if(!preview.getFrame().equals(s(head.get("frame"))) || !preview.getCustomer().equals(s(head.get("customer"))))throw new IllegalArgumentException("退货客户或组织与来源销售单不一致");
+        Map<String,Map<String,Object>> available=new HashMap<>();for(Map<String,Object> row:preview.getItems())available.put(s(row.get("source")),row);
+        List<Map<String,Object>> lines=db.queryForList("SELECT * FROM sre_info WHERE pid=? ORDER BY id FOR UPDATE",id);
+        if(lines.isEmpty() || lines.size()>200)throw new IllegalArgumentException("退货明细缺失或数量异常");
+        Set<String> seen=new HashSet<>();BigDecimal total=BigDecimal.ZERO,actual=BigDecimal.ZERO;
+        for(Map<String,Object> line:lines){
+            String source=s(line.get("source"));Map<String,Object> limit=available.get(source);
+            BigDecimal quantity=amount(d(line.get("nums")),12,"退货数量");
+            if(!seen.add(source) || limit==null || quantity.signum()<=0 || quantity.compareTo(d(limit.get("available")))>0)throw new IllegalArgumentException("退货来源明细重复、失效或数量超出当前可退范围");
+            Map<String,Object> original=db.queryForMap("SELECT * FROM sell_info WHERE id=? AND pid=?",source,head.get("source"));
+            for(String field:Arrays.asList("goods","attr","unit","warehouse","batch","mfd"))if(!s(line.get(field)).equals(s(original.get(field))))throw new IllegalArgumentException("退货商品、仓库、属性、单位或批次与来源不一致");
+            for(String field:Arrays.asList("price","discount","tax"))if(d(line.get(field)).compareTo(d(original.get(field)))!=0)throw new IllegalArgumentException("退货单价或费率与来源不一致，请重新核对");
+            Map<String,Object> used=db.queryForMap("SELECT COUNT(*) AS n,COALESCE(SUM(total),0) AS total,COALESCE(SUM(tat),0) AS tat,COALESCE(SUM(dsc),0) AS dsc FROM sre_info WHERE source=? AND pid<>?",source,id);
+            BigDecimal tolerance=new BigDecimal("0.0001").multiply(new BigDecimal(((Number)used.get("n")).longValue()+1));
+            for(String field:Arrays.asList("total","tat","dsc")){
+                BigDecimal value=amount(d(line.get(field)),12,"退货金额"),expected=d(original.get(field)).multiply(quantity).divide(d(original.get("nums")),4,RoundingMode.HALF_UP);
+                if(value.subtract(expected).abs().compareTo(tolerance)>0 || value.add(d(used.get(field))).compareTo(d(original.get(field)))>0)throw new IllegalArgumentException("退货金额与来源或其他退货占用不一致");
+            }
+            if(d(line.get("tpt")).compareTo(d(line.get("total")).add(d(line.get("tat"))))!=0)throw new IllegalArgumentException("退货价税合计与明细不一致");
+            total=total.add(d(line.get("total")));actual=actual.add(d(line.get("tpt")));
+        }
+        if(total.compareTo(d(head.get("total")))!=0 || actual.compareTo(d(head.get("actual")))!=0)throw new IllegalArgumentException("退货主从金额不一致");
+        BigDecimal money=amount(d(head.get("money")),16,"计划退款");amount(d(head.get("cost")),16,"费用");if(money.compareTo(actual)>0)throw new IllegalArgumentException("计划退款超出实际金额");
+        reference("account",s(head.get("account")),preview.getFrame(),"退款账户",money.signum()>0);reference("people",s(head.get("people")),preview.getFrame(),"关联人员",false);
     }
     private void reference(String table,String id,String frame,String label,boolean required){
         if(id==null || id.isEmpty() || "0".equals(id)){if(required)throw new IllegalArgumentException("请选择"+label);return;}

@@ -62,7 +62,7 @@ public interface SaleReturnFormApis {
     /**
      * 核对/反核对销售退货单
      */
-    JsonVO salereturncheck(SaleReturnIdsDTO saleReturnIdsDTO);
+    JsonVO salereturncheck(com.zeroone.star.project.dto.j4.sale.SaleReturnReviewCommand command);
     /**
      * 审核/反审核销售退货单
      */

@@ -1,6 +1,6 @@
 <template>
   <div class="return-workspace">
-    <el-alert title="退货草稿保存后占用可退数量；保存不会入库或扣款。核对、审核及退款流程仍在维护中。" type="info" :closable="false" show-icon />
+    <el-alert title="退货草稿保存后占用可退数量。保存及核对均不会入库或扣款；审核及实际退款流程仍在维护中。" type="info" :closable="false" show-icon />
     <el-tabs v-model="tab">
       <el-tab-pane label="从销售单开退货草稿" name="source">
         <p class="guide">① 查询已审核销售单　② 选择退货商品与数量　③ 保存后重新打开核对</p>
@@ -25,9 +25,12 @@
           <el-input v-model="returnCustomer" placeholder="输入客户名称或编号" clearable aria-label="退货客户" />
           <el-button type="primary" native-type="submit" :loading="savedLoading">查询退货单</el-button>
           <el-button @click="loadSaved">刷新退货列表</el-button>
+          <el-button :disabled="!selectedSaved.length || busy || savedLoading" @click="reviewSelected(1)">核对选中</el-button>
+          <el-button :disabled="!selectedSaved.length || busy || savedLoading" @click="reviewSelected(0)">反核对选中</el-button>
         </form>
         <el-alert v-if="savedError" :title="savedError" type="error" :closable="false"><el-button @click="loadSaved">重新查询退货单</el-button></el-alert>
-        <el-table :data="savedRows" v-loading="savedLoading" border empty-text="尚无符合条件的退货单，可先从已审核销售单开草稿">
+        <el-table :data="savedRows" row-key="id" v-loading="savedLoading" border empty-text="尚无符合条件的退货单，可先从已审核销售单开草稿" @selection-change="selectedSaved = $event">
+          <el-table-column type="selection" width="48" />
           <el-table-column prop="number" label="退货单编号" min-width="210" />
           <el-table-column prop="sourceNumber" label="来源销售单" min-width="200" />
           <el-table-column prop="customerName" label="客户" min-width="150" />
@@ -68,7 +71,7 @@
       <p class="guide">商品、仓库、单位和价格来自原销售单。取消勾选可不退该行；保存时会重新检查可退数量并计算金额。</p>
       <el-form label-position="top" :disabled="busy || readOnly"><el-form-item label="退货备注"><el-input v-model="form.data" type="textarea" maxlength="256" show-word-limit /></el-form-item></el-form>
       </div>
-      <template #footer><el-button :disabled="busy" @click="editorVisible = false">关闭</el-button><el-button type="primary" :loading="busy" :disabled="readOnly || (savedId !== '' && version === '')" @click="save">{{ savedId ? '保存草稿修改' : '保存退货草稿' }}</el-button></template>
+      <template #footer><el-button :disabled="busy" @click="editorVisible = false">关闭</el-button><el-button v-if="savedId && !approved" :loading="busy" :disabled="busy || editorLoading || !version" @click="reviewCurrent">{{ checked ? '反核对退货单' : '核对退货单' }}</el-button><el-button type="primary" :loading="busy" :disabled="readOnly || (savedId !== '' && version === '')" @click="save">{{ savedId ? '保存草稿修改' : '保存退货草稿' }}</el-button></template>
     </el-dialog>
   </div>
 </template>
@@ -90,10 +93,13 @@ const returnNumber = ref(''), returnCustomer = ref(''), savedPage = ref(1), save
 const entryError = ref(''), editorError = ref(''), editorVisible = ref(false), editorLoading = ref(false), busy = ref(false)
 const savedId = ref(''), version = ref(''), sourceId = ref(''), sourceVersion = ref(''), sourceLabel = ref(''), customerLabel = ref(''), readOnly = ref(false)
 const rows = ref<Record<string, any>[]>([]), accounts = ref<Record<string, any>[]>([]), accountLoading = ref(false), accountError = ref('')
+const selectedSaved = ref<Record<string, any>[]>([]), checked = ref(false), approved = ref(false), savedSnapshot = ref('')
 const form = reactive({ number: '', time: '', money: 0, cost: 0, account: '', data: '' })
 let sourceSequence = 0, savedSequence = 0, editorSequence = 0, accountSequence = 0
 function estimate(row: Record<string, any>) { const quantity = Number(row.quantity), original = Number(row.nums); return Number.isFinite(quantity) && original > 0 ? Math.round(Number(row.tpt || 0) * quantity / original * 10000) / 10000 : 0 }
 const estimatedTotal = computed(() => rows.value.filter(row => row.selected).reduce((total, row) => total + estimate(row), 0).toFixed(4))
+function editorSnapshot() { return JSON.stringify({ form, rows: rows.value.map(row => ({ id: row.id, source: row.source, quantity: row.quantity, selected: row.selected, serial: row.serial, data: row.data })) }) }
+const dirty = computed(() => !!savedSnapshot.value && editorSnapshot() !== savedSnapshot.value)
 async function loadSources() {
   const sequence = ++sourceSequence; sourceLoading.value = true; sourceError.value = ''
   try { const result = await saleOrderApi.getSaleList({ pageIndex: sourcePage.value, pageSize: 10, number: sourceNumber.value.trim() || undefined, customer: sourceCustomer.value.trim() || undefined, examine: 1 }); if (sequence !== sourceSequence) return; if (result.code !== 10000 || !Array.isArray(result.data?.rows)) throw new Error(result.message || '销售单查询失败'); sources.value = result.data.rows; sourceTotal.value = Number(result.data.total) }
@@ -102,7 +108,7 @@ async function loadSources() {
 }
 async function loadSaved() {
   const sequence = ++savedSequence; savedLoading.value = true; savedError.value = ''
-  try { const result = await returnDraftApi.list({ pageIndex: savedPage.value, pageSize: 10, id: returnNumber.value.trim() || undefined, customer: returnCustomer.value.trim() || undefined }); if (sequence !== savedSequence) return; savedRows.value = result.rows || []; savedTotal.value = Number(result.total) }
+  try { const result = await returnDraftApi.list({ pageIndex: savedPage.value, pageSize: 10, id: returnNumber.value.trim() || undefined, customer: returnCustomer.value.trim() || undefined }); if (sequence !== savedSequence) return; selectedSaved.value = []; savedRows.value = result.rows || []; savedTotal.value = Number(result.total) }
   catch (error) { if (sequence === savedSequence) { savedRows.value = []; savedTotal.value = 0; savedError.value = extractApiErrorMessage(error) } }
   finally { if (sequence === savedSequence) savedLoading.value = false }
 }
@@ -119,7 +125,7 @@ async function startSource(id: string, expectedVersion?: string) {
     savedId.value = ''; version.value = ''; sourceId.value = id; sourceVersion.value = preview.sourceVersion; sourceLabel.value = preview.sourceNumber; customerLabel.value = document.data.header.customerName || preview.customer
     rows.value = preview.items.map(item => ({ ...item, selected: true, quantity: item.available }))
     Object.assign(form, { number: 'XSTH' + Date.now(), time: today(), money: 0, cost: 0, account: '', data: '' })
-    accounts.value = []; editorError.value = ''; accountError.value = ''; readOnly.value = false; editorVisible.value = true; void searchAccounts('')
+    accounts.value = []; editorError.value = ''; accountError.value = ''; readOnly.value = false; checked.value = false; approved.value = false; savedSnapshot.value = ''; editorVisible.value = true; void searchAccounts('')
   } catch (error) { if (sequence === editorSequence) entryError.value = extractApiErrorMessage(error) }
   finally { if (sequence === editorSequence) editorLoading.value = false }
 }
@@ -134,7 +140,8 @@ async function openReturn(id: string) {
     Object.assign(form, { number: head.number, time: head.timeText, money: Number(head.money), cost: Number(head.cost || 0), account: head.account || '', data: head.data || '' })
     accounts.value = head.account ? [{ id: String(head.account), name: head.accountName || String(head.account) }] : []
     readOnly.value = Number(head.examine) !== 0 || Number(head.check) !== 0 || Number(head.nucleus) !== 0
-    editorError.value = ''; accountError.value = ''; editorVisible.value = true; void searchAccounts('')
+    checked.value = Number(head.check) === 1; approved.value = Number(head.examine) !== 0; savedSnapshot.value = editorSnapshot()
+    editorError.value = ''; accountError.value = ''; editorVisible.value = true; if (!readOnly.value) void searchAccounts('')
   } catch (error) { if (sequence === editorSequence) { const message = extractApiErrorMessage(error); if (editorVisible.value) editorError.value = message; else entryError.value = message } }
   finally { if (sequence === editorSequence) editorLoading.value = false }
 }
@@ -172,6 +179,30 @@ async function removeRow(row: Record<string, any>) {
   if (busy.value || sequence !== savedSequence) return
   busy.value = true
   try { await returnDraftApi.remove(id, reviewed); await loadSaved(); ElMessage.success('退货草稿已删除，可退数量已释放') }
+  catch (error) { savedError.value = extractApiErrorMessage(error) }
+  finally { busy.value = false }
+}
+async function reviewCurrent() {
+  if (busy.value || editorLoading.value || !savedId.value || !version.value || approved.value) return
+  if (dirty.value) { editorError.value = '请先保存未提交的修改，再重新核对退货单'; return }
+  const id = savedId.value, reviewed = version.value, target = checked.value ? 0 : 1
+  try { await ElMessageBox.confirm(target ? '核对当前显示版本的退货单？这不会入库或退款。' : '反核对后可继续修改草稿，不会变更库存或资金。', '核对销售退货单', { type: 'warning' }) } catch { return }
+  if (busy.value || !editorVisible.value || id !== savedId.value || reviewed !== version.value) return
+  if (dirty.value) { editorError.value = '确认期间内容已变化，请先保存后重新核对'; return }
+  busy.value = true
+  try { await returnDraftApi.review([id], target, reviewed); await openReturn(id); await loadSaved(); ElMessage.success(target ? '退货单已核对，未入库或退款' : '退货单已反核对') }
+  catch (error) { editorError.value = extractApiErrorMessage(error) }
+  finally { busy.value = false }
+}
+async function reviewSelected(target: 0 | 1) {
+  if (busy.value || savedLoading.value || !selectedSaved.value.length) return
+  const selection = [...selectedSaved.value], ids = selection.map(row => String(row.id)), versions = Object.fromEntries(selection.map(row => [String(row.id), String(row.version || '')]))
+  if (selection.some(row => !/^[0-9a-f]{64}$/.test(String(row.version || '')))) { savedError.value = '选中单据缺少版本，请刷新列表后重新选择'; return }
+  const sequence = savedSequence, selectionKey = JSON.stringify(selection.map(row => [row.id, row.version]))
+  try { await ElMessageBox.confirm(`将${target ? '核对' : '反核对'}选中的${ids.length}张退货单，任一版本变化则整批取消；不会入库或退款。`, '批量核对退货单', { type: 'warning' }) } catch { return }
+  if (busy.value || savedLoading.value || sequence !== savedSequence || JSON.stringify(selectedSaved.value.map(row => [row.id, row.version])) !== selectionKey) return
+  busy.value = true
+  try { await returnDraftApi.review(ids, target, versions); await loadSaved(); ElMessage.success('选中退货单核对状态已处理，未入库或退款') }
   catch (error) { savedError.value = extractApiErrorMessage(error) }
   finally { busy.value = false }
 }
