@@ -127,6 +127,7 @@ export interface PurchaseOrderListQuery {
 
 // 采购订单列表数据对象
 export interface PurchaseOrderListItem {
+  version?: string
   /** 订单ID */
   id?: string | number
   frameName?: string
@@ -605,7 +606,7 @@ export class PurchaseOrderAPI {
   static async auditPurchaseOrders(
     ids: (number | string)[],
     type: 0 | 1,
-    version?: string
+    version?: string | Record<string,string>
   ): Promise<ApiResponse<string[]>> {
     try {
       if (!ids || ids.length === 0) {
@@ -623,13 +624,16 @@ export class PurchaseOrderAPI {
         return value
       })
       if (new Set(validIds).size !== validIds.length || validIds.length > 200 || (type !== 0 && type !== 1)) throw new Error('请选择1到200张不同订单和有效审核操作')
-      if (version !== undefined && (validIds.length !== 1 || !/^[0-9a-f]{64}$/.test(version))) throw new Error('订单版本无效，请重新打开详情')
+      let snapshot: {version:string} | {versions:Record<string,string>}
+      if (typeof version === 'string' && validIds.length === 1 && /^[0-9a-f]{64}$/.test(version)) snapshot={version}
+      else if (version && typeof version === 'object' && !Array.isArray(version) && Object.keys(version).length===validIds.length && validIds.every(id=>Object.prototype.hasOwnProperty.call(version,id) && /^[0-9a-f]{64}$/.test(version[id]))) snapshot={versions:{...version}}
+      else throw new Error('请刷新列表或重新打开详情，核对全部订单后提交完整版本')
 
       // 按照接口文档，参数名是 ids 和 type（type: 1=审核，0=反审核）
       const requestData = {
         ids: validIds,
         type: type,
-        ...(version !== undefined ? {version} : {})
+        ...snapshot
       }
 
       const result = await this.http.put<string[]>(

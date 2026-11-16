@@ -163,7 +163,7 @@ public class BorServiceImpl extends ServiceImpl<BorMapper, BorDO> implements IBo
      * @return
      */
     @Override
-    @Transactional(readOnly=true)
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public PageDTO<PurchaseOrderListDTO> listPurchaseOrders(PurchaseOrderQuery query) {
         if(query.getPageSize()<1 || query.getPageSize()>200 || query.getPageIndex()<1)throw new IllegalArgumentException("页码必须大于0，每页1到200条");
         String allowedFrame=orderAccess.frame(orderAccess.authorize("/purchase-order/list"));

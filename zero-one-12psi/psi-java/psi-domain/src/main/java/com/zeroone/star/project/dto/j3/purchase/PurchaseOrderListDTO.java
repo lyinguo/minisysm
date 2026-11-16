@@ -19,6 +19,7 @@ import javax.validation.constraints.*;
 @Data
 @ApiModel("采购订单列表数据对象")
 public class PurchaseOrderListDTO {
+    private String version;
     @ApiModelProperty("组织名称（frame保留原ID）") private String frameName;
     @ApiModelProperty("供应商名称（supplier保留原ID）") private String supplierName;
     @ApiModelProperty("人员名称（people保留原ID）") private String peopleName;

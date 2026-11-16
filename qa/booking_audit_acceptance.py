@@ -1,5 +1,5 @@
 """Actual order approval and reversal; approval must never itself post stock or money."""
-import uuid,concurrent.futures,argparse,json
+import uuid,concurrent.futures,argparse,json,urllib.parse
 from decimal import Decimal
 from booking_draft_acceptance import BookingDraftSuite
 from acceptance import read_state,sql,literal,QA
@@ -7,7 +7,14 @@ from resource_fixture import qa_resource_grants
 from purchase_ui_acceptance import PurchaseUiSuite
 
 class OrderAuditSuite(BookingDraftSuite):
-    def audit(self,ids,target=1):return self.request('PUT','/purchase-order/audit',dict(ids=ids,type=target),service='purchase')
+    def audit(self,ids,target=1,versions=None):
+        # Explicit real status reads prepare each command; no hidden request injection.
+        if versions is None:
+            versions={}
+            for id in ids:
+                response=self.request('GET','/purchase-order/status?id='+urllib.parse.quote(str(id),safe=''),service='purchase')
+                versions[id]=(response.get('data') or {}).get('version','0'*64)
+        return self.request('PUT','/purchase-order/audit',dict(ids=ids,type=target,versions=versions),service='purchase')
     def state_of(self,id):return sql(self.state,'SELECT CAST(examine AS SIGNED) FROM bor WHERE id='+literal(id)+';')
     def records(self,id):return int(sql(self.state,"SELECT COUNT(*) FROM record WHERE type='bor' AND source="+literal(id)+';'))
     def order(self):return self.create_order(self.order_body())
@@ -43,9 +50,10 @@ class OrderAuditSuite(BookingDraftSuite):
         self.case('booking.audit_storage_rollback_retry',fault)
         def repeat():
             self.fixture();id=self.order()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:results=list(pool.map(lambda _:self.audit([id]),range(3)))
-            assert all(r.get('code')==10000 for r in results) and self.state_of(id)=='1' and self.records(id)==2
-            assert self.audit([id]).get('code')==10000 and self.records(id)==2;self.unchanged();return ['Three concurrent approvals and repeat safely succeed without duplicate operation records or posting']
+            versions={id:self.request('GET','/purchase-order/status?id='+id,service='purchase')['data']['version']}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:results=list(pool.map(lambda _:self.audit([id],versions=versions),range(3)))
+            assert sum(r.get('code')==10000 for r in results)==1 and self.state_of(id)=='1' and self.records(id)==2
+            assert self.audit([id]).get('code')==10000 and self.records(id)==2;self.unchanged();return ['One same-version concurrent approval succeeds, stale contenders reject; a fresh-version repeat is idempotent with no duplicate history or posting']
         self.case('booking.audit_concurrent_idempotent',repeat)
         def auth():
             self.fixture();id=self.order();role=self.success('POST','/role/add-role',dict(name='QA Order Audit '+uuid.uuid4().hex[:8],data='',root='[]',auth='{}'));keyword=sql(self.state,'SELECT keyword FROM role WHERE id='+literal(role)+';');actor,user,_=self.new_user(role=role);admin=self.token;self.token=PurchaseUiSuite.login(self,user)

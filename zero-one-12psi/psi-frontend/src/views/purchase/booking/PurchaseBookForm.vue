@@ -1,5 +1,6 @@
 <template>
   <div class="purchase-book-form">
+    <el-alert v-if="batchAuditError" :title="batchAuditError" type="error" :closable="false" show-icon />
     <!-- 顶部操作栏 -->
     <div class="toolbar">
       <div class="toolbar-left">
@@ -23,11 +24,11 @@
               trigger="click"
             >
               <template #reference>
-                <el-button type="info">操作</el-button>
+                <el-button type="info" :disabled="batchAuditBusy" :loading="batchAuditBusy">操作</el-button>
               </template>
               <ul>
-                <li @click="onBatchExamine(0)">审核</li>
-                <li @click="onBatchExamine(1)">反审核</li>
+                <li><el-button link :disabled="batchAuditBusy" @click="onBatchExamine(0)">审核</el-button></li>
+                <li><el-button link :disabled="batchAuditBusy" @click="onBatchExamine(1)">反审核</el-button></li>
               </ul>
             </el-popover>
             <el-button @click="onBatchDelete" type="info">删除</el-button>
@@ -233,6 +234,7 @@ const handleDetailSave = (payload: any) => {
 }
 
 interface RowData {
+  version?: string
   id?: number | string
   org: string
   supplier: string
@@ -313,6 +315,7 @@ const purchaseSearchRef = ref<InstanceType<typeof PurchaseSearchForm> | null>(nu
 const convertToRowData = (item: PurchaseOrderListItem): RowData => {
   return {
     id: item.id,
+    version: item.version,
     org: item.frameName || item.frame || '—',
     supplier: item.supplierName || item.supplier || '—',
     date: item.documentTime || '',
@@ -427,96 +430,43 @@ const onDelete = (row: RowData) => {
 }
 
 /* 批量审核/反审核 */
+const batchAuditBusy = ref(false)
+const batchAuditError = ref('')
 const onBatchExamine = async (type: 0 | 1) => {
-  // type: 0=审核, 1=反审核
-  
-  // 检查是否有选中项
-  if (!selected.value || selected.value.length === 0) {
-    ElMessage.warning('请先选择要操作的单据！')
+  if (batchAuditBusy.value) return
+  batchAuditError.value = ''
+  const rows = [...selected.value]
+  if (!rows.length) { ElMessage.warning('请先选择要操作的单据'); return }
+  const requiredStatus = type === 0 ? '未审核' : '已审核'
+  if (rows.some(row => row.auditStatus !== requiredStatus)) {
+    batchAuditError.value = '选中订单状态不符合本次操作，本次未处理任何订单，请核对全部选择'
     return
   }
-
-  const validRows: RowData[] = []
-  const invalidRows: RowData[] = []
-  
-  selected.value.forEach((row) => {
-    const currentStatus = row.auditStatus || ''
-    // 审核：只处理未审核的
-    if (type === 0) {
-      // 支持多种可能的"未审核"状态值
-      if (currentStatus === '未审核' || currentStatus === '0' || currentStatus === '' || currentStatus === 'false') {
-        validRows.push(row)
-      } else {
-        invalidRows.push(row)
-      }
-    }
-    // 反审核：只处理已审核的
-    if (type === 1) {
-      // 支持多种可能的"已审核"状态值
-      if (currentStatus === '已审核' || currentStatus === '1' || currentStatus === 'true') {
-        validRows.push(row)
-      } else {
-        invalidRows.push(row)
-      }
-    }
-  })
-
-  if (invalidRows.length > 0 && validRows.length > 0) {
-    ElMessage.warning('所选订单状态不一致，本次未处理任何订单，请核对后重新选择')
+  const orderIds = rows.map(row => String(row.id ?? '').trim())
+  if (orderIds.length > 200 || orderIds.some(id => !id || id === '0') || new Set(orderIds).size !== orderIds.length) {
+    batchAuditError.value = '选中订单包含缺失或重复ID，本次整批未处理，请刷新列表重新选择'
     return
   }
-  if (validRows.length === 0) {
-    const actionName = type === 0 ? '审核' : '反审核'
-    const requiredStatus = type === 0 ? '未审核' : '已审核'
-    if (invalidRows.length > 0) {
-      ElMessage.warning(`选中的 ${invalidRows.length} 条单据状态不符合要求！${actionName}操作只能处理状态为"${requiredStatus}"的单据。`)
-    } else {
-      ElMessage.warning('无可操作单据！')
-    }
-    // 输出调试信息
-    console.log('选中单据状态详情:', selected.value.map(r => ({ orderNo: r.orderNo, auditStatus: r.auditStatus })))
+  if (rows.some(row => !/^[0-9a-f]{64}$/.test(row.version || ''))) {
+    batchAuditError.value = '选中订单缺少读取版本，请刷新列表核对后重新选择，本次整批未处理'
     return
   }
-
-  // 提取订单ID
-  const orderIds = validRows
-    .map(row => row.id)
-    .filter(id => id !== undefined && id !== null && String(id).trim() !== '' && String(id) !== '0') as (number | string)[]
-
-  if (orderIds.length === 0) {
-    ElMessage.error('选中的单据缺少订单ID，无法执行审核操作')
-    return
-  }
-
-  if (orderIds.length !== validRows.length) {
-    ElMessage.warning(`共选中 ${validRows.length} 条单据，其中 ${orderIds.length} 条有有效订单ID，将处理这 ${orderIds.length} 条`)
-  }
-
+  const versions = Object.fromEntries(rows.map((row,index) => [orderIds[index],row.version!]))
+  const actionName = type === 0 ? '审核' : '反审核'
+  let committed = false
+  batchAuditBusy.value = true
   try {
-    // 根据接口文档，type: 1=审核，0=反审核
-    // 但前端逻辑中 type: 0=审核，1=反审核，所以需要反转
-    const apiType = type === 0 ? 1 : 0
-    
-    // 调用批量审核/反审核接口，传递 ids 和 type 参数
-    const response = await PurchaseOrderAPI.auditPurchaseOrders(orderIds, apiType)
+    const response = await PurchaseOrderAPI.auditPurchaseOrders(orderIds, type === 0 ? 1 : 0, versions)
     if (response.code !== 10000) throw new Error(response.message || '整批审核失败')
-    
-    // 清空选中项
+    committed = true
     selected.value = []
-    if (tableRef.value) {
-      tableRef.value.clearSelection()
-    }
-
-    // 重新加载列表
-    purchaseSearchRef.value?.search?.()
-
-    const actionName = type === 0 ? '审核' : '反审核'
+    tableRef.value?.clearSelection()
+    await purchaseSearchRef.value?.search?.()
     ElMessage.success(`${actionName}成功！共处理 ${orderIds.length} 条单据`)
   } catch (error: any) {
-    console.error('批量审核/反审核失败:', error)
-    const errorMessage = error?.response?.data?.message || error?.message || '操作失败，请稍后重试'
-    ElMessage.error(errorMessage)
-  }
+    batchAuditError.value = committed ? '操作已提交，但列表刷新失败，请手动刷新核对' : error?.message || '操作失败，请刷新列表核对后重试'
+    ElMessage.error(batchAuditError.value)
+  } finally { batchAuditBusy.value = false }
 }
 
 /* 批量删除 */

@@ -19,8 +19,9 @@ import java.util.List;
 @Data
 @ApiModel("审核请求参数")
 public class AuditRequestDTO {
-    /** Optional reviewed-document version; batch actions explicitly operate on current records. */
+    /** Order approval requires either one detail version or exact versions for all selected IDs. */
     private String version;
+    private java.util.Map<String,String> versions;
     @ApiModelProperty(value = "操作类型：1-审核 0-反审核", example = "1", required = true)
     @NotNull(message = "操作类型不能为空")
     private Integer type;

@@ -28,6 +28,9 @@ public class PurchaseOrderAuditService {
         rows.addAll(db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS version_approval,CAST(b.state AS SIGNED) AS version_execution FROM bor b WHERE b.id=?"+suffix,id));
         rows.addAll(db.queryForList("SELECT * FROM bor_info WHERE pid=? ORDER BY id"+suffix,id));
         rows.addAll(db.queryForList("SELECT id FROM record WHERE type='bor' AND source=? ORDER BY id"+suffix,id));
+        return digest(rows);
+    }
+    private String digest(List<Map<String,Object>> rows){
         StringBuilder value=new StringBuilder();
         for(Map<String,Object> row:rows){
             value.append('{');
@@ -42,6 +45,24 @@ public class PurchaseOrderAuditService {
             byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(value.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
             StringBuilder result=new StringBuilder();for(byte item:digest)result.append(String.format("%02x",item & 255));return result.toString();
         }catch(java.security.NoSuchAlgorithmException error){throw new IllegalStateException("无法校验订单版本",error);}
+    }
+    /** Three batch reads in the caller's list snapshot, never one lookup per row. */
+    public Map<String,String> versions(List<String> ids){
+        Map<String,String> result=new HashMap<>();if(ids.isEmpty())return result;
+        if(ids.size()>200)throw new IllegalArgumentException("每页最多200张订单");
+        String placeholders=String.join(",",Collections.nCopies(ids.size(),"?"));Object[] parameters=ids.toArray();
+        Map<String,List<Map<String,Object>>> stored=new HashMap<>();
+        for(Map<String,Object> head:db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS version_approval,CAST(b.state AS SIGNED) AS version_execution FROM bor b WHERE b.id IN ("+placeholders+")",parameters)){
+            List<Map<String,Object>> rows=new ArrayList<>();rows.add(head);stored.put(text(head.get("id")),rows);
+        }
+        for(Map<String,Object> line:db.queryForList("SELECT * FROM bor_info WHERE pid IN ("+placeholders+") ORDER BY pid,id",parameters)){
+            List<Map<String,Object>> rows=stored.get(text(line.get("pid")));if(rows!=null)rows.add(line);
+        }
+        for(Map<String,Object> history:db.queryForList("SELECT id,source FROM record WHERE type='bor' AND source IN ("+placeholders+") ORDER BY source,id",parameters)){
+            List<Map<String,Object>> rows=stored.get(text(history.get("source")));if(rows!=null)rows.add(Collections.singletonMap("id",history.get("id")));
+        }
+        for(Map.Entry<String,List<Map<String,Object>>> entry:stored.entrySet())result.put(entry.getKey(),digest(entry.getValue()));
+        return result;
     }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String,Object> document(String id){
@@ -113,14 +134,19 @@ public class PurchaseOrderAuditService {
         if(request==null || request.getType()==null || (request.getType()!=0 && request.getType()!=1))throw new IllegalArgumentException("审核操作必须为1，反审核必须为0");
         List<String> ids=request.getIds();
         if(ids==null || ids.isEmpty() || ids.size()>200 || new HashSet<>(ids).size()!=ids.size() || ids.stream().anyMatch(id->id==null || id.trim().isEmpty()))throw new IllegalArgumentException("请选择1到200张不同的采购订单");
-        if(request.getVersion()!=null && (ids.size()!=1 || !request.getVersion().matches("[0-9a-f]{64}")))throw new IllegalArgumentException("详情审核必须携带一张订单的有效版本");
+        Map<String,String> expected=request.getVersions();
+        if(request.getVersion()!=null){
+            if(expected!=null || ids.size()!=1 || !request.getVersion().matches("[0-9a-f]{64}"))throw new IllegalArgumentException("详情审核必须携带一张订单的有效版本，不能混用批量版本");
+            expected=Collections.singletonMap(ids.get(0),request.getVersion());
+        }
+        if(expected==null || !expected.keySet().equals(new HashSet<>(ids)) || expected.values().stream().anyMatch(value->value==null || !value.matches("[0-9a-f]{64}")))throw new IllegalArgumentException("请刷新列表后核对全部选中订单，提交完整版本后再审核");
         lock();
         List<String> ordered=new ArrayList<>(ids);Collections.sort(ordered);
         for(String id:ordered){
             List<Map<String,Object>> found=db.queryForList("SELECT b.*,CAST(b.examine AS SIGNED) AS approval_state,CAST(b.state AS SIGNED) AS execution_state FROM bor b WHERE b.id=? FOR UPDATE",id);
             if(found.size()!=1)throw new IllegalArgumentException("采购订单不存在");
             Map<String,Object> head=found.get(0);access.requireFrame(actor,text(head.get("frame")));
-            if(request.getVersion()!=null && !request.getVersion().equals(version(id,true)))throw new IllegalStateException("采购订单已变化，请关闭详情重新打开，核对后再审核");
+            if(!expected.get(id).equals(version(id,true)))throw new IllegalStateException(request.getVersion()!=null?"采购订单已变化，请关闭详情重新打开，核对后再审核":"选中订单已变化，请刷新列表重新核对；本次整批未处理");
             if(head.get("approval_state")==null || integer(head.get("approval_state"))<0 || integer(head.get("approval_state"))>1 || head.get("execution_state")==null || integer(head.get("execution_state"))<0 || integer(head.get("execution_state"))>3)throw new IllegalArgumentException("采购订单状态异常，请先核对原始业务记录");
             head.put("examine",integer(head.remove("approval_state")));head.put("state",integer(head.remove("execution_state")));
             if(integer(head.get("examine"))==request.getType())continue;
