@@ -116,14 +116,13 @@ class SaleReturnReviewSuite(SaleReturnDraftSuite):
         self.case('sale.return_review_database_failure_rollback_retry', storage_fault)
 
         def live_permission():
-            _, identifier, _ = self.created(); frozen = self.versions([identifier])
+            source, identifier, _ = self.created(); frozen = self.versions([identifier])
             token, role = self.role_session(); admin = self.token
             try:
                 self.token = token
                 assert self.review([identifier], versions=frozen).get('code') == 403
                 with qa_resource_grants(self.state, ['/sale/return/return/check'], [role]):
-                    assert self.review([identifier], versions=frozen).get('code') == 403
-                with qa_resource_grants(self.state, ['/sale/return/return/check', '/sale/form/getSaleDetail'], [role]):
+                    assert self.request('GET','/sale/form/document/'+source,service='sale').get('code')==403
                     assert self.request('GET', '/sale/return/document/' + identifier + '/source-options', service='sale').get('code') == 403
                     assert self.review([identifier], versions=frozen).get('code') == 10000
                 assert self.review([identifier], status=0, versions=frozen).get('code') == 403
@@ -131,7 +130,7 @@ class SaleReturnReviewSuite(SaleReturnDraftSuite):
                 self.token = admin
             assert self.return_doc(identifier)['header']['check'] == 1
             self.unchanged()
-            return ['New actual OAuth role requires both current check and source detail grants; same token loses access immediately after revoke']
+            return ['New actual OAuth role needs only its current check grant; unrelated source detail remains denied; same token loses access immediately after revoke']
         self.case('sale.return_review_live_oauth_permission', live_permission)
 
         def source_change():

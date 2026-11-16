@@ -9,7 +9,7 @@ import urllib.request
 from decimal import Decimal
 from sale_return_preview_acceptance import SaleReturnPreviewSuite
 from acceptance import QA, read_state, sql, literal
-from resource_fixture import qa_resource_grants, authority
+from resource_fixture import qa_resource_grants, qa_database_permission_switches, authority
 from purchase_ui_acceptance import PurchaseUiSuite
 
 
@@ -270,22 +270,24 @@ class SaleReturnDraftSuite(SaleReturnPreviewSuite):
             role = self.success('POST', '/role/add-role', dict(name='QA Return CRUD ' + uuid.uuid4().hex[:8], data='', root='[]', auth='{}'))
             actor, user, _ = self.new_user(role=role); token = PurchaseUiSuite.login(self, user)
             keyword = authority(role, sql(self.state, 'SELECT keyword FROM role WHERE id=' + literal(role) + ';'))
-            paths = [self.create_resource, '/sale/form/getSaleDetail', '/sale/return/{id}', '/sale/return/saleReturnList', '/sale/return/updateSalesReturnOrder', '/sale/return/deleteSalesReturnOrder']
+            paths = [self.create_resource, '/sale/return/{id}', '/sale/return/saleReturnList', '/sale/return/updateSalesReturnOrder', '/sale/return/deleteSalesReturnOrder']
             admin = self.token
             try:
                 self.token = token
-                with qa_resource_grants(self.state, paths, [keyword]):
+                with qa_database_permission_switches(self.state,paths,[keyword]) as toggle:
+                    for path in paths:toggle(path,True)
                     result = self.add_return(body); assert result.get('code') == 10000
                     identifier = result['data']; document = self.return_doc(identifier)
+                    assert self.request('GET','/sale/form/document/'+source,service='sale').get('code')==403
                     assert document['header']['user'] == actor and document['header']['frame'] == self.state['frame_id']
                     payload = self.revision(identifier, 1.5)
                     assert self.revise_return(payload).get('code') == 10000
                     current = self.return_doc(identifier)
-                    with qa_resource_grants(self.state, ['/sale/return/updateSalesReturnOrder'], []):
-                        assert self.revise_return(self.revision(identifier)).get('code') == 403
+                    toggle('/sale/return/updateSalesReturnOrder',False)
+                    assert self.revise_return(self.revision(identifier)).get('code') == 403
                     assert self.remove_return(identifier, current['version']).get('code') == 10000
-                    with qa_resource_grants(self.state, [self.create_resource], []):
-                        assert self.add_return(body).get('code') == 403
+                    toggle(self.create_resource,False)
+                    assert self.add_return(body).get('code') == 403
             finally:
                 self.token = admin
             assert sql(self.state, "SELECT COUNT(*) FROM record WHERE type='sre' AND source=" + literal(identifier) + ' AND `user`=' + literal(actor) + ';') == '3'

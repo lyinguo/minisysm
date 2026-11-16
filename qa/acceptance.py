@@ -63,7 +63,7 @@ def verify_qa_gateway_routes(opener,state):
     if state.get('gateway_port')!=18001 or state.get('login_port')!=18003:
         raise RuntimeError('Gateway and Login must use dedicated QA ports')
     with opener.open('http://127.0.0.1:18001/actuator/gateway/routes',timeout=20) as response:routes=json.load(response)
-    expected={'qa-payment':'http://127.0.0.1:18024','qa-receipt':'http://127.0.0.1:18026','qa-identity':'http://127.0.0.1:18091','qa-login':'http://127.0.0.1:18003','qa-purchase':'http://127.0.0.1:18023'}
+    expected={'qa-sale':'http://127.0.0.1:18022','qa-payment':'http://127.0.0.1:18024','qa-receipt':'http://127.0.0.1:18026','qa-identity':'http://127.0.0.1:18091','qa-login':'http://127.0.0.1:18003','qa-purchase':'http://127.0.0.1:18023'}
     if {row['route_id']:row['uri'] for row in routes}!=expected:
         raise RuntimeError('Gateway contains unverified routes; refusing writes and credential submission')
 

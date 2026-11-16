@@ -3,8 +3,7 @@ package com.zeroone.star.sale.service;
 import com.zeroone.star.project.components.user.UserDTO;
 import com.zeroone.star.project.components.user.UserHolder;
 import com.zeroone.star.project.components.user.RoleAuthority;
-import com.zeroone.star.project.constant.RedisConstant;
-import org.springframework.data.redis.core.RedisTemplate;
+import com.zeroone.star.project.components.user.DatabaseResourcePermission;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -15,11 +14,17 @@ import java.util.*;
 public class SaleDocumentAccess {
     private final UserHolder users;
     private final JdbcTemplate db;
-    private final RedisTemplate<String, Object> redis;
-    public SaleDocumentAccess(UserHolder users, JdbcTemplate db, RedisTemplate<String, Object> redis) {
-        this.users=users; this.db=db; this.redis=redis;
+    public SaleDocumentAccess(UserHolder users, JdbcTemplate db) {
+        this.users=users; this.db=db;
     }
     public UserDTO authorize(String resource) {
+        if(resource==null || !(resource.startsWith("/sale/form/") || resource.startsWith("/sale/return/")))
+            throw new IllegalArgumentException("销售权限资源无效");
+        return current(resource);
+    }
+    /** Internal source calculations still verify the current account and organization. */
+    public UserDTO current() { return current(null); }
+    private UserDTO current(String resource) {
         UserDTO user;
         try { user=users.getCurrentUser(); }
         catch (Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }
@@ -33,10 +38,8 @@ public class SaleDocumentAccess {
         else {
             if (current.get("role_id")==null) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号角色不存在");
             user.setRoles(Collections.singletonList(RoleAuthority.resolve(current.get("role_id").toString(),(String)current.get("keyword"))));
-        }
-        if (!user.getRoles().contains("ROLE_ADMIN")) {
-            Object allowed=redis.opsForHash().get(RedisConstant.RESOURCE_ROLES_MAP,resource);
-            if (!(allowed instanceof Collection) || Collections.disjoint(user.getRoles(),(Collection<?>)allowed))
+            frame(user);
+            if (resource!=null && !DatabaseResourcePermission.allowed(db,current.get("role_id").toString(),resource))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有销售单操作权限");
         }
         return user;

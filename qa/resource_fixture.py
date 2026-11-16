@@ -35,11 +35,13 @@ def _qa_redis_resource_grants(state,paths,roles):
 
 @contextmanager
 def qa_resource_grants(state,paths,roles):
-    """Procurement uses committed DB fixtures; unchanged modules retain QA Redis fixtures."""
+    """Procurement and sale use committed DB fixtures; unchanged modules retain QA Redis fixtures."""
     purchase=[path for path in paths if path.startswith(('/purchase-order/','/purchase-note/','/purchase-return-form/','/j3-purchase/'))]
-    legacy=[path for path in paths if path not in purchase]
+    sale=[path for path in paths if path.startswith(('/sale/form/','/sale/return/'))]
+    legacy=[path for path in paths if path not in purchase and path not in sale]
     with ExitStack() as stack:
         if purchase:stack.enter_context(qa_database_resource_grants(state,[path if path.startswith('/j3-purchase/') else '/j3-purchase'+path for path in purchase],roles))
+        if sale:stack.enter_context(qa_database_resource_grants(state,sale,roles))
         if legacy:stack.enter_context(_qa_redis_resource_grants(state,legacy,roles))
         yield
 
@@ -49,7 +51,7 @@ def qa_database_resource_grants(state,paths,roles):
     """Explicit disposable DB catalog/role fixtures; does not claim a role-UI lifecycle."""
     from acceptance import sql,literal
     assert re.fullmatch('psi_qa_[0-9a-f]{12}',state['database'])
-    assert paths and all(path.startswith(('/fund/receipt/','/payment-order/','/j3-purchase/')) for path in paths)
+    assert paths and all(path.startswith(('/fund/receipt/','/payment-order/','/j3-purchase/','/sale/form/','/sale/return/')) for path in paths)
     identifiers=[];previous={};menu=uuid.uuid4().hex;menu_created=False
     try:
         sql(state,'INSERT INTO menu(id,pid,name,`key`,model,type,resource,sort) VALUES('+','.join(literal(value) for value in [menu,'0','QA business permission fixture','qa-business-'+menu[:8],0,0,'',0])+');')
@@ -73,11 +75,10 @@ def qa_database_resource_grants(state,paths,roles):
 
 
 @contextmanager
-def qa_purchase_permission_switches(state,paths,roles):
+def qa_database_permission_switches(state,paths,roles):
     """Toggle only this fixture's enabled catalog IDs; restore all role selections."""
     from acceptance import sql,literal
-    canonical=[path if path.startswith('/j3-purchase/') else '/j3-purchase'+path for path in paths]
-    assert all(path.startswith('/j3-purchase/') for path in canonical)
+    canonical=list(paths)
     with qa_database_resource_grants(state,canonical,roles) as functions:
         mapping={path:functions[resource] for path,resource in zip(paths,canonical)}
         def switch(path,enabled):
@@ -85,6 +86,14 @@ def qa_purchase_permission_switches(state,paths,roles):
             sql(state,"UPDATE func_perm SET is_enable="+literal('1' if enabled else '0')+' WHERE id='+literal(mapping[path])+';')
         for path in paths:switch(path,False)
         yield switch
+
+
+@contextmanager
+def qa_purchase_permission_switches(state,paths,roles):
+    canonical=[path if path.startswith('/j3-purchase/') else '/j3-purchase'+path for path in paths]
+    assert all(path.startswith('/j3-purchase/') for path in canonical)
+    with qa_database_permission_switches(state,canonical,roles) as toggle:
+        yield lambda path,enabled: toggle(path if path.startswith('/j3-purchase/') else '/j3-purchase'+path,enabled)
 
 
 @contextmanager

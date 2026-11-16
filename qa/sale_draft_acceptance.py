@@ -9,6 +9,7 @@ import urllib.parse
 import subprocess
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
+from resource_fixture import qa_database_permission_switches
 from warehouse_acceptance import WarehouseSuite
 from acceptance import QA, read_state, sql, literal
 
@@ -193,23 +194,17 @@ class SaleDraftSuite(WarehouseSuite):
             with self.opener.open(request, timeout=20) as response: authenticated = json.load(response)
             token = authenticated.get('token') or authenticated.get('access_token')
             assert token, 'New isolated role account could not authenticate'
-            container = 'psi-qa-redis-' + self.state['database'][len('psi_qa_'):]
-            actual = subprocess.run(['docker', 'ps', '--filter', 'publish=18379', '--format', '{{.Names}}'], capture_output=True, text=True, check=True).stdout.strip()
-            assert actual == container, 'Refusing to alter an unverified Redis instance'
-            def redis(*arguments):
-                return subprocess.run(['docker', 'exec', container, 'redis-cli', '--raw'] + list(arguments), capture_output=True, text=True, check=True).stdout.rstrip('\r\n')
             paths = ['/sale/form/getSaleList', '/sale/form/getSaleDetail', '/sale/form/addSale', '/sale/form/updateSale', '/sale/form/check', '/sale/form/examine']
-            previous = {path: (redis('HEXISTS', 'AUTH:RESOURCE_ROLES', path), redis('HGET', 'AUTH:RESOURCE_ROLES', path)) for path in paths}
             admin = self.token
+            permissions=qa_database_permission_switches(self.state,paths,[keyword])
+            switch=permissions.__enter__()
             try:
                 self.token = token
-                for path in paths: redis('HDEL', 'AUTH:RESOURCE_ROLES', path)
                 assert self.request('GET', '/sale/form/getSaleList', service='sale').get('code') == 403, 'Role without query grant could query sales'
                 assert self.request('GET', '/sale/form/document/' + own_id, service='sale').get('code') == 403
                 assert self.request('POST', '/sale/form/check?check=true', [own_id], service='sale').get('code') == 403
                 assert self.request('POST', '/sale/form/examine?examine=true', [own_id], service='sale').get('code') == 403
-                grants = json.dumps(['java.util.ArrayList', [keyword]])
-                for path in paths: redis('HSET', 'AUTH:RESOURCE_ROLES', path, grants)
+                for path in paths:switch(path,True)
                 own = self.sale('GET', '/sale/form/document/' + own_id)
                 assert own['header']['id'] == own_id
                 listing = self.sale('GET', '/sale/form/getSaleList?pageIndex=1&pageSize=200&number='+prefix+'&authorizedFrame=' + foreign_frame)
@@ -225,13 +220,13 @@ class SaleDraftSuite(WarehouseSuite):
                 self.sale('POST', '/sale/form/check?check=true', [own_id])
                 self.sale('POST', '/sale/form/examine?examine=true', [own_id])
                 assert self.inventory() == 1
-                redis('HDEL', 'AUTH:RESOURCE_ROLES', '/sale/form/examine')
+                switch('/sale/form/examine',False)
                 assert self.request('POST', '/sale/form/examine?examine=false', [own_id], service='sale').get('code') == 403
                 assert self.inventory() == 1, 'Revoked posting permission changed stock'
-                redis('HSET', 'AUTH:RESOURCE_ROLES', '/sale/form/examine', grants)
+                switch('/sale/form/examine',True)
                 self.sale('POST', '/sale/form/examine?examine=false', [own_id])
                 assert self.inventory() == 3
-                redis('HDEL', 'AUTH:RESOURCE_ROLES', '/sale/form/getSaleDetail')
+                switch('/sale/form/getSaleDetail',False)
                 assert self.request('GET', '/sale/form/document/' + own_id, service='sale').get('code') == 403, 'Cached credential ignored permission revocation'
                 self.token = admin
                 other_role = self.success('POST', '/role/add-role', {'name': 'QA Sales Revoked ' + uuid.uuid4().hex[:7], 'data': '', 'root': '[]', 'auth': '{}'})
@@ -240,11 +235,9 @@ class SaleDraftSuite(WarehouseSuite):
                 assert self.request('GET', '/sale/form/getSaleList', service='sale').get('code') == 403, 'Old token retained a role removed in the database'
             finally:
                 self.token = admin
-                for path, (exists, value) in previous.items():
-                    if exists == '1': redis('HSET', 'AUTH:RESOURCE_ROLES', path, value)
-                    else: redis('HDEL', 'AUTH:RESOURCE_ROLES', path)
+                permissions.__exit__(None,None,None)
             assert self.sale('GET', '/sale/form/document/' + foreign_id) == foreign_before, 'Unauthorized mutation changed another organization document'
-            return ['Actual OAuth sign-in for a newly created role/user; Redis fixtures touch only verified QA Redis and are restored', 'Ungranted access denied, granted access allowed, foreign organization read/create/update denied, supplied scope ignored', 'Permission revocation and actual user-role change take effect with the existing token; no existing business account modified']
+            return ['Actual OAuth sign-in for a newly created role/user; DB permission fixtures touch only the isolated catalog/role and are restored', 'Ungranted access denied, granted access allowed, foreign organization read/create/update denied, supplied scope ignored', 'Permission revocation and actual user-role change take effect with the existing token; no existing business account modified']
         self.case('sale.draft_real_role_and_organization_authorization', role_and_frame)
         self.write_report()
 

@@ -126,7 +126,7 @@ public class SaleReturnDraftService {
             if(dto.getMore()==null)dto.setMore(s(original.get("more")));if(dto.getData()==null)dto.setData(s(original.get("data")));
         }else{if(dto.getId()!=null && !dto.getId().isEmpty())throw new IllegalArgumentException("新增退货草稿不能指定ID");id=uid();}
         if(dto.getSourceVersion()==null || !dto.getSourceVersion().matches("[0-9a-f]{64}"))throw new IllegalArgumentException("请重新读取并核对来源销售单");
-        SaleReturnGenerateDTO preview=update?previews.previewForDraft(dto.getSource(),id):previews.preview(dto.getSource());
+        SaleReturnGenerateDTO preview=previews.previewForDraft(dto.getSource(),update?id:null);
         sourceVersions.require(dto.getSource(),dto.getSourceVersion());
         String frame=preview.getFrame(),customer=preview.getCustomer();access.requireFrame(actor,frame);
         if((dto.getFrame()!=null && !dto.getFrame().equals(frame)) || (dto.getCustomer()!=null && !dto.getCustomer().equals(customer)))throw new IllegalArgumentException("客户和组织必须与来源销售单一致");

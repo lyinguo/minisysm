@@ -6,11 +6,11 @@ from decimal import Decimal
 from sale_posting_acceptance import SalePostingSuite
 from purchase_ui_acceptance import PurchaseUiSuite
 from acceptance import QA, read_state, sql, literal
-from resource_fixture import qa_resource_grants, authority
+from resource_fixture import qa_resource_grants, qa_database_permission_switches, authority
 
 
 class SaleReturnPreviewSuite(SalePostingSuite):
-    resource = '/sale/form/getSaleDetail'
+    resource = '/sale/form/getGenerateReturnData'
 
     def preview(self, identifier):
         return self.request('GET', '/sale/form/getGenerateReturnData?saleId=' + identifier, service='sale')
@@ -77,16 +77,16 @@ class SaleReturnPreviewSuite(SalePostingSuite):
             token, keyword = self.role_session(); admin = self.token
             try:
                 self.token = token
-                with qa_resource_grants(self.state, [self.resource], []):
+                with qa_database_permission_switches(self.state,[self.resource],[keyword]) as toggle:
                     assert self.preview(identifier).get('code') == 403, 'Ungranted actual role can preview sales data'
-                with qa_resource_grants(self.state, [self.resource], [keyword]):
+                    toggle(self.resource,True)
                     assert self.preview(identifier).get('code') == 10000
-                    with qa_resource_grants(self.state, [self.resource], []):
-                        assert self.preview(identifier).get('code') == 403, 'Old token ignores live permission revocation'
+                    toggle(self.resource,False)
+                    assert self.preview(identifier).get('code') == 403, 'Old token ignores live permission revocation'
             finally:
                 self.token = admin
             self.unchanged()
-            return ['New role/user actually logs in; no grant refuses, own grant works, same-token live revocation refuses; QA Redis restored']
+            return ['New role/user actually logs in; no grant refuses, own grant works, same-token live revocation refuses; QA database function selection/enabled state restored']
         self.case('sale.return_preview_actual_role_and_revocation', permission)
 
         def organization():

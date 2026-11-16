@@ -33,11 +33,10 @@ public class SaleReturnPreviewService {
     }
     private BigDecimal proportion(Object value,BigDecimal available,BigDecimal quantity){return d(value).multiply(available).divide(quantity,4,RoundingMode.HALF_UP);}
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
-    public SaleReturnGenerateDTO preview(String id){return calculate(id,null);}
+    public SaleReturnGenerateDTO preview(String id){return calculate(id,null,access.authorize("/sale/form/getGenerateReturnData"));}
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
-    public SaleReturnGenerateDTO previewForDraft(String id,String excludedDraft){return calculate(id,excludedDraft);}
-    private SaleReturnGenerateDTO calculate(String id,String excludedDraft){
-        UserDTO actor=access.authorize("/sale/form/getSaleDetail");
+    public SaleReturnGenerateDTO previewForDraft(String id,String excludedDraft){return calculate(id,excludedDraft,access.current());}
+    private SaleReturnGenerateDTO calculate(String id,String excludedDraft,UserDTO actor){
         if(id==null || id.trim().isEmpty() || id.length()>32)throw new IllegalArgumentException("请选择有效的来源销售单");
         List<Map<String,Object>> found=db.queryForList("SELECT * FROM sell WHERE id=?",id);
         if(found.size()!=1)throw new IllegalArgumentException("来源销售单不存在");

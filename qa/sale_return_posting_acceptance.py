@@ -269,20 +269,19 @@ class SaleReturnPostingSuite(SaleReturnReviewSuite):
         self.case('sale.return_posting_downstream_invoice_protection', invoice_reference)
 
         def actual_role():
-            _, identifier = self.checked_return(); frozen = self.versions([identifier]); token, role = self.role_session(); admin = self.token
+            source, identifier = self.checked_return(); frozen = self.versions([identifier]); token, role = self.role_session(); admin = self.token
             try:
                 self.token = token
                 assert self.post_return([identifier], versions=frozen).get('code') == 403
                 with qa_resource_grants(self.state, ['/sale/return/return/examine'], [role]):
-                    assert self.post_return([identifier], versions=frozen).get('code') == 403
-                with qa_resource_grants(self.state, ['/sale/return/return/examine', '/sale/form/getSaleDetail'], [role]):
+                    assert self.request('GET','/sale/form/document/'+source,service='sale').get('code')==403
                     assert self.post_return([identifier], versions=frozen).get('code') == 10000
                 assert self.post_return([identifier], status=0, versions=frozen).get('code') == 403
             finally: self.token = admin
             assert self.inventory() == 9 and self.balance('account', self.account) == 125 and self.balance('customer', self.customer) == 88
             assert self.post_return([identifier], status=0, versions=self.versions([identifier])).get('code') == 10000
             self.unchanged()
-            return ['Actual new OAuth user needs current audit and source-detail grants; same token immediately loses audit after grant restoration; authorized admin can reverse verified posting']
+            return ['Actual new OAuth user needs its current audit grant without unrelated source-detail authorization; same token immediately loses audit after grant restoration; authorized admin can reverse verified posting']
         self.case('sale.return_posting_live_role_and_revocation', actual_role)
         self.write_report()
 
