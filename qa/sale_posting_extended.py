@@ -322,4 +322,8 @@ if __name__ == '__main__':
     import sys
     suite=ExtendedPostingSuite(read_state())
     if len(sys.argv)>1 and sys.argv[1]=='source-state':suite.source_state_cases();suite.write_report()
+    elif len(sys.argv)>1 and sys.argv[1]=='closed-cost':
+        actual_case=suite.case
+        suite.case=lambda name,action: actual_case(name,action) if name=='sale.posting_preserves_closed_period_costs' else None
+        suite.run()
     else:suite.run()

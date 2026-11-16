@@ -20,7 +20,13 @@ import java.util.*;
 @Service
 public class WarehouseReportDocumentService {
     private final JdbcTemplate db;
-    public WarehouseReportDocumentService(JdbcTemplate db) { this.db = db; }
+    private final WarehousePostingProof proofs;
+    private final com.zeroone.star.project.components.stock.StockCostRebuilder costs;
+    public WarehouseReportDocumentService(JdbcTemplate db) {
+        this.db = db;this.proofs=new WarehousePostingProof(db);
+        this.costs=new com.zeroone.star.project.components.stock.StockCostRebuilder(db);
+    }
+    @javax.annotation.PostConstruct public void initializePostingProofs() { proofs.initialize(); }
 
     @Data
     public static class Edit {
@@ -124,13 +130,17 @@ public class WarehouseReportDocumentService {
         String t = table(kind);
         if (target != 0 && target != 1) throw new IllegalArgumentException("审核状态无效");
         Map<String, Object> head = header(t, id, true);
-        // 状态在同一事务中锁定，重复请求不重复增减库存。
-        if (num(head.get("examine")) == target) return detail(t, id);
-        List<Map<String, Object>> rows = items(t, id);
-        assertVersion(expectedVersion, head, rows);
-        if (rows.isEmpty()) throw new IllegalArgumentException("单据没有商品明细");
-        // 对商品按固定顺序加锁，串行化同一商品的跨单据库存操作和库存新建。
-        List<Map<String, Object>> products = db.queryForList("SELECT id,type,batch,serial FROM goods WHERE id IN (SELECT goods FROM `" + t + "_info` WHERE pid=?) ORDER BY id FOR UPDATE", id);
+        List<Map<String,Object>> rows=db.queryForList("SELECT * FROM `"+t+"_info` WHERE pid=? ORDER BY id FOR UPDATE",id);
+        List<Map<String,Object>> products=db.queryForList("SELECT id,type,batch,serial FROM goods WHERE id IN (SELECT goods FROM `"+t+"_info` WHERE pid=?) ORDER BY id FOR UPDATE",id);
+        int state=num(head.get("examine"));
+        if(state==1)proofs.require(t,id,head,rows,products);
+        else if(state!=0 || proofs.hasMarker(t,id) || proofs.hasMovements(id))
+            throw new IllegalStateException("单据状态与原始入账凭据不一致，请先核对库存流水");
+        if(state==target)return detail(t,id);
+        assertVersion(expectedVersion,head,rows);
+        proofs.requireOpenPeriod(head.get("time"));
+        if(rows.isEmpty())throw new IllegalArgumentException("单据没有商品明细");
+        if(target==0)proofs.requireNoDependents(id,head,rows,products);
         Map<String, Map<String, Object>> goods = new HashMap<>();
         products.forEach(g -> goods.put(str(g.get("id")), g));
         for (Map<String, Object> item : rows) {
@@ -151,11 +161,14 @@ public class WarehouseReportDocumentService {
             if (num(product.get("serial")) == 1) serials(t, id, item, target, product);
         }
         if (target == 0) {
+            db.update("DELETE FROM fifo WHERE `in` IN (SELECT id FROM summary WHERE `class`=?) OR `out` IN (SELECT id FROM summary WHERE `class`=?)",id,id);
             db.update("DELETE FROM psi_stock_posting_order WHERE movement_id IN (SELECT id FROM summary WHERE `class`=? AND type IN (?,?,?))",id,t,"swapOut","swapEnter");
             for (String ledger : Arrays.asList("summary", "room_info", "batch_info", "serve_info", "serial_info")) {
                 db.update("DELETE FROM `" + ledger + "` WHERE `class`=? AND type IN (?,?,?)", id, t, "swapOut", "swapEnter");
             }
         }
+        for(Map<String,Object> product:products)if(num(product.get("type"))!=1)costs.rebuild(str(product.get("id")));
+        if(target==1)proofs.save(t,id,head,rows,products);else proofs.remove(t,id);
         db.update("UPDATE `" + t + "` SET examine=? WHERE id=?", target, id);
         log(t, id, actor, target == 1 ? "审核单据" : "反审核单据");
         return detail(t, id);
@@ -183,10 +196,7 @@ public class WarehouseReportDocumentService {
         if (target == 1) {
             String ledgerId = uid();
             db.update("INSERT INTO room_info(id,pid,type,`class`,info,time,direction,price,nums) VALUES(?,?,?,?,?,?,?,?,?)", ledgerId, roomId, type, id, item.get("id"), head.get("time"), sign > 0 ? 1 : 0, item.get("price"), qty);
-            BigDecimal remaining = db.queryForObject("SELECT nums FROM room WHERE id=?", BigDecimal.class, roomId);
-            BigDecimal value = db.queryForObject("SELECT COALESCE(SUM(CASE WHEN direction=1 THEN price*nums ELSE -price*nums END),0) FROM room_info WHERE pid=?", BigDecimal.class, roomId);
-            String exists = Collections.nCopies(4, remaining).toString();
-            String balances = Collections.nCopies(4, value).toString();
+            String exists="[0,0,0,0]",balances="[0,0,0,0]";
             String summaryId=uid();
             db.update("INSERT INTO summary(id,pid,type,`class`,info,time,goods,attr,warehouse,batch,mfd,serial,direction,price,nums,uct,bct,exist,balance,handle) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", summaryId, ledgerId, type, id, item.get("id"), head.get("time"), goods, item.get("attr"), warehouse, item.get("batch"), item.get("mfd"), item.get("serial"), sign > 0 ? 1 : 0, item.get("price"), qty, item.get("price"), decimal(item.get("price")).multiply(qty), exists, balances, BigDecimal.ZERO);
             db.update("INSERT INTO psi_stock_posting_order(movement_id) VALUES(?)",summaryId);
