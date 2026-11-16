@@ -23,9 +23,5 @@ public interface IOtherInService extends IService<EntryDO> {
 
 
 
-    JsonVO<String> importExcel(MultipartFile file);
-
-    JsonVO<ResponseEntity<byte[]>> exportDetailExcel(String ids);
-
-    JsonVO<ResponseEntity<byte[]>> exportEasyExcel(String ids);
+    OtherInListAddDTO previewOtherInList(OtherInListAddDTO dto);
 }

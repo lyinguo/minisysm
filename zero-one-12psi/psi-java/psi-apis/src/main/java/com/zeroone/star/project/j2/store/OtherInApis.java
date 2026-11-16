@@ -68,21 +68,21 @@ public interface OtherInApis {
      * @param file 导入的excel文件
      * @return 导入数据的id
      */
-    JsonVO<String> importExcel(MultipartFile file);
+    JsonVO<Map<String,Object>> importExcel(MultipartFile file, String version);
 
     /**
      *  导出简单报表
      * @param ids 需要导出的数据的id,导入格式（暂定）为 "1+2+4+5"（1，2，4，5）为id
      * @return 一张excel表
      */
-    JsonVO<ResponseEntity<byte[]>> exportEasyExcel(String ids);
+    ResponseEntity<byte[]> exportEasyExcel(String ids);
 
     /**
      *  导出详细报表
      * @param ids 需要导出的数据的id,导入格式（暂定）为 "1+2+4+5"（1，2，4，5）为id
-     * @return 一个压缩包，存储excel表，每个id各对应一张excel表
+     * @return 一张包含所选单据全部商品明细的Excel表
      */
-    JsonVO<ResponseEntity<byte[]>> exportDetailExcel(String ids);
+    ResponseEntity<byte[]> exportDetailExcel(String ids);
 
     /**
      * 获取其他入库单列表

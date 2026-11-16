@@ -23,6 +23,9 @@
         >删除草稿</el-button
       >
       <el-button @click="router.push({ name: 'WarehouseOtherInboundReport' })">入库报表</el-button>
+      <InboundFiles :disabled="busy" @saved="loadList" @open="open" />
+      <el-button :disabled="!id || busy" @click="exportFile(false)">导出此单汇总</el-button>
+      <el-button :disabled="!id || busy" @click="exportFile(true)">导出此单明细</el-button>
     </div>
     <el-alert
       title="保存只生成草稿；审核才增加库存。修改已核对的单据，须先反审核、再反核对。"
@@ -191,6 +194,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useHttp } from '@/plugins/http'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
+import InboundFiles from '@/components/warehouse/InboundFiles.vue'
+import { downloadExportBlob } from '@/utils/reportMappers'
 type Row = Record<string, any>
 const http = useHttp(),
   router = useRouter(),
@@ -505,6 +510,24 @@ onMounted(async () => {
     }
   await loadList()
 })
+async function exportFile(detail: boolean) {
+  if (!id.value || busy.value) return
+  busy.value = true
+  try {
+    downloadExportBlob(
+      await http.getFile(
+        '/otherin/' + (detail ? 'exportDetailExcel' : 'exportEasyExcel'),
+        { ids: id.value },
+        { responseType: 'blob' }
+      ),
+      detail ? '入库明细.xlsx' : '入库汇总.xlsx'
+    )
+  } catch (e) {
+    fail(e)
+  } finally {
+    busy.value = false
+  }
+}
 </script>
 <style scoped>
 .inbound-workspace {

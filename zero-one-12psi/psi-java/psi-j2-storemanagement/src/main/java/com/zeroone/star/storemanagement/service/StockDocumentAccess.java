@@ -61,6 +61,7 @@ public class StockDocumentAccess {
             paths.put("read", "/otherin"); paths.put("create", "/otherin/add"); paths.put("save", "/otherin/update");
             paths.put("audit", "/otherin/examine"); paths.put("delete", "/otherin/delete"); paths.put("check", "/otherin/check");
             paths.put("detail", "/otherin/detail");
+            paths.put("export-simple", "/otherin/exportEasyExcel");paths.put("export-detail", "/otherin/exportDetailExcel");
             if (paths.containsKey(action)) return paths.get(action);
         } else if ("extry".equals(kind)) {
             if ("read".equals(action)) return "/otherout/list";

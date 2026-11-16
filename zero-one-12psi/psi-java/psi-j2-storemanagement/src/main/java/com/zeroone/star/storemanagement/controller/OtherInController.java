@@ -39,6 +39,7 @@ public class OtherInController implements OtherInApis {
     @Autowired
     IOtherInService otherInListService;
     @Autowired private InboundDocumentService inbound;
+    @Autowired private com.zeroone.star.storemanagement.service.InboundSpreadsheetService files;
 
 
     @PutMapping("/update")
@@ -91,22 +92,27 @@ public class OtherInController implements OtherInApis {
     @PostMapping("/import")
     @ApiOperation(value = "导入数据")
     @Override
-    public JsonVO<String> importExcel(@RequestBody MultipartFile file) {
-        return otherInListService.importExcel(file);
+    public JsonVO<Map<String,Object>> importExcel(@RequestPart("file") MultipartFile file, @RequestParam(required=false) String version) {
+        return JsonVO.success(version==null?files.preview(file):files.save(file,version));
+    }
+    @GetMapping("/import/template")
+    public ResponseEntity<byte[]> importTemplate() { return download(files.template(),"inbound-template.xlsx"); }
+    private ResponseEntity<byte[]> download(byte[] bytes,String name) {
+        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=\""+name+"\"").header("Cache-Control","no-store").contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(bytes);
     }
 
     @GetMapping(value = "/exportEasyExcel")
     @ApiOperation(value = "导出简单报表")
     @Override
-    public JsonVO<ResponseEntity<byte[]>> exportEasyExcel(@ApiParam(value = "例：\"1+2+4\"") @RequestParam String ids) {
-        return otherInListService.exportEasyExcel(ids);
+    public ResponseEntity<byte[]> exportEasyExcel(@ApiParam(value = "例：\"1+2+4\"") @RequestParam String ids) {
+        return download(files.export(ids,false),"inbound-summary.xlsx");
     }
 
     @GetMapping(value = "/exportDetailExcel")
     @ApiOperation(value = "导出详细报表")
     @Override
-    public JsonVO<ResponseEntity<byte[]>> exportDetailExcel(@ApiParam(value = "例：\"1+2+4\"") @RequestParam String ids) {
-        return otherInListService.exportDetailExcel(ids);
+    public ResponseEntity<byte[]> exportDetailExcel(@ApiParam(value = "例：\"1+2+4\"") @RequestParam String ids) {
+        return download(files.export(ids,true),"inbound-details.xlsx");
     }
 
     /**
