@@ -57,4 +57,5 @@ reference-project/
 !database/migrations/20261116_purchase_attachments.sql
 !database/migrations/20261116_sale_return_rate_precision.sql
 !database/migrations/20261116_sale_return_posting.sql
+!database/migrations/20261116_purchase_return.sql
 !**/src/test/resources/warehouse-schema.sql

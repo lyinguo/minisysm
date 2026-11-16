@@ -50,6 +50,14 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
 
     @Resource
     private IBreService breService;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseReturnDraftService drafts;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseReturnReviewService reviews;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseReturnPostingService postings;
+    @Resource
+    private com.zeroone.star.purchase.service.PurchaseDocumentAccess access;
 
     /**
      * 注入采购退货单服务：IBreService
@@ -79,8 +87,8 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
      */
     @DeleteMapping("/delete")
     @ApiOperation(value = "删除采购退货单 (支持批量)")
-    public JsonVO<String> deletePurchaseReturnForm( @RequestBody List<String> pid) {
-        return breInfoService.deletePurchaseReturnForm(pid);
+    public JsonVO<String> deletePurchaseReturnForm(@RequestBody PurchaseReturnCommand command) {
+        return JsonVO.success(String.valueOf(drafts.delete(command)));
     }
 
     /**
@@ -92,8 +100,8 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
      */
     @PutMapping("/update")
     @ApiOperation(value = "修改采购退货单")
-    public JsonVO<Integer> updatePurchaseReturnForm(@Validated @RequestBody PurchaseUpdateDTO purchaseUpdateDTO) {
-        return breInfoService.updateBreInfoDo(purchaseUpdateDTO);
+    public JsonVO<Integer> updatePurchaseReturnForm(@RequestBody PurchaseReturnDraftDTO purchaseUpdateDTO) {
+        drafts.save(purchaseUpdateDTO,true); return JsonVO.success(1);
     }
 
     /**
@@ -102,8 +110,8 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
      */
     @ApiOperation(value = "核对/反核对 (支持批量)")
     @PostMapping("/checkout")
-    public JsonVO<Integer> checkOut(@RequestBody CheckOutReturnGoodsDTO checkOutReturnGoodsDTO) {
-        return breService.checkOut(checkOutReturnGoodsDTO);
+    public JsonVO<Integer> checkOut(@RequestBody PurchaseReturnCommand command) {
+        return JsonVO.success(reviews.check(command));
     }
 
     /**
@@ -126,12 +134,8 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @GetMapping("/list")
 
     @ApiOperation(value= "获取采购退货单列表（条件+分页）")
-    public JsonVO<PageDTO<PurchaseReturnListVO>> listPurchaseReturns(PurchaseReturnQuery purchaseReturnQuery) {
-        // 1.获取获取采购退货单列表VO并封装为PageDTO
-        PageDTO<PurchaseReturnListVO> breVOPageDTO = iBreService.getPurchaseReturnPageDATO(purchaseReturnQuery);
-
-        // 2.返回查询结果
-        return JsonVO.success(breVOPageDTO);
+    public JsonVO<PageDTO<Map<String,Object>>> listPurchaseReturns(PurchaseReturnQuery purchaseReturnQuery) {
+        return JsonVO.success(drafts.list(purchaseReturnQuery));
     }
 
 
@@ -146,13 +150,9 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @GetMapping("/detail")
     @ApiOperation(value = "获取指定采购退货单详情")
     @ApiImplicitParam(name= "id",value = "采购退货单id",required = true,example = "b005")
-    public JsonVO<PurchaseReturnDetailVO> getPurchaseReturnDetail(@RequestParam String id) {
+    public JsonVO<Map<String,Object>> getPurchaseReturnDetail(@RequestParam String id) {
 
-        // 1.获取指定采购退货单详情VO
-        PurchaseReturnDetailVO purchaseReturnDetailVO = iBreInfoService.getPurchaseReturnDetailVO(id);
-
-        // 2.返回查询结果
-        return JsonVO.success(purchaseReturnDetailVO);
+        return JsonVO.success(drafts.detail(id));
     }
 
 
@@ -167,20 +167,9 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @Override
     @PostMapping("/add")
     @ApiOperation(value = "新增采购退货单")
-    @ApiImplicitParams({
-            @ApiImplicitParam(
-                    name = "Authorization",
-                    value = "请求头示例值",
-                    required = true,
-                    paramType = "header",
-                    dataType = "string",
-                    example = "Bearer REDACTED_EXAMPLE_TOKEN"
-            )
-    })
-    @Transactional
-    public JsonVO<String> savePurchaseReturn(@RequestBody PurchaseReturnAddDTO purchaseReturnAddDTO) {
+    public JsonVO<String> savePurchaseReturn(@RequestBody PurchaseReturnDraftDTO purchaseReturnAddDTO) {
         // TODO 新增采购退货单
-        String breId = iBreService.addPurchaseReturn(purchaseReturnAddDTO);
+        String breId = drafts.save(purchaseReturnAddDTO,false);
         return JsonVO.success(breId);
     }
 
@@ -193,8 +182,8 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @PutMapping("/approve")
     @ApiOperation(value = "审核/反审核（支持批量）")
     @Override
-    public JsonVO<String> approve(@RequestBody PurchaseReturnBreAuditDTO purchaseReturnBreAuditDTO) {
-        return breService.approve(purchaseReturnBreAuditDTO);
+    public JsonVO<Integer> approve(@RequestBody PurchaseReturnCommand command) {
+        return JsonVO.success(postings.post(command));
     }
 
     @Autowired
@@ -211,7 +200,7 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @ApiOperation(value = "导入数据")
     @Override
     public JsonVO<String> importData(@RequestParam("file") MultipartFile file) {
-        return breService.importData(file);
+        access.authorize("/purchase-return-form/import");throw new IllegalArgumentException("采购退货导入需真实来源及已读版本，当前入口尚未开放，本次未导入任何记录");
     }
 
     /**
@@ -224,7 +213,7 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @ApiOperation(value = "导出简单报表")
     @Override
     public ResponseEntity<byte[]> exportBre(@RequestParam("ids") List<String> ids) {
-        return breService.exportBre(ids);
+        drafts.requireScoped(ids,"/purchase-return-form/bre-export");return breService.exportBre(ids);
     }
 
     /**
@@ -240,6 +229,19 @@ public class PurchaseReturnFormController implements PurchaseReturnFormApis {
     @ApiOperation(value = "导出详细报表")
     @Override
     public ResponseEntity<byte[]> exportBreInfo(@RequestParam("ids") List<String> ids) {
-        return breService.exportBreInfo(ids);
+        drafts.requireScoped(ids,"/purchase-return-form/breInfo-export");return breService.exportBreInfo(ids);
     }
+    @GetMapping("/document/{id}")
+    public JsonVO<Map<String,Object>> document(@PathVariable String id){return JsonVO.success(drafts.detail(id));}
+    @PutMapping("/document/{id}")
+    public JsonVO<String> revise(@PathVariable String id,@RequestBody PurchaseReturnDraftDTO command){
+        if(command.getId()!=null && !id.equals(command.getId()))throw new IllegalArgumentException("请求退货单与路径不一致");command.setId(id);return JsonVO.success(drafts.save(command,true));
+    }
+    public static class DraftRemoval {public String version;}
+    @DeleteMapping("/document/{id}")
+    public JsonVO<String> remove(@PathVariable String id,@RequestBody DraftRemoval command){drafts.delete(id,command.version);return JsonVO.success(id);}
+    @GetMapping("/document/{id}/source-options")
+    public JsonVO<Map<String,Object>> sourceOptions(@PathVariable String id){return JsonVO.success(drafts.sourceOptions(id));}
+    @GetMapping("/accounts")
+    public JsonVO<List<Map<String,Object>>> accounts(@RequestParam String source,@RequestParam(defaultValue="") String keyword,@RequestParam(defaultValue="false") boolean updating,@RequestParam(defaultValue="") String draft){return JsonVO.success(drafts.accounts(source,keyword,updating,draft));}
 }

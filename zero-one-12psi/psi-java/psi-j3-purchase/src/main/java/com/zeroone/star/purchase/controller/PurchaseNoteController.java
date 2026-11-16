@@ -56,6 +56,8 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     @Resource
     private com.zeroone.star.purchase.service.PurchaseDocumentAccess access;
     @Resource
+    private com.zeroone.star.purchase.service.PurchaseReturnPreviewService returnPreviews;
+    @Resource
     private com.zeroone.star.purchase.service.PurchaseImportService purchaseImports;
 
     @GetMapping("/import/template")
@@ -221,14 +223,8 @@ public class PurchaseNoteController implements PurchaseNoteApis {
     @Override
     @ApiOperation("获取生成采购退货单数据")
     @GetMapping("/getBuildBre")
-    public JsonVO<PurchaseNoteBuildDTO> getBuildBre( @ApiParam(value = "采购单ID", required = true, example = "PUR20251103001") String id) {
-        access.requireDocuments(java.util.Collections.singletonList(id),"/purchase-note/getBuildBre");
-        try {
-            PurchaseNoteBuildDTO result = purchaseNoteService.getBuildBreData(id);
-            return JsonVO.success(result);
-        } catch (Exception e) {
-            return JsonVO.create(null, 9999,"获取生成采购退货单数据失败"+e.getMessage());
-        }
+    public JsonVO<PurchaseNoteBuildDTO> getBuildBre(@RequestParam String id) {
+        return JsonVO.success(returnPreviews.preview(id));
     }
 
     /***

@@ -26,10 +26,10 @@ export const login = async (data: LoginDTO, success: RequestCallback, fail: Requ
     })
     // 开发环境下输出响应信息
     if (import.meta.env.DEV) {
-      console.log('[登录接口] 响应数据:', res)
+      console.log('[登录接口] 响应状态:', { code: res.code, message: res.message })
     }
     // 记录Token到本地
-    if (res.data) {
+    if (res.code === 10000 && typeof res.data?.token === 'string' && res.data.token.trim()) {
       us.setToken(res.data)
       // 重置加载状态，确保路由守卫会重新加载用户信息和菜单数据
       us.setLoaded(false)
@@ -39,7 +39,7 @@ export const login = async (data: LoginDTO, success: RequestCallback, fail: Requ
     }
     // 执行失败回调
     if (import.meta.env.DEV) {
-      console.warn('[登录接口] 响应数据为空:', res)
+      console.warn('[登录接口] 未取得有效登录凭据:', { code: res.code, message: res.message })
     }
     fail(res)
   } catch (err) {

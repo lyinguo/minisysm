@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @Author: 小夏
@@ -32,20 +33,20 @@ public interface PurchaseReturnFormApis {
      * @param pid 需要删除的订单 id
      * @return 删除状态 若删除失败 会返回第一个pid
      * */
-    JsonVO<String> deletePurchaseReturnForm(@NotEmpty(message = "采购退货单ID列表不能为空") List<String> pid);
+    JsonVO<String> deletePurchaseReturnForm(@NotNull(message = "请提交已读版本命令") PurchaseReturnCommand command);
 
     /**
      * 更新采购退货单接口
      * @param purchaseUpdateDTO 前端更新之后的 DTO 对象
      * @return 在数据库的更新状态 0表示失败 1表示成功
      * */
-    JsonVO<Integer> updatePurchaseReturnForm(@NotNull(message = "更新数据不能为空") PurchaseUpdateDTO purchaseUpdateDTO);
+    JsonVO<Integer> updatePurchaseReturnForm(@NotNull(message = "更新数据不能为空") PurchaseReturnDraftDTO purchaseUpdateDTO);
 
     /**
      * @param checkOutReturnGoodsDTO 需要核对或者反核对的订单
      * @return 核对或反核对之后的状态 0表示失败 1表示成功
      * */
-    JsonVO<Integer> checkOut(@NotEmpty(message = "核对ID列表不能为空")CheckOutReturnGoodsDTO checkOutReturnGoodsDTO);
+    JsonVO<Integer> checkOut(@NotNull(message = "请提交已读版本命令") PurchaseReturnCommand command);
 
     /**
      * @Author: xiaoliu
@@ -54,7 +55,7 @@ public interface PurchaseReturnFormApis {
      * @param purchaseReturnQuery
      * @return 采购退货单列表
      */
-    JsonVO<PageDTO<PurchaseReturnListVO>> listPurchaseReturns(@NotNull(message = "查询参数不能为空") PurchaseReturnQuery purchaseReturnQuery);
+    JsonVO<PageDTO<Map<String,Object>>> listPurchaseReturns(@NotNull(message = "查询参数不能为空") PurchaseReturnQuery purchaseReturnQuery);
 
     /**
      * @Author: xiaoliu
@@ -63,7 +64,7 @@ public interface PurchaseReturnFormApis {
      * @param id 采购退货单id
      * @return 采购退货单详情
      */
-    JsonVO<PurchaseReturnDetailVO> getPurchaseReturnDetail(@NotEmpty(message = "采购退货单id不能为空") String id);
+    JsonVO<Map<String,Object>> getPurchaseReturnDetail(@NotEmpty(message = "采购退货单id不能为空") String id);
 
     /**
      * @Author: xiaoliu
@@ -72,7 +73,7 @@ public interface PurchaseReturnFormApis {
      * @param purchaseReturnAddDTO 采购退货单详情
      * @return 采购退货单id
      */
-    JsonVO<String> savePurchaseReturn(@NotNull(message = "采购退货单数据不能为空") @Validated PurchaseReturnAddDTO purchaseReturnAddDTO);
+    JsonVO<String> savePurchaseReturn(@NotNull(message = "采购退货单数据不能为空") PurchaseReturnDraftDTO purchaseReturnAddDTO);
 
     /**
      * @author 斗气化码
@@ -80,7 +81,7 @@ public interface PurchaseReturnFormApis {
      * @param purchaseReturnBreAuditDTO 采购退货单审核DTO
      * @return 操作结果
      */
-    JsonVO<String> approve(@NotNull(message = "采购退货单审核DTO不能为空") PurchaseReturnBreAuditDTO purchaseReturnBreAuditDTO);
+    JsonVO<Integer> approve(@NotNull(message = "请提交已读版本命令") PurchaseReturnCommand command);
 
     /**
      * @author 斗气化码

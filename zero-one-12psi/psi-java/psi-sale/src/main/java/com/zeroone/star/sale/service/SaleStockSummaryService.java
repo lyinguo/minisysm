@@ -87,7 +87,7 @@ public class SaleStockSummaryService {
         Map<String,BigDecimal> prices=new HashMap<>();
         for(Map<String,Object> attr:db.queryForList("SELECT name,buy FROM attr WHERE pid=?",goods)) prices.put(s(attr.get("name")),d(attr.get("buy")));
         String closedDate=s(db.queryForObject("SELECT MAX(date) FROM period",java.sql.Date.class));
-        List<Map<String,Object>> movements=db.queryForList("SELECT s.*,CASE WHEN s.type='buy' THEN (SELECT total FROM buy_info WHERE id=s.info AND pid=s.`class`) END AS purchase_net,DATE_FORMAT(s.time,'%Y-%m-%d') AS posting_date FROM summary s LEFT JOIN psi_stock_posting_order o ON o.movement_id=s.id WHERE s.goods=? ORDER BY s.time,COALESCE(o.sequence,0),s.id FOR UPDATE",goods);
+        List<Map<String,Object>> movements=db.queryForList("SELECT s.*,CASE WHEN s.type='buy' THEN (SELECT total FROM buy_info WHERE id=s.info AND pid=s.`class`) END AS purchase_net,CASE WHEN s.type='bre' THEN (SELECT total FROM bre_info WHERE id=s.info AND pid=s.`class`) END AS purchase_return_net,DATE_FORMAT(s.time,'%Y-%m-%d') AS posting_date FROM summary s LEFT JOIN psi_stock_posting_order o ON o.movement_id=s.id WHERE s.goods=? ORDER BY s.time,COALESCE(o.sequence,0),s.id FOR UPDATE",goods);
         clearFifo(goods);
         db.update("UPDATE summary SET handle=0 WHERE goods=?",goods);
         Map<String,Balance> balances=new HashMap<>();
@@ -108,6 +108,8 @@ public class SaleStockSummaryService {
             if("base".equals(valuation)) cost=fixed ? d(row.get("price")):purchase;
             else if("ma".equals(valuation)) cost=fixed ? d(row.get("price")):previous.quantity.signum()>0 ? previous.value.divide(previous.quantity,8,RoundingMode.HALF_UP):purchase;
             if(incoming && "buy".equals(type) && row.get("purchase_net")!=null) exactValue=d(row.get("purchase_net"));
+            // Preserve source return net before rounded unit prices; FIFO below computes its own layer value.
+            if(!incoming && "bre".equals(type) && row.get("purchase_return_net")!=null) exactValue=d(row.get("purchase_return_net"));
             if("ma".equals(valuation) && !fixed && !incoming && previous.quantity.signum()>0)
                 exactValue=previous.value.multiply(quantity).divide(previous.quantity,4,RoundingMode.HALF_UP);
             Deque<Layer> queue=layers.computeIfAbsent(selected,k->new ArrayDeque<>());

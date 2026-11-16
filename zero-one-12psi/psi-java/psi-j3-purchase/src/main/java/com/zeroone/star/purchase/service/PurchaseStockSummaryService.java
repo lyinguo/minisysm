@@ -47,6 +47,18 @@ public class PurchaseStockSummaryService {
         db.update("DELETE FROM summary WHERE type='buy' AND `class`=?",sale);
         for(String product:goods) rebuild(product);
     }
+    public void addPurchaseReturn(Map<String,Object> head,Map<String,Object> line,String ledger,BigDecimal quantity,BigDecimal price){
+        String summary=id();
+        db.update("INSERT INTO summary(id,pid,type,`class`,info,time,goods,attr,warehouse,batch,mfd,serial,direction,price,nums,uct,bct,exist,balance,handle) VALUES(?,?,'bre',?,?,?,?,?,?,?,?,?,0,?,?,0,0,'[0,0,0,0]','[0,0,0,0]',0)",summary,ledger,head.get("id"),line.get("id"),head.get("time"),line.get("goods"),line.get("attr"),line.get("warehouse"),line.get("batch"),line.get("mfd"),line.get("serial"),price,quantity);
+        db.update("INSERT INTO psi_stock_posting_order(movement_id) VALUES(?)",summary);rebuild(s(line.get("goods")));
+    }
+    public void removePurchaseReturn(String identifier){
+        List<String> goods=db.queryForList("SELECT DISTINCT goods FROM summary WHERE type='bre' AND `class`=?",String.class,identifier);
+        for(String product:goods)clearFifo(product);
+        db.update("DELETE FROM psi_stock_posting_order WHERE movement_id IN (SELECT id FROM summary WHERE type='bre' AND `class`=?)",identifier);
+        db.update("DELETE FROM summary WHERE type='bre' AND `class`=?",identifier);
+        for(String product:goods)rebuild(product);
+    }
     private void clearFifo(String goods) {
         db.update("DELETE FROM fifo WHERE `out` IN (SELECT id FROM summary WHERE goods=?) OR `in` IN (SELECT id FROM summary WHERE goods=?)",goods,goods);
     }
@@ -71,7 +83,7 @@ public class PurchaseStockSummaryService {
         Map<String,BigDecimal> prices=new HashMap<>();
         for(Map<String,Object> attr:db.queryForList("SELECT name,buy FROM attr WHERE pid=?",goods)) prices.put(s(attr.get("name")),d(attr.get("buy")));
         String closedDate=s(db.queryForObject("SELECT MAX(date) FROM period",java.sql.Date.class));
-        List<Map<String,Object>> movements=db.queryForList("SELECT s.*,CASE WHEN s.type='buy' THEN (SELECT total FROM buy_info WHERE id=s.info AND pid=s.`class`) END AS purchase_net,DATE_FORMAT(s.time,'%Y-%m-%d') AS posting_date FROM summary s LEFT JOIN psi_stock_posting_order o ON o.movement_id=s.id WHERE s.goods=? ORDER BY s.time,COALESCE(o.sequence,0),s.id FOR UPDATE",goods);
+        List<Map<String,Object>> movements=db.queryForList("SELECT s.*,CASE WHEN s.type='buy' THEN (SELECT total FROM buy_info WHERE id=s.info AND pid=s.`class`) END AS purchase_net,CASE WHEN s.type='bre' THEN (SELECT total FROM bre_info WHERE id=s.info AND pid=s.`class`) END AS purchase_return_net,DATE_FORMAT(s.time,'%Y-%m-%d') AS posting_date FROM summary s LEFT JOIN psi_stock_posting_order o ON o.movement_id=s.id WHERE s.goods=? ORDER BY s.time,COALESCE(o.sequence,0),s.id FOR UPDATE",goods);
         clearFifo(goods);
         db.update("UPDATE summary SET handle=0 WHERE goods=?",goods);
         Map<String,Balance> balances=new HashMap<>();
@@ -92,6 +104,8 @@ public class PurchaseStockSummaryService {
             if("base".equals(valuation)) cost=fixed ? d(row.get("price")):purchase;
             else if("ma".equals(valuation)) cost=fixed ? d(row.get("price")):previous.quantity.signum()>0 ? previous.value.divide(previous.quantity,8,RoundingMode.HALF_UP):purchase;
             if(incoming && "buy".equals(type) && row.get("purchase_net")!=null) exactValue=d(row.get("purchase_net"));
+            // Preserve source return net before rounded unit prices; FIFO below computes its own layer value.
+            if(!incoming && "bre".equals(type) && row.get("purchase_return_net")!=null) exactValue=d(row.get("purchase_return_net"));
             if("ma".equals(valuation) && !fixed && !incoming && previous.quantity.signum()>0)
                 exactValue=previous.value.multiply(quantity).divide(previous.quantity,4,RoundingMode.HALF_UP);
             Deque<Layer> queue=layers.computeIfAbsent(selected,k->new ArrayDeque<>());

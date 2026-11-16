@@ -47,7 +47,7 @@ const routes: RouteRecordRaw[] = [
       label: '采购退货单',
       icon: 'mdi:cart-remove'
     },
-    component: () => import('@/views/purchase/return/PurchaseReturn.vue')
+    component: () => import('@/views/purchase/return/PurchaseReturnWorkspace.vue')
   },
   {
     path: 'purchase-return-report',
@@ -56,7 +56,7 @@ const routes: RouteRecordRaw[] = [
       label: '采购退货单报表',
       icon: 'mdi:file-chart'
     },
-    component: () => import('@/views/purchase/return/PurchaseReturnForm.vue')
+    component: () => import('@/views/purchase/return/PurchaseReturnWorkspace.vue')
   }
 ]
 

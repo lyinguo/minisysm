@@ -339,14 +339,18 @@
       </div>
     </template>
   </el-dialog>
+  <PurchaseReturnSourceDialog v-model="returnSourceOpen" :source="returnSource" :loading="returnSourceLoading" :error="returnSourceError" @continue="continueReturn" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, ArrowDown, Setting, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 import Supplier from '@/components/goodSearchConpoent/Supplier.vue'
-import { useRouter } from 'vue-router'
+import PurchaseReturnSourceDialog from '../return/PurchaseReturnSourceDialog.vue'
+import { purchaseReturnSourceApi } from '@/apis/purchase/returnSource'
+import type { PurchaseReturnSource } from '@/apis/purchase/returnSource'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import Warehouse from '@/components/goodSearchConpoent/Warehouse.vue'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
@@ -424,7 +428,7 @@ const handleSupplierSearch = (params: any) => {
   }
 }
 
-const router = useRouter()
+
 
 /* 审核状态 */
 const isApproved = ref(false)
@@ -472,56 +476,36 @@ const toggleCheck = async () => {
 }
 const readOnly = computed(() => loading.value || saving.value || attachmentBusy.value || !!loadError.value || !currentDocument.value || isApproved.value || isChecked.value)
 
-/* 生成到其他单据 */
-const generateTo = (type: 'purchaseReturn') => {
-  // 有效商品行（过滤掉空行）
-  const validRows = tableData.value.filter((r) => r.productName)
-
-  // 打包要传递的数据
-  const payload = {
-    from: 'purchase-order-detail',
-    businessType: 'purchase-return',
-    header: { ...header },
-    supplier: supplierModel.value,
-    tableData: validRows,
-    footer: { ...footer },
-    isApproved: isApproved.value,
-    timestamp: Date.now()
+/* Validate the persisted source instead of transferring editable rows through browser storage. */
+const returnSourceOpen = ref(false), returnSourceLoading = ref(false), returnSourceError = ref('')
+const returnSource = ref<PurchaseReturnSource | null>(null)
+const router = useRouter()
+let returnSourceSequence = 0
+async function continueReturn(id: string, version: string) {
+  if (returnSourceLoading.value || returnSourceError.value || !returnSourceOpen.value || !innerVisible.value) return
+  if (returnSource.value?.source !== id || returnSource.value?.sourceVersion !== version || currentDocument.value?.header.id !== id || currentDocument.value?.version !== version || !isApproved.value || hasUnsavedChanges.value) {
+    returnSourceError.value = '采购单已变化，请重新打开详情并核对退货来源'; return
   }
-
-  // 存到 sessionStorage，让目标页读取
-  sessionStorage.setItem('PO_DETAIL_TRANSFER', JSON.stringify(payload))
-
-  // 构造路由目标：跳转到采购退货单页面
-  const targetRoute = {
-    path: '/purchase-return', // 采购退货单路由
-    query: {
-      from: 'purchase-order-detail',
-      dataTransfer: 'true'
-    }
-  }
-
-  console.log('🎯 准备跳转到:', targetRoute)
-
-  // 执行跳转
-  router
-    .push(targetRoute)
-    .then(() => {
-      console.log('✅ 路由跳转成功')
-      if (validRows.length === 0) {
-        ElMessage.info('正在跳转到采购退货单页面（无商品数据）')
-      } else {
-        ElMessage.success(`正在跳转到采购退货单页面，共 ${validRows.length} 条数据`)
-      }
-    })
-    .catch((error: any) => {
-      console.error('❌ 路由跳转失败:', error)
-      ElMessage.error('路由跳转失败，请检查路由配置')
-    })
-
-  console.log('🏁 [generateTo] 执行完成')
+  returnSourceLoading.value = true
+  try { await router.push({ path: '/purchase-return', query: { source: id, sourceVersion: version } }); returnSourceOpen.value = false; innerVisible.value = false }
+  catch (error) { returnSourceError.value = extractErrorMessage(error) }
+  finally { returnSourceLoading.value = false }
 }
-
+watch(innerVisible, visible => { if (!visible) { returnSourceSequence++; returnSourceOpen.value = false; returnSourceLoading.value = false; returnSource.value = null } })
+watch(() => currentDocument.value?.header.id, () => { returnSourceSequence++; returnSourceOpen.value = false; returnSourceLoading.value = false; returnSource.value = null })
+async function generateTo(_type: 'purchaseReturn') {
+  if (loading.value || saving.value || attachmentBusy.value || loadError.value || returnSourceLoading.value || !currentDocument.value || !isApproved.value) return
+  if (hasUnsavedChanges.value) { ElMessage.warning('请先保存修改，并重新打开核对原采购单'); return }
+  const id = String(currentDocument.value.header.id), reviewed = currentDocument.value.version, sequence = ++returnSourceSequence
+  returnSourceOpen.value = true; returnSourceLoading.value = true; returnSourceError.value = ''; returnSource.value = null
+  try {
+    const data = await purchaseReturnSourceApi.preview(id)
+    if (sequence !== returnSourceSequence || !returnSourceOpen.value || !innerVisible.value || String(currentDocument.value?.header.id) !== id) return
+    if (hasUnsavedChanges.value || currentDocument.value?.version !== reviewed || data.sourceVersion !== reviewed) throw new Error('原采购单已变化，请关闭详情并重新打开核对后再查看退货来源')
+    returnSource.value = data
+  } catch (error) { if (sequence === returnSourceSequence) returnSourceError.value = extractErrorMessage(error) }
+  finally { if (sequence === returnSourceSequence) returnSourceLoading.value = false }
+}
 // 表格数据
 const tableData = ref<Record<string, any>[]>([])
 
