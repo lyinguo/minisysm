@@ -29,14 +29,15 @@ public class PurchaseDocumentAccess {
         UserDTO actor;
         try { actor=users.getCurrentUser(); } catch(Exception error) { throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录"); }
         if(actor==null || actor.getId()==null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
-        List<Map<String,Object>> found=db.queryForList("SELECT u.frame,u.role,r.id AS role_id,r.keyword FROM `user` u LEFT JOIN role r ON r.id=u.role WHERE u.id=?",actor.getId());
+        List<Map<String,Object>> found=db.queryForList("SELECT u.frame,u.role,r.id AS role_id FROM `user` u LEFT JOIN role r ON r.id=u.role WHERE u.id=?",actor.getId());
         if(found.size()!=1) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在");
         Map<String,Object> row=found.get(0);
         actor.setFrameId(row.get("frame")==null ? null:row.get("frame").toString());
         if("0".equals(String.valueOf(row.get("role")))) actor.setRoles(Collections.singletonList("ROLE_ADMIN"));
         else {
             if(row.get("role_id")==null) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号角色不存在");
-            actor.setRoles(Collections.singletonList(RoleAuthority.resolve(row.get("role_id").toString(),(String)row.get("keyword"))));
+            // Only DB role 0 is administrator; ordinary authority uses its immutable role ID.
+            actor.setRoles(Collections.singletonList(RoleAuthority.resolve(row.get("role_id").toString(),null)));
             frame(actor);
             if(resource!=null && !DatabaseResourcePermission.allowed(db,row.get("role_id").toString(),resource))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有采购单操作权限");

@@ -48,6 +48,8 @@ public class SaleFormServiceImpl implements SaleFormService {
     @Resource
     private com.zeroone.star.sale.service.SaleCheckService saleChecks;
     @Resource
+    private org.springframework.jdbc.core.JdbcTemplate auditDb;
+    @Resource
     private SaleFormMapper saleFormMapper;
 
     @Resource
@@ -172,6 +174,15 @@ public class SaleFormServiceImpl implements SaleFormService {
         }
         /// 执行批量删除 同时删除主表以及详情表有关的数据
         saleMapper.deleteBatchWithDetails(ids);
+
+        java.sql.Timestamp deletedAt=java.sql.Timestamp.valueOf(LocalDateTime.now());
+        for(String id:ids){
+            SaleDO sale=saleMap.get(id);
+            auditDb.update("INSERT INTO record(id,type,source,time,`user`,info) VALUES(?,'sell',?,?,?,?)",
+                    IdUtil.fastSimpleUUID(),id,deletedAt,actor.getId(),"删除销售单");
+            auditDb.update("INSERT INTO `log`(id,time,`user`,info) VALUES(?,?,?,?)",
+                    IdUtil.fastSimpleUUID(),deletedAt,actor.getId(),"删除销售单["+sale.getNumber()+"]["+id+"]");
+        }
 
         /// 最终只返回删除主表的个数
         return ids.size();

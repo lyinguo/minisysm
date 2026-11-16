@@ -15,13 +15,14 @@ public class ReceiptDocumentAccess {
     public UserDTO authorize(String path){
         UserDTO actor;try{actor=users.getCurrentUser();}catch(Exception error){throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");}
         if(actor==null || actor.getId()==null)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"请重新登录");
-        List<Map<String,Object>> rows=db.queryForList("SELECT u.frame,u.role,r.id AS role_id,r.keyword FROM `user` u LEFT JOIN role r ON r.id=u.role WHERE u.id=?",actor.getId());
+        List<Map<String,Object>> rows=db.queryForList("SELECT u.frame,u.role,r.id AS role_id FROM `user` u LEFT JOIN role r ON r.id=u.role WHERE u.id=?",actor.getId());
         if(rows.size()!=1)throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"账号不存在");Map<String,Object> row=rows.get(0);
         actor.setFrameId(Objects.toString(row.get("frame"),""));
         if("0".equals(Objects.toString(row.get("role"),"")))actor.setRoles(Collections.singletonList("ROLE_ADMIN"));
         else{
             if(row.get("role_id")==null)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号角色不存在");
-            actor.setRoles(Collections.singletonList(RoleAuthority.resolve(row.get("role_id").toString(),(String)row.get("keyword"))));
+            // Only DB role 0 is administrator; ordinary authority uses its immutable role ID.
+            actor.setRoles(Collections.singletonList(RoleAuthority.resolve(row.get("role_id").toString(),null)));
             if(actor.getFrameId().isEmpty() || "0".equals(actor.getFrameId()))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号缺少有效组织");
             if(db.queryForObject("SELECT COUNT(*) FROM frame WHERE id=?",Integer.class,actor.getFrameId())!=1)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"账号所属组织已不存在，请联系管理员修正组织后重新操作");
             if(!DatabaseResourcePermission.allowed(db,row.get("role_id").toString(),path))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"没有收款单操作权限");
