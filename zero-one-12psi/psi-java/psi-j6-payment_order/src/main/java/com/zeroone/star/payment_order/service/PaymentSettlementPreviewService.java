@@ -37,17 +37,19 @@ public class PaymentSettlementPreviewService {
     }
     private List<Map<String,Object>> documents(String type,Map<String,Object> payment){
         String marker=type.equals("buy")?"psi_purchase_posting":"psi_purchase_return_posting",markerId=type.equals("buy")?"purchase_id":"return_id";
-        List<Map<String,Object>> rows=db.queryForList("SELECT h.id,h.number,h.time,h.frame,h.supplier,h.actual,h.money,CAST(h.examine AS SIGNED) AS approval_state,CAST(h.nucleus AS SIGNED) AS settlement_state FROM "+type+" h WHERE h.frame=? AND h.supplier=? AND h.examine=1 AND DATE(h.time)<=DATE(?) ORDER BY h.time,h.id",payment.get("frame"),payment.get("supplier"),payment.get("time"));
-        if(rows.size()>500)throw new IllegalArgumentException("待核对单据超过500张，请先分批结算或缩小业务范围");
+        // Aggregate closed histories in one query; their count must not block new business.
+        // Validate every matching head before excluding closed ones, including corrupt history.
+        List<Map<String,Object>> rows=db.queryForList("SELECT h.id,h.number,h.time,h.frame,h.supplier,h.actual,h.money,CAST(h.examine AS SIGNED) AS approval_state,CAST(h.nucleus AS SIGNED) AS settlement_state,COALESCE(SUM(b.money),0) AS paid_total,MIN(b.money) AS minimum_payment FROM "+type+" h LEFT JOIN "+type+"_bill b ON b.pid=h.id WHERE h.frame=? AND h.supplier=? AND h.examine=1 AND DATE(h.time)<=DATE(?) GROUP BY h.id ORDER BY h.time,h.id",payment.get("frame"),payment.get("supplier"),payment.get("time"));
         List<Map<String,Object>> result=new ArrayList<>();
         for(Map<String,Object> row:rows){
-            List<Map<String,Object>> bills=db.queryForList("SELECT * FROM "+type+"_bill WHERE pid=? ORDER BY id",row.get("id"));
-            BigDecimal paid=BigDecimal.ZERO;for(Map<String,Object> bill:bills){BigDecimal money=d(bill.get("money"));if(money.signum()<0)throw new IllegalArgumentException("来源单据核销金额无效，请先核对历史数据");paid=paid.add(money);}
+            BigDecimal paid=d(row.remove("paid_total")),minimum=d(row.remove("minimum_payment"));
+            if(minimum.signum()<0)throw new IllegalArgumentException("来源单据核销金额无效，请先核对历史数据");
             BigDecimal actual=d(row.get("actual")),remaining=actual.subtract(paid);
             if(actual.signum()<0 || remaining.signum()<0)throw new IllegalArgumentException("来源单据已核销金额超过实际金额");
             int expected=paid.signum()==0?0:remaining.signum()==0?2:1;
             if(((Number)row.get("settlement_state")).intValue()!=expected)throw new IllegalArgumentException("来源单据核销状态与实际核销明细不一致");
             if(remaining.signum()==0)continue;
+            List<Map<String,Object>> bills=db.queryForList("SELECT * FROM "+type+"_bill WHERE pid=? ORDER BY id",row.get("id"));
             if(db.queryForObject("SELECT COUNT(*) FROM "+marker+" WHERE "+markerId+"=?",Integer.class,row.get("id"))!=1)throw new IllegalArgumentException("来源单据只有审核标记，缺少实际入账凭据");
             List<Map<String,Object>> evidence=new ArrayList<>();evidence.add(new LinkedHashMap<>(row));evidence.addAll(bills);evidence.addAll(db.queryForList("SELECT id FROM record WHERE type=? AND source=? ORDER BY id",type,row.get("id")));
             row.put("version",digest(evidence));row.put("type",type);row.put("settled",paid);row.put("remaining",remaining);result.add(row);
