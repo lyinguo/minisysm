@@ -307,6 +307,7 @@
 
     <!-- 底部表单 -->
     <DocumentForm ref="documentFormRef" :fields="purchaseOrderFields" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.paidAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
+    <el-alert type="info" :closable="false" show-icon title="需要附件时，先保存采购草稿。保存后会进入采购单报表，打开该单详情，在“采购单附件”上传；上传后立即保存。" />
 
     <!-- 商品选择弹窗（用于 el-table） -->
     <OperationPopTable
@@ -743,7 +744,6 @@ const purchaseOrderFields = [
   'settlementAccount', // 结算账户
   'relatedPerson', // 关联人员
   'logistics', // 物流信息
-  'documentAttachment', // 单据附件
   'remarks' // 备注信息
 ]
 

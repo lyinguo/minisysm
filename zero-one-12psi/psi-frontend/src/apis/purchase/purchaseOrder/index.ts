@@ -1,3 +1,5 @@
+import type {PurchaseOrderAttachmentResult} from '@/apis/purchase/PurchaseBooking/order'
+import {extractErrorMessage} from '@/apis/utils/jsonResponse'
 import { useHttp, DataUpType } from '@/plugins/http'
 import type { ApiResponse } from '@/apis/type'
 import type {
@@ -14,6 +16,37 @@ const currBaseUrl = '/j3-purchase/purchase-note'
  */
 export class PurchaseNoteAPI {
   private static http = useHttp()
+  private static attachmentError(error:unknown,fallback:string){const message=extractErrorMessage(error);return new Error(message==='请求失败'?fallback:message)}
+  static async uploadAttachment(order: string, version: string, file: File): Promise<PurchaseOrderAttachmentResult> {
+    try {
+      if (!file.size || file.size > 5 * 1024 * 1024) throw new Error('请选择非空附件，单个文件不能超过5MiB')
+      const result = await this.http.postWithFile<PurchaseOrderAttachmentResult>(`${currBaseUrl}/attachments/${encodeURIComponent(order)}`, {version, file})
+      if (result.code !== 10000 || !result.data) throw new Error(result.message || '附件上传失败')
+      return result.data
+    } catch (error) { throw this.attachmentError(error, '附件上传失败') }
+  }
+  static async removeAttachment(order: string, id: string, version: string): Promise<PurchaseOrderAttachmentResult> {
+    try {
+      const result = await this.http.delete<PurchaseOrderAttachmentResult>(`${currBaseUrl}/attachments/${encodeURIComponent(order)}/${encodeURIComponent(id)}`, {version}, {upType: DataUpType.json})
+      if (result.code !== 10000 || !result.data) throw new Error(result.message || '附件移除失败')
+      return result.data
+    } catch (error) { throw this.attachmentError(error, '附件移除失败') }
+  }
+  static async downloadAttachment(order: string, id: string): Promise<Blob> {
+    try {
+      const result = await this.http.getFile(`${currBaseUrl}/attachments/${encodeURIComponent(order)}/${encodeURIComponent(id)}`, {}, {responseType: 'blob'})
+      const blob = result instanceof Blob ? result : result?.data
+      if (!(blob instanceof Blob)) throw new Error('下载失败，未返回附件')
+      if (blob.type.includes('json')) {
+        let message = '附件下载失败'
+        try { const data = JSON.parse(await blob.text()); message = typeof data.data === 'string' ? data.data : data.message || message } catch { /* Preserve the safe fallback. */ }
+        throw new Error(message)
+      }
+      return blob
+    } catch (error) { throw this.attachmentError(error, '附件下载失败') }
+  }
+
+
   static getList(params: Record<string, any>) {
     return this.http.get<import('@/apis/type').PageDTO<import('./type').PurchaseListItem>>(`${currBaseUrl}/list`, params)
   }

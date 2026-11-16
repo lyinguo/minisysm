@@ -29,6 +29,12 @@ class BackupSuite(PurchasePostingSuite):
             'SELECT balance FROM account WHERE id='+literal(self.account)+';'+
             'SELECT balance FROM supplier WHERE id='+literal(self.supplier)+';')
 
+    def attachments(self,state):
+        result={}
+        for table,parent in [('psi_bor_attachment','order_id'),('psi_buy_attachment','purchase_id')]:
+            result[table]=sql(state,'SELECT id,'+parent+',name,file_size,sha256,SHA2(body,256),user_id,created_at,removed_at,removed_by FROM '+table+' ORDER BY id;')
+        return result
+
     def run(self):
         def permissions():
             _,user,_=self.new_user();token=PurchaseUiSuite.login(self,user)
@@ -56,6 +62,13 @@ class BackupSuite(PurchasePostingSuite):
 
         def restore():
             self.fixture();identifier=self.create_document(paid=25)
+            # Actual uploads ensure this standalone restore suite contains both new binary tables.
+            from purchase_attachment_acceptance import PurchaseAttachmentSuite
+            from booking_attachment_acceptance import AttachmentSuite
+            uploaded=PurchaseAttachmentSuite.upload(self,identifier,version=self.document(identifier)['version'],data=b'QA backup receipt\x00\xff',name='QA backup receipt.txt')
+            assert uploaded.get('code')==10000
+            order_files=AttachmentSuite(self.state);order=order_files.fresh();item=order_files.added(order,data=b'QA backup order\x00\xff',name='QA backup order.txt')
+            assert order_files.remove(order,item['id']).get('code')==10000
             assert self.check([identifier]).get('code')==10000 and self.post([identifier]).get('code')==10000
             marker='qa_backup_'+uuid.uuid4().hex[:12];trigger=marker+'_trg'
             sql(self.state,'CREATE TABLE `'+marker+'` (id INT PRIMARY KEY,txt TEXT,amount DECIMAL(16,4),bytes LONGBLOB) ENGINE=InnoDB;'+
@@ -64,6 +77,7 @@ class BackupSuite(PurchasePostingSuite):
             restored='psi_qa_'+uuid.uuid4().hex[:12];created=False
             try:
                 before=self.business(self.state,identifier);counts=self.table_counts(self.state)
+                attachment_before=self.attachments(self.state);assert all(attachment_before.values())
                 marker_before=sql(self.state,'SELECT HEX(txt),amount,HEX(bytes) FROM `'+marker+'`;')
                 data,headers=self.backup()
                 assert data.startswith(b'-- MySQL dump') and b'CREATE TABLE' in data
@@ -77,12 +91,13 @@ class BackupSuite(PurchasePostingSuite):
                 sql(target,text)
                 assert self.table_counts(target)==counts,'Restored table set/counts differ from actual backup source'
                 assert self.business(target,identifier)==before,'Restored real stock/cash/payable/document state differs'
+                assert self.attachments(target)==attachment_before,'Restored attachment bytes/metadata/operators/removal flags differ'
                 assert sql(target,'SELECT HEX(txt),amount,HEX(bytes) FROM `'+marker+'`;')==marker_before,'Unicode/binary/decimal values not restored exactly'
                 assert sql(target,'SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema=DATABASE() AND trigger_name='+literal(trigger)+';')=='1'
                 sql(target,'INSERT INTO `'+marker+'` VALUES(2,\'restored trigger\',1,0xFF);')
                 assert sql(target,'SELECT amount FROM `'+marker+'` WHERE id=2;')=='2.0000','Restored trigger is not functional'
                 assert self.business(self.state,identifier)==before and self.table_counts(self.state)==counts,'Backup or restore modified the source'
-                return ['Actual SQL file and SHA256 valid; restored all base-table counts into a new isolated database', 'Real audited purchase stock/cash/payable state and exact Unicode/binary/decimal content preserved; restored trigger executes; original source unchanged']
+                return ['Actual SQL file and SHA256 valid; restored all base-table counts into a new isolated database', 'Both actual-uploaded attachment tables preserve every binary SHA256, metadata, operator and logical-removal flag', 'Real audited purchase stock/cash/payable state and exact Unicode/binary/decimal content preserved; restored trigger executes; original source unchanged']
             finally:
                 if created:
                     assert re.fullmatch('psi_qa_[0-9a-f]{12}',restored) and restored!=self.state['database']

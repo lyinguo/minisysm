@@ -105,6 +105,7 @@ export interface PurchaseNoteAddDTO {
 }
 
 export interface PurchaseDocument {
+  attachments?: import('@/apis/purchase/PurchaseBooking/order').PurchaseOrderAttachment[]
   version: string
   header: Record<string, any>
   items: Record<string, any>[]

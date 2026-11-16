@@ -10,7 +10,8 @@ import java.security.MessageDigest;
 @Service
 public class PurchaseSnapshotService {
     private final JdbcTemplate db;
-    public PurchaseSnapshotService(JdbcTemplate db){this.db=db;}
+    private final PurchaseAttachmentStore attachments;
+    public PurchaseSnapshotService(JdbcTemplate db,PurchaseAttachmentStore attachments){this.db=db;this.attachments=attachments;}
     private String digest(List<Map<String,Object>> rows){
         StringBuilder text=new StringBuilder();
         for(Map<String,Object> row:rows){text.append('{');for(String key:new TreeSet<>(row.keySet())){
@@ -25,9 +26,10 @@ public class PurchaseSnapshotService {
         rows.addAll(db.queryForList("SELECT * FROM buy WHERE id=?"+suffix,id));
         rows.addAll(db.queryForList("SELECT * FROM buy_info WHERE pid=? ORDER BY id"+suffix,id));
         rows.addAll(db.queryForList("SELECT id FROM record WHERE type='buy' AND source=? ORDER BY id"+suffix,id));
+        rows.addAll(attachments.versionRows(id,locked));
         return digest(rows);
     }
-    /** Exactly three batch reads inside the caller's repeatable-read list transaction. */
+    /** Four metadata-only batch reads inside the caller's repeatable-read list transaction. */
     public Map<String,String> versions(List<String> ids){
         Map<String,String> result=new HashMap<>();if(ids.isEmpty())return result;
         if(ids.size()>200)throw new IllegalArgumentException("每页最多200张采购单");
@@ -36,6 +38,7 @@ public class PurchaseSnapshotService {
         for(Map<String,Object> head:db.queryForList("SELECT * FROM buy WHERE id IN ("+placeholders+")",args)){List<Map<String,Object>> rows=new ArrayList<>();rows.add(head);documents.put(head.get("id").toString(),rows);}
         for(Map<String,Object> line:db.queryForList("SELECT * FROM buy_info WHERE pid IN ("+placeholders+") ORDER BY pid,id",args)){List<Map<String,Object>> rows=documents.get(line.get("pid").toString());if(rows!=null)rows.add(line);}
         for(Map<String,Object> history:db.queryForList("SELECT id,source FROM record WHERE type='buy' AND source IN ("+placeholders+") ORDER BY source,id",args)){List<Map<String,Object>> rows=documents.get(history.get("source").toString());if(rows!=null)rows.add(Collections.singletonMap("id",history.get("id")));}
+        for(Map<String,Object> attachment:attachments.versionRows(ids)){List<Map<String,Object>> rows=documents.get(attachment.get("purchase_id").toString());if(rows!=null)rows.add(attachment);}
         for(Map.Entry<String,List<Map<String,Object>>> entry:documents.entrySet())result.put(entry.getKey(),digest(entry.getValue()));
         return result;
     }

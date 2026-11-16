@@ -19,7 +19,8 @@ public class PurchaseDraftUpdateService {
     private final PurchaseDraftValidation validation;
     private final PurchaseDocumentAccess access;
     private final PurchaseSnapshotService snapshots;
-    public PurchaseDraftUpdateService(JdbcTemplate db,UserHolder users,PurchaseDraftValidation validation,PurchaseDocumentAccess access,PurchaseSnapshotService snapshots) { this.db=db;this.users=users;this.validation=validation;this.access=access;this.snapshots=snapshots; }
+    private final PurchaseAttachmentStore attachments;
+    public PurchaseDraftUpdateService(JdbcTemplate db,UserHolder users,PurchaseDraftValidation validation,PurchaseDocumentAccess access,PurchaseSnapshotService snapshots,PurchaseAttachmentStore attachments) { this.db=db;this.users=users;this.validation=validation;this.access=access;this.snapshots=snapshots;this.attachments=attachments; }
     private static String s(Object v) { return v==null ? "":v.toString(); }
     private static BigDecimal d(Object v) { return v==null ? BigDecimal.ZERO:new BigDecimal(v.toString()); }
     private static int n(Object v) { return v instanceof Boolean ? ((Boolean)v ? 1:0):v==null ? 0:((Number)v).intValue(); }
@@ -35,6 +36,7 @@ public class PurchaseDraftUpdateService {
         List<Map<String,Object>> lines=db.queryForList("SELECT * FROM buy_info WHERE pid=? ORDER BY id",id);
         Map<String,Object> result=new LinkedHashMap<>();
         result.put("version",snapshots.version(id,false));
+        result.put("attachments",attachments.items(id));
         header.putAll(db.queryForMap("SELECT s.name AS supplierName,f.name AS frameName,p.name AS peopleName,a.name AS accountName FROM buy b LEFT JOIN supplier s ON s.id=b.supplier LEFT JOIN frame f ON f.id=b.frame LEFT JOIN people p ON p.id=b.people LEFT JOIN account a ON a.id=b.account WHERE b.id=?",id));
         result.put("header",header);
         result.put("items",db.queryForList("SELECT i.*,g.name AS goodsName,g.number AS goodsNumber,w.name AS warehouseName FROM buy_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));

@@ -5,8 +5,8 @@
     :close-on-click-modal="false"
     class="po-detail-dialog"
     title="采购单详情"
-    :close-on-press-escape="!saving"
-    :show-close="!saving"
+    :close-on-press-escape="!saving && !attachmentBusy"
+    :show-close="!saving && !attachmentBusy"
   >
     <el-alert v-if="loadError" type="error" :closable="false" show-icon><template #title>{{ loadError }}</template><el-button @click="loadDocument">重新加载</el-button></el-alert>
     <el-alert v-if="saveError" type="error" :title="saveError" :closable="false" show-icon><el-button @click="loadDocument">重新加载单据</el-button></el-alert>
@@ -68,16 +68,16 @@
             </template>
           </el-dropdown>
 
-          <el-button class="ml8" :loading="saving" :disabled="loading || saving || !!loadError || !currentDocument" @click="toggleApprove">反审核</el-button>
+          <el-button class="ml8" :loading="saving" :disabled="loading || saving || attachmentBusy || !!loadError || !currentDocument" @click="toggleApprove">反审核</el-button>
         </template>
 
         <!-- 未审核时：显示 保存 + 审核（隐藏"生成"） -->
         <template v-else>
           <el-button type="primary" :loading="saving" :disabled="readOnly" @click="handleSave">保存修改</el-button>
-          <el-button class="ml8" :loading="saving" :disabled="loading || saving || !isChecked || !!loadError || !currentDocument" @click="toggleApprove">审核</el-button>
+          <el-button class="ml8" :loading="saving" :disabled="loading || saving || attachmentBusy || !isChecked || !!loadError || !currentDocument" @click="toggleApprove">审核</el-button>
         </template>
         <!-- 无论是否审核，都显示这个"核对 / 反核对" -->
-        <el-button class="ml8" :loading="saving" :disabled="loading || saving || isApproved || !!loadError || !currentDocument" @click="toggleCheck">
+        <el-button class="ml8" :loading="saving" :disabled="loading || saving || attachmentBusy || isApproved || !!loadError || !currentDocument" @click="toggleCheck">
           {{ isChecked ? '反核对' : '核对' }}
         </el-button>
       </div>
@@ -317,15 +317,11 @@
           @close="showProductPopup = false"
         />
 
-        <!-- 已审核印章 -->
-        <transition name="fade-zoom">
-          <div v-if="isApproved" class="approved-stamp">已审核</div>
-        </transition>
-
         <!-- 状态栏 -->
         <div class="grid-status">
           <span class="status-item">总条数: {{ totalCount }}</span>
           <span class="status-item">总合计: {{ totalSum }}</span>
+          <el-tag v-if="isApproved" type="success">已审核</el-tag>
         </div>
       </div>
 
@@ -333,11 +329,12 @@
 
       <!-- 底部表单 -->
       <DocumentForm ref="documentFormRef" :fields="purchaseBookFields" :amount="documentNetAmount" :amount-precision="4" :computed-amounts="true" :disabled="readOnly" :readonly-fields="['documentFee']" :optional-fields="['relatedPerson', 'logistics', ...((Number(documentFormRef?.formdata.paidAmount) || 0) > 0 ? [] : ['settlementAccount'])]" />
+      <PurchaseOrderAttachments v-if="currentDocument" :key="String(currentDocument.header.id)" :order-id="String(currentDocument.header.id)" :version="currentDocument.version" :items="currentDocument.attachments || []" :disabled="readOnly || hasUnsavedChanges" :legacy="!!currentDocument.header.file && currentDocument.header.file !== '[]'" document-name="采购单" :api="purchaseAttachmentApi" @updated="attachmentUpdated" @busy="attachmentBusy = $event" />
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <el-button :disabled="saving" @click="innerVisible = false">关闭</el-button>
+        <el-button :disabled="saving || attachmentBusy" @click="innerVisible = false">关闭</el-button>
         <el-button type="primary" :loading="saving" :disabled="readOnly" @click="handleSave">保存修改</el-button>
       </div>
     </template>
@@ -353,10 +350,17 @@ import { useRouter } from 'vue-router'
 import OperationPopTable from '@/components/operationpoptable/OperationPopTable.vue'
 import Warehouse from '@/components/goodSearchConpoent/Warehouse.vue'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
+import PurchaseOrderAttachments from '../booking/PurchaseOrderAttachments.vue'
+import type { PurchaseOrderAttachmentResult } from '@/apis/purchase/PurchaseBooking/order'
 import { PurchaseNoteAPI } from '@/apis/purchase/purchaseOrder'
 import type { PurchaseDocument } from '@/apis/purchase/purchaseOrder/type'
 import { purchaseEditorRows, purchaseEditorPayload, recalculatePurchaseRow } from '@/utils/purchaseDraft'
 import { extractErrorMessage } from '@/apis/utils/jsonResponse'
+const purchaseAttachmentApi={
+  uploadAttachment:(id:string,version:string,file:File)=>PurchaseNoteAPI.uploadAttachment(id,version,file),
+  removeAttachment:(id:string,fileId:string,version:string)=>PurchaseNoteAPI.removeAttachment(id,fileId,version),
+  downloadAttachment:(id:string,fileId:string)=>PurchaseNoteAPI.downloadAttachment(id,fileId)
+}
 
 interface Props {
   visible: boolean
@@ -389,6 +393,13 @@ const saving = ref(false)
 const loadError = ref('')
 const saveError = ref('')
 const currentDocument = ref<PurchaseDocument | null>(null)
+const attachmentBusy = ref(false)
+function attachmentUpdated(result:PurchaseOrderAttachmentResult){
+  if(!currentDocument.value)return
+  currentDocument.value.version=result.version
+  currentDocument.value.attachments=result.items
+  emit('changed')
+}
 const savedSnapshot = ref<string | null>(null)
 function editableSnapshot() {
   return JSON.stringify({header,supplier:supplierId.value,rows:tableData.value.filter(row=>row.productName),form:documentFormRef.value?.formdata})
@@ -418,7 +429,7 @@ const router = useRouter()
 /* 审核状态 */
 const isApproved = ref(false)
 const toggleApprove = async () => {
-  if (loading.value || saving.value || !currentDocument.value || loadError.value) return
+  if (loading.value || saving.value || attachmentBusy.value || !currentDocument.value || loadError.value) return
   if (hasUnsavedChanges.value) { saveError.value='请先保存未提交的修改，再重新打开核对后审核'; return }
   const reviewed=currentDocument.value
   const audited = !isApproved.value
@@ -426,7 +437,7 @@ const toggleApprove = async () => {
   try {
     await ElMessageBox.confirm(audited ? '审核后将实际入库、扣减本单付款并登记应付，是否继续？' : '反审核将撤销本单入库、付款和应付；库存已被使用或存在后续关联时会拒绝。是否继续？', audited ? '审核采购单' : '反审核采购单', { type: 'warning' })
   } catch { return }
-  if (saving.value || currentDocument.value!==reviewed) return
+  if (saving.value || attachmentBusy.value || currentDocument.value!==reviewed) return
   if (hasUnsavedChanges.value) { saveError.value='确认期间内容发生变化，请先保存后重新核对'; return }
   saving.value = true; saveError.value = ''
   try {
@@ -440,14 +451,14 @@ const toggleApprove = async () => {
 }
 const isChecked = ref(false)
 const toggleCheck = async () => {
-  if (loading.value || saving.value || isApproved.value || !currentDocument.value || loadError.value) return
+  if (loading.value || saving.value || attachmentBusy.value || isApproved.value || !currentDocument.value || loadError.value) return
   if (hasUnsavedChanges.value) { saveError.value='请先保存未提交的修改，再重新打开核对'; return }
   const reviewed=currentDocument.value
   const checked = !isChecked.value
   try {
     await ElMessageBox.confirm(checked ? '将核对当前已读取版本的采购单；单据已变化时会拒绝，请确认是否继续？' : '反核对后可以继续编辑采购草稿，是否继续？', checked ? '核对采购单' : '反核对采购单', { type: 'warning' })
   } catch { return }
-  if (saving.value || currentDocument.value!==reviewed) return
+  if (saving.value || attachmentBusy.value || currentDocument.value!==reviewed) return
   if (hasUnsavedChanges.value) { saveError.value='确认期间内容发生变化，请先保存后重新核对'; return }
   saving.value = true; saveError.value = ''
   try {
@@ -459,7 +470,7 @@ const toggleCheck = async () => {
   } catch (error) { saveError.value = extractErrorMessage(error); ElMessage.error(saveError.value) }
   finally { saving.value = false }
 }
-const readOnly = computed(() => loading.value || saving.value || !!loadError.value || !currentDocument.value || isApproved.value || isChecked.value)
+const readOnly = computed(() => loading.value || saving.value || attachmentBusy.value || !!loadError.value || !currentDocument.value || isApproved.value || isChecked.value)
 
 /* 生成到其他单据 */
 const generateTo = (type: 'purchaseReturn') => {
@@ -719,7 +730,6 @@ const purchaseBookFields = [
   'settlementAccount', // 结算账户
   'relatedPerson', // 关联人员
   'logistics', // 物流信息
-  'documentAttachment', // 单据附件
   'remarks' // 备注信息
 ]
 

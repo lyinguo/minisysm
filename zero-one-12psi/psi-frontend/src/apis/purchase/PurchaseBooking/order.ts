@@ -10,6 +10,7 @@ export interface PurchaseOrderAttachment {
   size: number
   sha256: string
   uploadedAt: string
+  uploadedAtMillis?: number
   uploaderName?: string
 }
 export interface PurchaseOrderAttachmentResult { version: string; items: PurchaseOrderAttachment[] }

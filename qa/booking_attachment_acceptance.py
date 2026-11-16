@@ -1,5 +1,6 @@
 """Actual HTTP multipart/binary and independent MySQL checks. Dedicated QA only."""
 import argparse, concurrent.futures, hashlib, json, urllib.request, urllib.error, uuid
+import time
 from booking_detail_acceptance import OrderDetailSuite
 from acceptance import read_state, sql, literal, QA
 from resource_fixture import qa_resource_grants
@@ -38,6 +39,7 @@ class AttachmentSuite(OrderDetailSuite):
             order=self.fresh();old=self.document(order)['data']['version'];data=b'QA actual persisted document\x00\xff'
             item=self.added(order,data=data,name='QA 合同.txt');doc=self.document(order)['data']
             assert doc['attachments']==[item] and doc['version']!=old and item['sha256']==hashlib.sha256(data).hexdigest() and item['size']==len(data)
+            assert abs(float(item['uploadedAtMillis'])/1000-time.time())<30,'Uploaded timestamp does not represent the actual current instant'
             assert sql(self.state,'SELECT CONCAT(file_size,\':\',sha256,\':\',user_id,\':\',HEX(body)) FROM psi_bor_attachment WHERE id='+literal(item['id'])+';')==str(len(data))+':'+hashlib.sha256(data).hexdigest()+':'+self.actor+':'+data.hex().upper()
             self.binary(order,item['id'],data);assert self.records(order)==2;self.unchanged()
             return ['Actual Unicode multipart persists exact binary/SHA/operator; reopened document and binary download agree; stock/funds unchanged']
