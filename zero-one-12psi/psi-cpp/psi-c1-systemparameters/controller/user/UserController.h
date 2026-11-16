@@ -41,13 +41,13 @@ public:
 	API_DEF_ENDPOINT_INFO_AUTH(ZH_WORDS_GETTER("user.add-user.summary"), addUser, UserJsonVO::Wrapper, API_TAG, API_DEF_ADD_AUTH(););
 
 	// 定义新增接口端点
-	API_HANDLER_ENDPOINT_AUTH(API_M_POST, "/user/add-user", addUser, BODY_DTO(UserAddDTO::Wrapper,dto), executeAddUser(dto));
+	API_HANDLER_ENDPOINT_AUTH(API_M_POST, "/user/add-user", addUser, BODY_DTO(UserAddDTO::Wrapper,dto), executeAddUser(dto, authObject->getPayload()));
 
 	// 定义修改用户接口描述
 	API_DEF_ENDPOINT_INFO_AUTH(ZH_WORDS_GETTER("user.mod-user.summary"), modUser, UserJsonVO::Wrapper, API_TAG,API_DEF_ADD_AUTH(););
 
 	// 定义修改接口端点
-	API_HANDLER_ENDPOINT_AUTH(API_M_PUT, "/user/mod-user", modUser, BODY_DTO(UserModDTO::Wrapper, dto), executeModUser(dto));
+	API_HANDLER_ENDPOINT_AUTH(API_M_PUT, "/user/mod-user", modUser, BODY_DTO(UserModDTO::Wrapper, dto), executeModUser(dto, authObject->getPayload()));
 
 	//// 定义删除用户接口描述
 	//API_DEF_ENDPOINT_INFO_AUTH(ZH_WORDS_GETTER("user.del-user.summary"), delUser, UserJsonVO::Wrapper, API_TAG, API_DEF_ADD_AUTH(););
@@ -59,7 +59,7 @@ public:
 	API_DEF_ADD_QUERY_PARAMS(String, "id", ZH_WORDS_GETTER("user.field.id"), "ae65c714d48d4f34b52479f5482c0edd", true);
 		);
 	// 接口端点（QUERY 对应查询参数 URL）
-	API_HANDLER_ENDPOINT_AUTH(API_M_DEL, "/user/del-user", delUser, QUERY(String, id), executeDelUser(id));
+	API_HANDLER_ENDPOINT_AUTH(API_M_DEL, "/user/del-user", delUser, QUERY(String, id), executeDelUser(id, authObject->getPayload()));
 
 	// 定义查询所有用户信息接口描述
 	API_DEF_ENDPOINT_INFO_QUERY_AUTH(ZH_WORDS_GETTER("user.query-all.summary"), queryAllUser, UserQuery, UserPageJsonVO::Wrapper, API_TAG);
@@ -79,9 +79,9 @@ private: // 定义接口执行函数
 	UserPageJsonVO::Wrapper executeQueryAll(const UserQuery::Wrapper& query);
 	UserDetailJsonVO::Wrapper executeQueryOne(const String& id);
 
-	UserJsonVO::Wrapper executeAddUser(const UserAddDTO::Wrapper& dto);
-	UserJsonVO::Wrapper executeModUser(const UserModDTO::Wrapper& dto);
-	UserJsonVO::Wrapper executeDelUser(const String& id);
+	UserJsonVO::Wrapper executeAddUser(const UserAddDTO::Wrapper& dto, const PayloadDTO& payload);
+	UserJsonVO::Wrapper executeModUser(const UserModDTO::Wrapper& dto, const PayloadDTO& payload);
+	UserJsonVO::Wrapper executeDelUser(const String& id, const PayloadDTO& payload);
 };
 	
 

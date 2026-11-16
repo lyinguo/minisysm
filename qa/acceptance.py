@@ -59,6 +59,33 @@ def read_state():
     return state
 
 
+def authenticate_isolated(state):
+    """Bootstrap a fresh disposable QA administrator and obtain a real QA token.
+
+    Never reuse a normal-environment identity to exercise privileged QA writes.
+    The reserved role0 is an explicit setup fixture, not an account API feature.
+    """
+    import bcrypt
+    if not re.fullmatch(r'psi_qa_[0-9a-f]{12}',state['database']) or state.get('oauth_port')!=18002:
+        raise RuntimeError('Refusing administrator setup outside isolated QA')
+    identifier=uuid.uuid4().hex;login='qa_admin_'+identifier[:16];credential=secrets.token_urlsafe(18)
+    hashed=bcrypt.hashpw(credential.encode(),bcrypt.gensalt()).decode()
+    fields=['id','name','py','tel','frame','role','user','pwd','img','token','expire','data','more']
+    values=[identifier,'QA Isolated Administrator','qa','199'+str(int(identifier[:8],16)%100000000).zfill(8),state['frame_id'],'0',login,hashed,'','',0,'Explicit isolated administrator fixture','{}']
+    sql(state,'INSERT INTO `user`('+','.join('`'+key+'`' for key in fields)+') VALUES('+','.join(literal(value) for value in values)+');')
+    client=json.loads((QA/'runtime/oauth-client.json').read_text(encoding='utf-8'))
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    request=urllib.request.Request('http://127.0.0.1:18002/oauth/token',data=urllib.parse.urlencode(dict(grant_type='password',client_id=client['mgr-id'],client_secret=client['mgr-password'],username=login,password=credential)).encode())
+    with opener.open(request,timeout=20) as response:body=json.load(response)
+    token=body.get('access_token') or body.get('token')
+    if not token:raise RuntimeError('Fresh isolated administrator could not authenticate')
+    import base64
+    payload=token.split('.')[1]
+    claims=json.loads(base64.urlsafe_b64decode(payload+'='*(-len(payload)%4)))
+    if claims.get('id')!=identifier:raise RuntimeError('QA authentication returned a different identity')
+    return opener,token,claims
+
+
 def sql(state, statement):
     if not re.fullmatch(r'psi_qa_[0-9a-f]{12}', state['database']):
         raise RuntimeError('Refusing a non-QA database')
@@ -98,12 +125,12 @@ def bootstrap():
 class Suite:
     def __init__(self, state):
         self.state = state
-        self.opener, self.token, _ = authenticate()
+        self.opener, self.token, _ = authenticate_isolated(state)
         self.results = []
 
     def request(self, method, path, body=None, service='c1'):
         port = self.state[service + '_port']
-        dedicated_ports = {'c1': 18091, 'supportinfo': 18007, 'store': 18020, 'basic': 18021, 'sale': 18022, 'purchase': 18023, 'payment': 18024, 'homepage': 18025}
+        dedicated_ports = {'c1': 18091, 'supportinfo': 18007, 'store': 18020, 'basic': 18021, 'sale': 18022, 'purchase': 18023, 'payment': 18024, 'homepage': 18025, 'fund': 18026}
         if dedicated_ports.get(service) != port or not path.startswith('/'):
             raise RuntimeError('Refusing writes outside isolated service ports')
         request = urllib.request.Request('http://127.0.0.1:' + str(port) + path, method=method,

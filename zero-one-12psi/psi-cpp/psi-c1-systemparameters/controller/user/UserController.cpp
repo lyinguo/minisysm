@@ -20,6 +20,7 @@
 #include "stdafx.h"
 #include "service/user/UserService.h"
 #include "UserController.h"
+#include "../../security/SystemIdentityAccess.h"
 #include<string>
 
 static size_t utf8Chars(const oatpp::String& value)
@@ -112,12 +113,15 @@ do{\
             return uvo; \
         } \
     } while(0)
-UserJsonVO::Wrapper UserController::executeAddUser(const UserAddDTO::Wrapper& dto)
+UserJsonVO::Wrapper UserController::executeAddUser(const UserAddDTO::Wrapper& dto, const PayloadDTO& payload)
 {
 	//service实例
 	UserService us;
 	//创建响应并初始化
 	auto uvo = UserJsonVO::createShared();
+    if (!canManageSystemIdentity(payload)) {
+        uvo->code=403;uvo->message=u8"只有当前系统管理员可以维护用户账号";return uvo;
+    }
 	INIT_VO_SUCCESS(uvo);
     if (!dto || !dto->pwd || dto->pwd->empty()) {
         uvo->code = 9999;
@@ -193,10 +197,13 @@ UserJsonVO::Wrapper UserController::executeAddUser(const UserAddDTO::Wrapper& dt
 	return uvo;
 }
 
-UserJsonVO::Wrapper UserController::executeModUser(const UserModDTO::Wrapper& dto)
+UserJsonVO::Wrapper UserController::executeModUser(const UserModDTO::Wrapper& dto, const PayloadDTO& payload)
 {
     UserService us;
     auto uvo = UserJsonVO::createShared();
+    if (!canManageSystemIdentity(payload)) {
+        uvo->code=403;uvo->message=u8"只有当前系统管理员可以维护用户账号";return uvo;
+    }
     INIT_VO_SUCCESS(uvo);
     if (!dto) { SET_VO_FAIL(uvo, 9999, "user.id.empty_error"); return uvo; }
     CHECK_ID_FORM(dto->id);
@@ -241,12 +248,15 @@ UserJsonVO::Wrapper UserController::executeModUser(const UserModDTO::Wrapper& dt
     return uvo;
 }
 
-UserJsonVO::Wrapper UserController::executeDelUser(const String& id)
+UserJsonVO::Wrapper UserController::executeDelUser(const String& id, const PayloadDTO& payload)
 {
 	//service实例
 	UserService us;
 	//创建响应
 	auto uvo = UserJsonVO::createShared();
+    if (!canManageSystemIdentity(payload)) {
+        uvo->code=403;uvo->message=u8"只有当前系统管理员可以维护用户账号";return uvo;
+    }
 	INIT_VO_SUCCESS(uvo);
 	//检查id存在性和长度合法性
 	{

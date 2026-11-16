@@ -43,7 +43,7 @@ public:
     // 定义删除角色接口信息
     API_DEF_ENDPOINT_INFO_AUTH(ZH_WORDS_GETTER("role.delete.summary"), removeRole, ListJsonVO<String>::Wrapper, API_TAG);
     // 实现删除角色接口处理
-    API_HANDLER_ENDPOINT_AUTH(API_M_DEL, "/role/delete-role", removeRole, BODY_DTO(List<String>, ids), execRemoveRole(ids));
+    API_HANDLER_ENDPOINT_AUTH(API_M_DEL, "/role/delete-role", removeRole, BODY_DTO(List<String>, ids), execRemoveRole(ids, authObject->getPayload()));
 
     // 定义修改角色接口信息
     API_DEF_ENDPOINT_INFO_AUTH(ZH_WORDS_GETTER("role.put.summary"), modifyRole, StringJsonVO::Wrapper, API_TAG);
@@ -94,7 +94,7 @@ private: // 接口实现方法
     StringJsonVO::Wrapper executeAddRole(const RoleAddDTO::Wrapper& dto, const PayloadDTO& payload);
 
     // 执行删除角色
-    ListJsonVO<DeleteResultDTO::Wrapper>::Wrapper execRemoveRole(const List<String>& ids);
+    ListJsonVO<DeleteResultDTO::Wrapper>::Wrapper execRemoveRole(const List<String>& ids, const PayloadDTO& payload);
 
 
     // 执行修改角色

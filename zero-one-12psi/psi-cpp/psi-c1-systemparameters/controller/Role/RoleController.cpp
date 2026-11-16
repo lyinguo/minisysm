@@ -23,12 +23,18 @@
 #include "stduuid/uuid.h"
 #include "ResultStatus.h"
 #include "../../../lib-mysql/include/SqlSession.h"
+#include "../../security/SystemIdentityAccess.h"
 using namespace uuids;
 
 //增加角色
 StringJsonVO::Wrapper RoleController::executeAddRole(const RoleAddDTO::Wrapper& dto, const PayloadDTO& payload)
 {
 	auto jvo = StringJsonVO::createShared();
+
+    if (!canManageSystemIdentity(payload)) {
+        jvo->setStatus(ResultStatus(u8"只有当前系统管理员可以维护角色权限", 403));
+        return jvo;
+    }
 
 	//参数校验
 	if (!dto->name || !dto->data || !dto->root || !dto->auth) {
@@ -64,10 +70,15 @@ StringJsonVO::Wrapper RoleController::executeAddRole(const RoleAddDTO::Wrapper& 
 }
 
 //删除角色
-ListJsonVO<DeleteResultDTO::Wrapper>::Wrapper RoleController::execRemoveRole(const List<String>& ids)
+ListJsonVO<DeleteResultDTO::Wrapper>::Wrapper RoleController::execRemoveRole(const List<String>& ids, const PayloadDTO& payload)
 {
 	// 定义返回数据对象
 	auto jvo = ListJsonVO<DeleteResultDTO::Wrapper>::createShared();
+
+    if (!canManageSystemIdentity(payload)) {
+        jvo->setStatus(ResultStatus(u8"只有当前系统管理员可以维护角色权限", 403));
+        return jvo;
+    }
 
 	RoleService service;
 
@@ -172,6 +183,10 @@ StringJsonVO::Wrapper RoleController::execModifyRole(const RoleListDTO::Wrapper&
 {
 	// 定义返回数据对象
 	auto jvo = StringJsonVO::createShared();
+    if (!canManageSystemIdentity(payload)) {
+        jvo->setStatus(ResultStatus(u8"只有当前系统管理员可以维护角色权限", 403));
+        return jvo;
+    }
 	// 参数校验
 	if (!dto->id)
 	{
