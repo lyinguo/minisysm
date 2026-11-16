@@ -50,7 +50,7 @@ public class SalesReturnOrderInfo {
     private String data;
 
     @ApiModelProperty(value = "关联销售单详情ID（来源详情，对应is_sell_info表）", example = "0")
-    private Integer source;
+    private String source;
 
     @ApiModelProperty(value = "序列号（多个用逗号分隔）", example = "SN123456,SN123457")
     private String serial;

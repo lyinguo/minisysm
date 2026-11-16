@@ -47,7 +47,7 @@ const routes: RouteRecordRaw[] = [
       label: '销售退货单',
       icon: 'mdi:cart-remove'
     },
-    component: () => import('@/views/sales/return/SalesReturn.vue')
+    component: () => import('@/views/sales/return/SalesReturnWorkspace.vue')
   },
   {
     path: 'sales-return-report',
@@ -56,7 +56,7 @@ const routes: RouteRecordRaw[] = [
       label: '销售退货单报表',
       icon: 'mdi:file-chart'
     },
-    component: () => import('@/views/sales/return/SalesReturnForm.vue')
+    component: () => import('@/views/sales/return/SalesReturnWorkspace.vue')
   }
 ]
 

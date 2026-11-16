@@ -53,6 +53,8 @@ import java.util.List;
 @Slf4j
 @Service
 public class SaleReturnFormServiceImpl implements SaleReturnFormService {
+    @Resource
+    private com.zeroone.star.sale.service.SaleReturnDraftService drafts;
 
     @Resource
     SaleReturnMapper saleReturnMapper;
@@ -98,80 +100,11 @@ public class SaleReturnFormServiceImpl implements SaleReturnFormService {
     }
 
     @Override
-    @Transactional
-    public boolean addSalesReturnOrder(SalesReturnOrderDTO dto) {
-        //将dto转换成isSre
-        IsSre isSre = mapper.toIsSre(dto);
-        //插入isSre
-        isSre.setId(null);
-        int insert = isSreMapper.insert(isSre);
-
-        if(insert<=0){
-            return false;
-        }
-        //获取isSre的id
-        String mainId = isSre.getId();
-        //将dto转换成isSreInfo
-        SalesReturnOrderInfo[] salesReturnOrderInfos = dto.getSalesReturnOrderInfos();
-        //批量插入isSreInfo,给pid赋值
-        for(int i = 0;i<salesReturnOrderInfos.length;i++){
-            IsSreInfo isSreInfo = mapper.toIsSreInfo(salesReturnOrderInfos[i]);
-            isSreInfo.setId(null);
-            isSreInfo.setPid(mainId);
-            int inserted = isSreInfoMapper.insert(isSreInfo);
-            if(inserted<=0){
-                return false;
-            }
-        }
-        return true;
-    }
-
+    public boolean addSalesReturnOrder(SalesReturnOrderDTO dto) {drafts.save(dto,false);return true;}
     @Override
-    @Transactional
-    public boolean updateSalesReturnOrder(SalesReturnOrderDTO dto) {
-        //将dto转换成isSre
-        IsSre isSre = mapper.toIsSre(dto);
-        //将dto转换成isSreInfo
-        SalesReturnOrderInfo[] salesReturnOrderInfos = dto.getSalesReturnOrderInfos();
-        //批量修改isSreInfo
-        for(int i = 0;i<salesReturnOrderInfos.length;i++){
-            IsSreInfo isSreInfo = mapper.toIsSreInfo(salesReturnOrderInfos[i]);
-            int update = isSreInfoMapper.updateById(isSreInfo);
-            if(update<=0){
-                return false;
-            }
-        }
-        //修改isSre
-        int update = isSreMapper.updateById(isSre);
-        if(update<=0){
-            return false;
-        }
-        return true;
-    }
-
+    public boolean updateSalesReturnOrder(SalesReturnOrderDTO dto) {drafts.save(dto,true);return true;}
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public boolean deleteSalesReturnOrder(String id) {
-        //查找要删除isSre所关联的isSreInfo
-        IsSre isSre = isSreMapper.selectById(id);
-        System.out.println(0);
-        //如果没有该对象则返回false
-        if(isSre==null){
-            return false;
-        }
-        System.out.println(1);
-        LambdaQueryWrapper<IsSreInfo> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(IsSreInfo::getPid,isSre.getId());
-        //批量删除isSreInfo
-        int deleted = isSreInfoMapper.delete(wrapper);
-        System.out.println(2);
-        //删除isSre
-        int delete = isSreMapper.deleteById(isSre.getId());
-        if(delete<=0){
-            return false;
-        }
-        return true;
-    }
+    public boolean deleteSalesReturnOrder(String id) {drafts.delete(id,null);return true;}
 
     @SneakyThrows
     @Override

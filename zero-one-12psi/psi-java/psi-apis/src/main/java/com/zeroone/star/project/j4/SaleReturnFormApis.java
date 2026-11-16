@@ -38,21 +38,21 @@ public interface SaleReturnFormApis {
     /**
      * 删除销售退货单
      */
-    JsonVO<String> deleteSalesReturnOrder(String id);
+    JsonVO<String> deleteSalesReturnOrder(String id, String version);
 
     /**
      * 查询退货订单
      * @param saleReturnQuery
      * @return
      */
-    JsonVO<PageDTO<SaleReturnDTO>> querySaleReturnList(SaleReturnQuery saleReturnQuery);
+    JsonVO<PageDTO<java.util.Map<String,Object>>> querySaleReturnList(SaleReturnQuery saleReturnQuery);
 
     /**
      * 查询退货订单详情
      * @param id
      * @return
      */
-    JsonVO<List<SaleReturnInfoDTO>> querySaleReturnInfoList(String id);
+    JsonVO<List<java.util.Map<String,Object>>> querySaleReturnInfoList(String id);
 
     public JsonVO<String> exportSimpleFund();
 

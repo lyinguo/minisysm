@@ -48,6 +48,8 @@ import javax.annotation.Resource;
 public class SaleReturnFormController implements SaleReturnFormApis {
 
     @Resource
+    private com.zeroone.star.sale.service.SaleReturnDraftService drafts;
+    @Resource
     private SaleReturnFormService saleReturnFormService;
 
     @Resource
@@ -56,9 +58,8 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     @ApiOperation(value = "获取退货订单")
     @GetMapping("/saleReturnList")
     @Override
-    public JsonVO<PageDTO<SaleReturnDTO>> querySaleReturnList(SaleReturnQuery saleReturnQuery) {
-        PageDTO<SaleReturnDTO> pageDTO = saleReturnFormService.pageSaleReturn(saleReturnQuery);
-        return JsonVO.success(pageDTO);
+    public JsonVO<PageDTO<java.util.Map<String,Object>>> querySaleReturnList(SaleReturnQuery saleReturnQuery) {
+        return JsonVO.success(drafts.list(saleReturnQuery));
     }
     @Override
     @PostMapping("/addSalesReturnOrder")
@@ -66,7 +67,7 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     public JsonVO<String> addSalesReturnOrder(@RequestBody SalesReturnOrderDTO dto) {
         boolean returnOrder = saleReturnFormService.addSalesReturnOrder(dto);
         if(returnOrder){
-            return JsonVO.success("新增成功");
+            return JsonVO.success(dto.getId());
         }
         else return JsonVO.fail("新增失败");
     }
@@ -81,10 +82,16 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     @GetMapping("/{id}")
     @ApiOperation(value = "获取退货订单详情")
     @Override
-    public JsonVO<List<SaleReturnInfoDTO>> querySaleReturnInfoList(@PathParam("id") String id) {
-        List<SaleReturnInfoDTO> list =  saleReturnFormService.listSaleReturnInfo(id);
-        return JsonVO.success(list);
+    public JsonVO<List<java.util.Map<String,Object>>> querySaleReturnInfoList(@PathVariable("id") String id) {
+        return JsonVO.success((List<java.util.Map<String,Object>>)drafts.detail(id).get("items"));
     }
+    @GetMapping("/document/{id}")
+    public JsonVO<java.util.Map<String,Object>> document(@PathVariable String id){return JsonVO.success(drafts.detail(id));}
+    @GetMapping("/accounts")
+    public JsonVO<List<java.util.Map<String,Object>>> accounts(@RequestParam String source,@RequestParam(defaultValue="") String keyword,@RequestParam(defaultValue="false") boolean updating){return JsonVO.success(drafts.accounts(source,keyword,updating));}
+    public static class DraftRemoval {public String version;}
+    @DeleteMapping("/document/{id}")
+    public JsonVO<String> removeDraft(@PathVariable String id,@RequestBody DraftRemoval request){drafts.delete(id,request.version);return JsonVO.success(id);}
 
     @Override
     @PutMapping("/updateSalesReturnOrder")
@@ -92,7 +99,7 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     public JsonVO<String> updateSalesReturnOrder(@RequestBody SalesReturnOrderDTO dto) {
         boolean returnOrder = saleReturnFormService.updateSalesReturnOrder(dto);
         if(returnOrder){
-            return JsonVO.success("修改成功");
+            return JsonVO.success(dto.getId());
         }
         else return JsonVO.fail("修改失败");
     }
@@ -100,12 +107,8 @@ public class SaleReturnFormController implements SaleReturnFormApis {
     @Override
     @DeleteMapping("/deleteSalesReturnOrder")
     @ApiOperation(value = "删除退货销售单")
-    public JsonVO<String> deleteSalesReturnOrder(String id) {
-        boolean returnOrder = saleReturnFormService.deleteSalesReturnOrder(id);
-        if(returnOrder){
-            return JsonVO.success("删除成功");
-        }
-        else return JsonVO.fail("删除失败");
+    public JsonVO<String> deleteSalesReturnOrder(@RequestParam String id,@RequestParam(required=false) String version) {
+        drafts.delete(id,version);return JsonVO.success(id);
     }
     @PostMapping("/importFund")
     @SneakyThrows

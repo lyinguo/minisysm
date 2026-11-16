@@ -1,5 +1,15 @@
 # 系统业务验收
 
+## 销售退货真实草稿
+
+运行`python qa/sale_return_draft_acceptance.py run`执行22项真实HTTP/OAuth/MySQL专项；`baseline`只执行原6项规则检查。来源销售经实际新增、核对、出库及收款应收入账；退货草稿保存、修改、查询和删除只占用/释放数量，不入库、不扣账户、不写退款核销流水。与其他期间、权限及读取门控夹具串行运行。历史附件元数据为明确的自建QA SQL夹具，其余主流程及故障回滚实际通过接口。
+
+新增沿用`POST /sale/return/addSalesReturnOrder`、修改沿用`PUT /sale/return/updateSalesReturnOrder`，响应data为实际ID，不再是成功短句。正文须带来源`source/sourceVersion`、编号/日期及`salesReturnOrderInfos`中的字符串来源行`source`和数量`nums`；商品价格等由服务端取来源。修改另带`id/version`；`GET /sale/return/document/{id}`返回完整主从、version和sourceVersion。新`DELETE /sale/return/document/{id}`提交JSON version，旧查询参数删除也必须带version；自由草稿物理删除主从并保留历史。列表沿用`/sale/return/saleReturnList`，id字段支持编号或ID，当前授权组织不能由查询参数覆盖。
+
+退货功能权限分别使用旧新增/修改/删除/list及`/sale/return/{id}`资源；来源还需`/sale/form/getSaleDetail`。账户选项`/sale/return/accounts`按新增或修改权限及来源权限限制组织，仅返回ID/名称/编号，不返回账户余额。费率扩宽只处理已知旧(5,2)，其他低精度必须先迁移`database/migrations/20261116_sale_return_rate_precision.sql`；历史百分比不自动解释或重写。
+
+浏览器运行`prepare`，使用18030隔离会话查打印的来源销售编号，预览后“继续填写退货草稿”。填打印的退货编号、1件、计划退款50，按打印账户编号搜索并选择，保存后运行`verify-saved`。刷新应重开同一真实ID，不能再新建；改1.5件、备注`QA browser revised persisted draft`并保存，从退货报表再次查号重开后执行`verify-edited`。独立检查同一主从ID、113→169.5金额、1→2条操作人历史、可退量1→0.5和库存8/现金150/应收176不变，无退款核销流水。不要在正常环境运行这些写入验收；私有runtime/reports不发布。
+
 ## 销售退货来源与可退明细
 
 运行`python qa/sale_return_preview_acceptance.py run`执行12项真实来源预览专项。来源销售经真实新增、核对和审核；已退/待退占用及历史坏状态是自建QA SQL夹具，不是退货创建或审核证据。与其他期间/角色/读门控专项串行运行。原销售回归及`qa/sale_snapshot_acceptance.py run`另验证库存资金与版本保护。

@@ -21,7 +21,10 @@ public class SaleReturnPreviewService {
     private BigDecimal d(Object v){return v==null?BigDecimal.ZERO:new BigDecimal(v.toString());}
     private BigDecimal proportion(Object value,BigDecimal available,BigDecimal quantity){return d(value).multiply(available).divide(quantity,4,RoundingMode.HALF_UP);}
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
-    public SaleReturnGenerateDTO preview(String id){
+    public SaleReturnGenerateDTO preview(String id){return calculate(id,null);}
+    @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
+    public SaleReturnGenerateDTO previewForDraft(String id,String excludedDraft){return calculate(id,excludedDraft);}
+    private SaleReturnGenerateDTO calculate(String id,String excludedDraft){
         UserDTO actor=access.authorize("/sale/form/getSaleDetail");
         if(id==null || id.trim().isEmpty() || id.length()>32)throw new IllegalArgumentException("请选择有效的来源销售单");
         List<Map<String,Object>> found=db.queryForList("SELECT * FROM sell WHERE id=?",id);
@@ -41,6 +44,10 @@ public class SaleReturnPreviewService {
                     || !s(original.get("goods")).equals(s(linked.get("goods"))) || !s(original.get("unit")).equals(s(linked.get("unit")))
                     || approval==null || (((Number)approval).intValue()!=0 && ((Number)approval).intValue()!=1) || d(linked.get("nums")).signum()<=0)
                 throw new IllegalArgumentException("来源销售单的退货关联数据异常，请先核对，不能继续估算可退数量");
+            if(excludedDraft!=null && excludedDraft.equals(s(linked.get("return_id")))){
+                if(((Number)approval).intValue()!=0)throw new IllegalArgumentException("Reviewed returns cannot be excluded from source quantities");
+                continue;
+            }
             Map<String,BigDecimal> totals=((Number)approval).intValue()==1?posted:pending;
             totals.put(source,totals.getOrDefault(source,BigDecimal.ZERO).add(d(linked.get("nums"))));
         }

@@ -17,6 +17,14 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @ApiModel("销售退货单数据对象")
 public class SalesReturnOrderDTO {
+    private String version;
+    private String sourceVersion;
+    private String frame;
+    private String account;
+    private String logistics;
+    private String file;
+    private String more;
+
 
     @ApiModelProperty(value = "销售退货单id",example = "1")
     private String id;

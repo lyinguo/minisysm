@@ -388,7 +388,7 @@
       </el-table>
       <p>可退金额（含税）：{{ returnPreview.actual }}；本次预览不会自动退款。</p>
     </template>
-    <template #footer><el-button @click="returnPreviewVisible = false">关闭预览</el-button></template>
+    <template #footer><el-button @click="returnPreviewVisible = false">关闭预览</el-button><el-button type="primary" @click="continueReturnDraft">继续填写退货草稿</el-button></template>
   </el-dialog>
 </template>
 
@@ -402,6 +402,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { nextTick } from 'vue'
 import DocumentForm from '@/components/documentform/DocumentForm.vue'
+import { useRouter } from 'vue-router'
 import Warehouse from '@/components/goodSearchConpoent/Warehouse.vue'
 import { useCommonStore } from '@/stores/common'
 import { useUserStore } from '@/stores/user'
@@ -542,6 +543,12 @@ async function reviewCommand(audit: boolean) {
 const returnPreviewLoading = ref(false)
 const returnPreviewVisible = ref(false)
 const returnPreview = ref<SaleReturnGenerateData | null>(null)
+const returnRouter = useRouter()
+async function continueReturnDraft() {
+  const preview = returnPreview.value
+  if (!preview) return
+  await returnRouter.push({ path: '/sales-return', query: { source: preview.source, sourceVersion: preview.sourceVersion } })
+}
 async function generateSalesReturn() {
   if (loading.value || saving.value || returnPreviewLoading.value || !currentDocument.value || !isApproved.value) return
   if (hasUnsavedChanges.value) { ElMessage.warning('请先重新打开销售单核对'); return }
