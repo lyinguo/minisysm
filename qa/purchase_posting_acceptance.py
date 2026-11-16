@@ -25,11 +25,21 @@ class PurchasePostingSuite(PurchaseRevisionSuite):
         body['purchaseNoteInfoDTOS'][0].update(discount=0,tax=13,batch='',mfd=None,serial='[]')
         return self.create(body)
 
-    def check(self, ids, target=1):
-        return self.request('POST','/purchase-note/verification',dict(ids=ids,type=target),service='purchase')
+    def review_versions(self,ids):
+        # Explicit real HTTP preparation; rejected/unknown members still reach command validation.
+        versions={}
+        for id in ids:
+            response=self.request('GET','/purchase-note/document/'+str(id),service='purchase')
+            data=response.get('data');versions[id]=data.get('version','0'*64) if isinstance(data,dict) else '0'*64
+        return versions
 
-    def post(self, ids, target=1):
-        return self.request('POST','/purchase-note/audit',dict(ids=ids,type=target),service='purchase')
+    def check(self, ids, target=1, versions=None):
+        if versions is None:versions=self.review_versions(ids)
+        return self.request('POST','/purchase-note/verification',dict(ids=ids,type=target,versions=versions),service='purchase')
+
+    def post(self, ids, target=1, versions=None):
+        if versions is None:versions=self.review_versions(ids)
+        return self.request('POST','/purchase-note/audit',dict(ids=ids,type=target,versions=versions),service='purchase')
 
     def inventory(self):
         return Decimal(sql(self.state,'SELECT COALESCE(SUM(nums),0) FROM room WHERE goods='+literal(self.goods)+' AND warehouse='+literal(self.warehouse)+';'))
@@ -120,12 +130,13 @@ class PurchasePostingSuite(PurchaseRevisionSuite):
             resource='/purchase-note/verification'
             existed,value=redis('HEXISTS','AUTH:RESOURCE_ROLES',resource),redis('HGET','AUTH:RESOURCE_ROLES',resource)
             admin=self.token
+            reviewed=self.review_versions([identifier])
             try:
                 self.token=token
                 redis('HDEL','AUTH:RESOURCE_ROLES',resource)
                 assert self.check([identifier]).get('code')==403 and self.checked(identifier)=='0'
                 redis('HSET','AUTH:RESOURCE_ROLES',resource,json.dumps(['java.util.ArrayList',[keyword]]))
-                assert self.check([identifier]).get('code')==10000 and self.checked(identifier)=='1'
+                assert self.check([identifier],versions=reviewed).get('code')==10000 and self.checked(identifier)=='1'
                 redis('HDEL','AUTH:RESOURCE_ROLES',resource)
                 assert self.check([identifier],0).get('code')==403 and self.checked(identifier)=='1','Revoked grant remained effective'
                 redis('HSET','AUTH:RESOURCE_ROLES',resource,json.dumps(['java.util.ArrayList',[keyword]]))

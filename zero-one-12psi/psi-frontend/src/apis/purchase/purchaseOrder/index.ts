@@ -23,11 +23,20 @@ export class PurchaseNoteAPI {
   static revise(data: Record<string, any>) {
     return this.http.post<string>(`${currBaseUrl}/revise`, data)
   }
-  static check(ids: string[], checked: boolean) {
-    return this.http.post<string>(`${currBaseUrl}/verification`, { ids, type: checked ? 1 : 0 })
+  private static reviewed(ids: string[], version: string | Record<string,string>) {
+    if (!ids.length || ids.length > 200 || ids.some(id => !id) || new Set(ids).size !== ids.length) throw new Error('请选择1到200张不同且有效的采购单')
+    if (typeof version === 'string') {
+      if (ids.length !== 1 || !/^[0-9a-f]{64}$/.test(version)) throw new Error('请重新打开详情取得当前采购单版本')
+      return {version}
+    }
+    if (!version || Object.keys(version).length !== ids.length || ids.some(id => !/^[0-9a-f]{64}$/.test(version[id] || ''))) throw new Error('请刷新列表并核对全部选中采购单的版本')
+    return {versions:version}
   }
-  static audit(ids: string[], audited: boolean) {
-    return this.http.post<string>(`${currBaseUrl}/audit`, { ids, type: audited ? 1 : 0 })
+  static check(ids: string[], checked: boolean, version: string | Record<string,string>) {
+    return this.http.post<string>(`${currBaseUrl}/verification`, { ids, type: checked ? 1 : 0, ...this.reviewed(ids,version) })
+  }
+  static audit(ids: string[], audited: boolean, version: string | Record<string,string>) {
+    return this.http.post<string>(`${currBaseUrl}/audit`, { ids, type: audited ? 1 : 0, ...this.reviewed(ids,version) })
   }
   static remove(ids: string[]) {
     return this.http.post<string>(`${currBaseUrl}/delete`, ids)

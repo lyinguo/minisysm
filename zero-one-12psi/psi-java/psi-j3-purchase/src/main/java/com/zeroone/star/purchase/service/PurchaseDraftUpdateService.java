@@ -18,15 +18,13 @@ public class PurchaseDraftUpdateService {
     private final UserHolder users;
     private final PurchaseDraftValidation validation;
     private final PurchaseDocumentAccess access;
-    public PurchaseDraftUpdateService(JdbcTemplate db,UserHolder users,PurchaseDraftValidation validation,PurchaseDocumentAccess access) { this.db=db;this.users=users;this.validation=validation;this.access=access; }
+    private final PurchaseSnapshotService snapshots;
+    public PurchaseDraftUpdateService(JdbcTemplate db,UserHolder users,PurchaseDraftValidation validation,PurchaseDocumentAccess access,PurchaseSnapshotService snapshots) { this.db=db;this.users=users;this.validation=validation;this.access=access;this.snapshots=snapshots; }
     private static String s(Object v) { return v==null ? "":v.toString(); }
     private static BigDecimal d(Object v) { return v==null ? BigDecimal.ZERO:new BigDecimal(v.toString()); }
     private static int n(Object v) { return v instanceof Boolean ? ((Boolean)v ? 1:0):v==null ? 0:((Number)v).intValue(); }
     private static String choose(String value,Object original) { return value==null ? s(original):value; }
     private static String optional(String value,Object original) { return value==null ? original==null ? null:original.toString():value; }
-    private String version(Map<String,Object> head,List<Map<String,Object>> lines) {
-        return org.springframework.util.DigestUtils.md5DigestAsHex((head.toString()+lines.toString()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
     @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String,Object> detail(String id) {
         UserDTO actor=access.authorize("/purchase-note/info");
@@ -36,7 +34,7 @@ public class PurchaseDraftUpdateService {
         access.requireFrame(actor,s(header.get("frame")));
         List<Map<String,Object>> lines=db.queryForList("SELECT * FROM buy_info WHERE pid=? ORDER BY id",id);
         Map<String,Object> result=new LinkedHashMap<>();
-        result.put("version",version(header,lines));
+        result.put("version",snapshots.version(id,false));
         header.putAll(db.queryForMap("SELECT s.name AS supplierName,f.name AS frameName,p.name AS peopleName,a.name AS accountName FROM buy b LEFT JOIN supplier s ON s.id=b.supplier LEFT JOIN frame f ON f.id=b.frame LEFT JOIN people p ON p.id=b.people LEFT JOIN account a ON a.id=b.account WHERE b.id=?",id));
         result.put("header",header);
         result.put("items",db.queryForList("SELECT i.*,g.name AS goodsName,g.number AS goodsNumber,w.name AS warehouseName FROM buy_info i LEFT JOIN goods g ON g.id=i.goods LEFT JOIN warehouse w ON w.id=i.warehouse WHERE i.pid=? ORDER BY i.id",id));
@@ -89,7 +87,7 @@ public class PurchaseDraftUpdateService {
         Map<String,Map<String,Object>> previous=new HashMap<>();
         List<Map<String,Object>> originalLines=db.queryForList("SELECT * FROM buy_info WHERE pid=? ORDER BY id FOR UPDATE",id);
         if(request.getVersion()==null || request.getVersion().trim().isEmpty()) throw new IllegalArgumentException("请先读取完整采购单，再提交编辑版本");
-        if(!request.getVersion().equals(version(head,originalLines))) throw new IllegalStateException("采购单已被其他操作修改，请刷新后重试");
+        snapshots.require(id,request.getVersion());
         for(Map<String,Object> row:originalLines) {
             if(d(row.get("retreat")).signum()!=0) throw new IllegalArgumentException("已有退货明细不能修改");
             previous.put(s(row.get("id")),row);

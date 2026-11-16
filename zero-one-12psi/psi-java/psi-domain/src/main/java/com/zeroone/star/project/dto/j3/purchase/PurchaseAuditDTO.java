@@ -10,6 +10,8 @@ import java.util.List;
 @Data
 @ApiModel("审核/反审核（支持批量）")
 public class PurchaseAuditDTO {
+    private String version;
+    private java.util.Map<String,String> versions;
     @ApiModelProperty(value = "采购单ID", required = true)
     private List<String> ids;
 

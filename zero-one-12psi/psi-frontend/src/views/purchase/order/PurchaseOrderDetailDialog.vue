@@ -389,6 +389,11 @@ const saving = ref(false)
 const loadError = ref('')
 const saveError = ref('')
 const currentDocument = ref<PurchaseDocument | null>(null)
+const savedSnapshot = ref<string | null>(null)
+function editableSnapshot() {
+  return JSON.stringify({header,supplier:supplierId.value,rows:tableData.value.filter(row=>row.productName),form:documentFormRef.value?.formdata})
+}
+const hasUnsavedChanges = computed(()=>savedSnapshot.value!==null && editableSnapshot()!==savedSnapshot.value)
 const documentFormRef = ref<InstanceType<typeof DocumentForm> | null>(null)
 let documentSequence = 0
 const header = reactive({
@@ -414,15 +419,18 @@ const router = useRouter()
 const isApproved = ref(false)
 const toggleApprove = async () => {
   if (loading.value || saving.value || !currentDocument.value || loadError.value) return
+  if (hasUnsavedChanges.value) { saveError.value='请先保存未提交的修改，再重新打开核对后审核'; return }
+  const reviewed=currentDocument.value
   const audited = !isApproved.value
   if (audited && !isChecked.value) { ElMessage.warning('请先保存并核对采购单'); return }
   try {
     await ElMessageBox.confirm(audited ? '审核后将实际入库、扣减本单付款并登记应付，是否继续？' : '反审核将撤销本单入库、付款和应付；库存已被使用或存在后续关联时会拒绝。是否继续？', audited ? '审核采购单' : '反审核采购单', { type: 'warning' })
   } catch { return }
-  if (saving.value || !currentDocument.value) return
+  if (saving.value || currentDocument.value!==reviewed) return
+  if (hasUnsavedChanges.value) { saveError.value='确认期间内容发生变化，请先保存后重新核对'; return }
   saving.value = true; saveError.value = ''
   try {
-    const response = await PurchaseNoteAPI.audit([String(currentDocument.value.header.id)], audited)
+    const response = await PurchaseNoteAPI.audit([String(reviewed.header.id)], audited, reviewed.version)
     if (response.code !== 10000) throw new Error(response.message || '审核状态修改失败')
     if (!await loadDocument()) throw new Error('操作已提交，读取最新状态失败，请重新加载单据')
     emit('changed')
@@ -433,14 +441,17 @@ const toggleApprove = async () => {
 const isChecked = ref(false)
 const toggleCheck = async () => {
   if (loading.value || saving.value || isApproved.value || !currentDocument.value || loadError.value) return
+  if (hasUnsavedChanges.value) { saveError.value='请先保存未提交的修改，再重新打开核对'; return }
+  const reviewed=currentDocument.value
   const checked = !isChecked.value
   try {
-    await ElMessageBox.confirm(checked ? '核对已保存的采购单；页面未保存的修改不会提交。请先确认已保存，是否继续？' : '反核对后可以继续编辑采购草稿，是否继续？', checked ? '核对采购单' : '反核对采购单', { type: 'warning' })
+    await ElMessageBox.confirm(checked ? '将核对当前已读取版本的采购单；单据已变化时会拒绝，请确认是否继续？' : '反核对后可以继续编辑采购草稿，是否继续？', checked ? '核对采购单' : '反核对采购单', { type: 'warning' })
   } catch { return }
-  if (saving.value || !currentDocument.value) return
+  if (saving.value || currentDocument.value!==reviewed) return
+  if (hasUnsavedChanges.value) { saveError.value='确认期间内容发生变化，请先保存后重新核对'; return }
   saving.value = true; saveError.value = ''
   try {
-    const response = await PurchaseNoteAPI.check([String(currentDocument.value.header.id)], checked)
+    const response = await PurchaseNoteAPI.check([String(reviewed.header.id)], checked, reviewed.version)
     if (response.code !== 10000) throw new Error(response.message || '核对状态修改失败')
     if (!await loadDocument()) throw new Error('操作已提交，读取最新状态失败，请重新加载单据')
     emit('changed')
@@ -732,6 +743,7 @@ async function loadDocument() {
   const sequence = ++documentSequence
   loading.value = true
   loadError.value = ''; saveError.value = ''; currentDocument.value = null
+  savedSnapshot.value = null
   tableData.value = []
   try {
     if (!props.record?.id) throw new Error('请从已保存的采购单列表打开详情')
@@ -763,6 +775,8 @@ async function loadDocument() {
       logistics: typeof logistics === 'object' && logistics ? logistics : { key: 'auto', name: '自动识别', number: String(logistics || '') },
       documentAttachment: files.map(file => ({ ...file, status: 'success' })), remarks: source.data || ''
     })
+    await nextTick()
+    savedSnapshot.value = editableSnapshot()
     return true
   } catch (error) { if (sequence === documentSequence) loadError.value = extractErrorMessage(error); return false }
   finally { if (sequence === documentSequence) loading.value = false }

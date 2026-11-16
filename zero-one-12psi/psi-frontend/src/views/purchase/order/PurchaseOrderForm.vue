@@ -48,6 +48,7 @@
       </div>
   
       <el-alert v-if="queryError" type="error" :closable="false" show-icon><template #title>{{ queryError }}</template><el-button @click="loadPurchaseList">重新加载</el-button></el-alert>
+      <el-alert v-if="actionError" type="error" :title="actionError" :closable="false" show-icon />
       <!-- 表格 + 固定横向滚动条 + 状态栏 -->
       <div class="table-section">
         <!-- 表格滚动容器 -->
@@ -537,6 +538,7 @@
   }
   
   interface RowData {
+    version?: string
     id?: number | string // 订单ID
     org: string
     supplier: string
@@ -586,7 +588,7 @@
       selected.value = []
       tableRef.value?.clearSelection?.()
       tableData.value = (response.data.rows || []).map(item => ({
-        id: item.id, org: item.frameName || item.frame, supplier: item.supplierName || item.supplier,
+        id: item.id, version:item.version, org: item.frameName || item.frame, supplier: item.supplierName || item.supplier,
         billTime: String(item.time || '').replace('T', ' '), billNo: item.number,
         billAmount: Number(item.total || 0), realAmount: Number(item.actual || 0), paymentAmount: Number(item.buyMoney || 0),
         writeoffAmount: Number(item.billMoney || 0), feeAmount: Number(item.cost || 0), relatedPerson: item.peopleName || item.people || '',
@@ -758,39 +760,34 @@
   }
   const onDelete = (row: RowData) => deletePurchases(row.id ? [String(row.id)] : [])
   const onBatchDelete = () => deletePurchases(selected.value.map(row => String(row.id || '')).filter(Boolean))
-  const onBatchExamine = async (type: 0 | 1) => {
-    if (checking.value || refreshing.value) return
-    const ids = selected.value.map(row => String(row.id || '')).filter(Boolean)
-    if (!ids.length) { ElMessage.warning('请先选择采购单'); return }
-    try { await ElMessageBox.confirm(`确认${type ? '审核' : '反审核'}选中的 ${ids.length} 张采购单？将联动真实库存、付款和应付，任一失败将整批取消。`, '批量审核', { type: 'warning' }) }
-    catch { return }
-    if (checking.value) return
-    checking.value = true
-    try {
-      const response = await PurchaseNoteAPI.audit(ids, type === 1)
-      if (response.code !== 10000) throw new Error(response.message || '批量审核失败')
-      await loadPurchaseList()
-      ElMessage.success(type ? '所选采购单已审核入账' : '所选采购单已反审核')
-    } catch (error) { ElMessage.error(extractErrorMessage(error)) }
-    finally { checking.value = false }
-  }
   const checking = ref(false)
-  const onBatchCheck = async (type: 0 | 1) => {
-    if (checking.value || refreshing.value) return
-    const ids = selected.value.map(row => String(row.id || '')).filter(Boolean)
-    if (!ids.length) { ElMessage.warning('请先选择采购单'); return }
-    try { await ElMessageBox.confirm(`确认${type ? '核对' : '反核对'}选中的 ${ids.length} 张采购单？任一单据不符合条件将整批取消。`, '批量核对', { type: 'warning' }) }
-    catch { return }
-    if (checking.value) return
-    checking.value = true
+  const actionError = ref('')
+  const reviewedBatch = async (type:0|1,audit:boolean) => {
+    if(checking.value || refreshing.value || deleting.value)return
+    actionError.value=''
+    const ids=selected.value.map(row=>String(row.id || ''))
+    const versions:Record<string,string>={}
+    if(!ids.length || ids.length>200 || new Set(ids).size!==ids.length || selected.value.some(row=>!row.id || !/^[0-9a-f]{64}$/.test(row.version || ''))) {
+      actionError.value='请刷新列表，重新选择并核对全部采购单；缺少ID或版本时整批不能提交';return
+    }
+    selected.value.forEach(row=>{versions[String(row.id)]=row.version!})
+    const operation=audit?(type?'审核':'反审核'):(type?'核对':'反核对')
+    checking.value=true
+    let committed=false
     try {
-      const response = await PurchaseNoteAPI.check(ids, type === 1)
-      if (response.code !== 10000) throw new Error(response.message || '批量核对失败')
+      await ElMessageBox.confirm(`确认${operation}当前列表选中的 ${ids.length} 张采购单？${audit?'将联动真实库存、付款和应付。':''}任一单据已变化或不符合条件，整批取消。`, `批量${operation}`, {type:'warning'})
+      const response=await (audit?PurchaseNoteAPI.audit(ids,type===1,versions):PurchaseNoteAPI.check(ids,type===1,versions))
+      if(response.code!==10000)throw new Error(response.message || `批量${operation}失败`)
+      committed=true
       await loadPurchaseList()
-      ElMessage.success(type ? '所选采购单已核对' : '所选采购单已反核对')
-    } catch (error) { ElMessage.error(extractErrorMessage(error)) }
-    finally { checking.value = false }
+      if(queryError.value)throw new Error('请求已成功提交，但列表刷新失败，请重新查询核对结果')
+      ElMessage.success(`所选采购单已${operation}`)
+    } catch(error) {
+      if(error!=='cancel' && error!=='close')actionError.value=(committed?'操作已提交；':'')+extractErrorMessage(error)
+    } finally {checking.value=false}
   }
+  const onBatchExamine=(type:0|1)=>reviewedBatch(type,true)
+  const onBatchCheck=(type:0|1)=>reviewedBatch(type,false)
 
   /* 固定横向滚动条联动 */
   const tableRef = ref()

@@ -18,8 +18,9 @@ public class PurchasePostingService {
     private final JdbcTemplate db;
     private final PurchaseDocumentAccess access;
     private final PurchaseStockSummaryService summaries;
-    public PurchasePostingService(JdbcTemplate db, PurchaseDocumentAccess access, PurchaseStockSummaryService summaries) {
-        this.db=db; this.access=access; this.summaries=summaries;
+    private final PurchaseSnapshotService snapshots;
+    public PurchasePostingService(JdbcTemplate db, PurchaseDocumentAccess access, PurchaseStockSummaryService summaries,PurchaseSnapshotService snapshots) {
+        this.db=db; this.access=access; this.summaries=summaries;this.snapshots=snapshots;
     }
     @PostConstruct public void initialize() {
         db.execute("CREATE TABLE IF NOT EXISTS psi_purchase_posting (purchase_id VARCHAR(32) NOT NULL PRIMARY KEY,fingerprint VARCHAR(32) NOT NULL,created_at DATETIME NOT NULL)");
@@ -35,8 +36,9 @@ public class PurchasePostingService {
         return DigestUtils.md5DigestAsHex((immutable.toString()+lines.toString()).getBytes(StandardCharsets.UTF_8));
     }
     @Transactional(rollbackFor=Exception.class)
-    public int post(List<String> ids,boolean target) {
+    public int post(List<String> ids,boolean target,String version,Map<String,String> versions) {
         UserDTO actor=access.authorize("/purchase-note/audit");
+        Map<String,String> expected=snapshots.expected(ids,version,versions);
         if(ids==null || ids.isEmpty() || ids.size()>200 || new HashSet<>(ids).size()!=ids.size() || ids.stream().anyMatch(x->x==null || x.trim().isEmpty()))
             throw new IllegalArgumentException("请选择1到200张不同单据");
         db.update("INSERT INTO psi_document_write_lock(scope) VALUES('buy') ON DUPLICATE KEY UPDATE scope='buy'");
@@ -48,6 +50,7 @@ public class PurchasePostingService {
             if(found.size()!=1) throw new IllegalArgumentException("采购单不存在");
             Map<String,Object> head=found.get(0);
             access.requireFrame(actor,s(head.get("frame")));
+            snapshots.require(id,expected.get(id));
             List<Map<String,Object>> lines=db.queryForList("SELECT * FROM buy_info WHERE pid=? ORDER BY id FOR UPDATE",id);
             boolean audited=n(head.get("examine"))==1;
             List<String> markers=db.queryForList("SELECT fingerprint FROM psi_purchase_posting WHERE purchase_id=? FOR UPDATE",String.class,id);

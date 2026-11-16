@@ -31,18 +31,19 @@ class PurchasePostingExtended(PurchasePostingSuite):
     def run(self):
         def repeats():
             self.fixture();identifier=self.ready(50)
+            versions=self.review_versions([identifier])
             barrier=threading.Barrier(4)
             def worker():
-                barrier.wait();return self.post([identifier])
+                barrier.wait();return self.post([identifier],versions=versions)
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                 results=list(pool.map(lambda _:worker(),range(4)))
-            assert all(row.get('code')==10000 for row in results),'Repeated audit should be idempotent'
+            assert sum(row.get('code')==10000 for row in results)==1,'Only one same-reviewed-version audit may commit'
             assert self.inventory()==2 and self.balance('account',self.account)==50 and self.balance('supplier',self.supplier)==176
             for table in ['room_info','summary','account_info']: assert self.ledger(table,identifier)==1
             assert self.post([identifier],0).get('code')==10000
             assert self.post([identifier],0).get('code')==10000
             self.empty([identifier])
-            return ['Concurrent same-document audit creates one receipt/payment/payable; repeated reversal has no extra effects']
+            return ['Four actual same-version audits have one winner and one receipt/payment/payable; fresh-read repeated reversal has no extra effects']
         self.case('purchase.posting_concurrent_idempotence',repeats)
 
         def funds():
@@ -164,17 +165,19 @@ class PurchasePostingExtended(PurchasePostingSuite):
             resource='/purchase-note/audit'
             existed,value=redis('HEXISTS','AUTH:RESOURCE_ROLES',resource),redis('HGET','AUTH:RESOURCE_ROLES',resource)
             admin=self.token
+            reviewed=self.review_versions([identifier])
             try:
                 self.token=token;redis('HDEL','AUTH:RESOURCE_ROLES',resource)
                 assert self.post([identifier]).get('code')==403;self.empty([identifier])
                 grant=json.dumps(['java.util.ArrayList',[keyword]])
                 redis('HSET','AUTH:RESOURCE_ROLES',resource,grant)
-                assert self.post([identifier]).get('code')==10000 and self.inventory()==2
+                assert self.post([identifier],versions=reviewed).get('code')==10000 and self.inventory()==2
+                self.token=admin;reverse_version=self.review_versions([identifier]);self.token=token
                 assert int(sql(self.state,"SELECT COUNT(*) FROM record WHERE type='buy' AND source="+literal(identifier)+' AND `user`='+literal(user_id)+';'))>0
                 redis('HDEL','AUTH:RESOURCE_ROLES',resource)
                 assert self.post([identifier],0).get('code')==403 and self.inventory()==2
                 redis('HSET','AUTH:RESOURCE_ROLES',resource,grant)
-                assert self.post([identifier],0).get('code')==10000;self.empty([identifier])
+                assert self.post([identifier],0,reverse_version).get('code')==10000;self.empty([identifier])
                 other=uuid.uuid4().hex
                 sql(self.state,'INSERT INTO frame(id,name,pid) VALUES('+literal(other)+",'QA Foreign Audit','0');")
                 sql(self.state,'UPDATE `user` SET frame='+literal(other)+' WHERE id='+literal(user_id)+';')

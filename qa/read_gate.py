@@ -17,7 +17,8 @@ def identity(state):
     return pid
 
 @contextlib.contextmanager
-def list_read_gate(state):
+def list_read_gate(state,kind='order'):
+    if kind not in ('order','purchase'):raise ValueError('Unknown QA list gate')
     pid=identity(state)
     jdk=Path(os.environ.get('JAVA_HOME','C:/Program Files/Java/jdk1.8.0_311'))
     if not (jdk/'lib/tools.jar').is_file():jdk=Path('C:/Program Files/Java/jdk1.8.0_311')
@@ -32,7 +33,7 @@ def list_read_gate(state):
     def attach(mode):
         identity(state)
         run([jdk/'bin/java.exe','-cp',str(classes)+os.pathsep+str(jdk/'lib/tools.jar'),'AttachReadGate',str(pid),jar,mode])
-    attach('on:'+str(root.resolve()))
+    attach(('on:' if kind=='order' else 'on-purchase:')+str(root.resolve()))
     try:yield root
     finally:
         (root/'resume').write_text('resume',encoding='ascii')

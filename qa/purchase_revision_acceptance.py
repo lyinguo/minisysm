@@ -99,7 +99,7 @@ class PurchaseRevisionSuite(PurchaseDraftSuite):
             assert self.revise(body).get('code')!=10000
             assert sql(self.state,'SELECT CAST(examine AS SIGNED) FROM buy WHERE id='+literal(identifier)+';')=='0'
             assert sql(self.state,'SELECT COUNT(*) FROM room WHERE goods='+literal(self.goods)+';')=='0'
-            assert self.request('POST','/purchase-note/verification',dict(ids=[identifier],type=1),service='purchase').get('code')==10000
+            assert self.request('POST','/purchase-note/verification',dict(ids=[identifier],type=1,version=self.document(identifier)['version']),service='purchase').get('code')==10000
             body['examine']=0
             assert self.revise(body).get('code')!=10000
             assert Decimal(sql(self.state,'SELECT nums FROM buy_info WHERE pid='+literal(identifier)+';'))==2

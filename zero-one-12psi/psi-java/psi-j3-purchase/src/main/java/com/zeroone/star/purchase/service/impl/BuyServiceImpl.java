@@ -97,6 +97,8 @@ import static com.alibaba.druid.util.StringUtils.*;
 @Service("purchaseIBuyService")
 public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBuyService {
     @Autowired
+    private com.zeroone.star.purchase.service.PurchaseSnapshotService purchaseSnapshots;
+    @Autowired
     private com.zeroone.star.purchase.service.PurchaseDocumentAccess purchaseAccess;
     @Autowired
     private com.zeroone.star.purchase.service.PurchaseDraftUpdateService purchaseDraftUpdate;
@@ -453,7 +455,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     @Override
     public JsonVO<String> checkStatus(PurchaseCheckDTO checkList) {
         if(checkList==null || checkList.getType()==null) throw new IllegalArgumentException("请选择采购单和目标核对状态");
-        purchaseCheck.change(checkList.getIds(),checkList.getType());
+        purchaseCheck.change(checkList.getIds(),checkList.getType(),checkList.getVersion(),checkList.getVersions());
         return JsonVO.success("修改成功");
     }
 
@@ -465,7 +467,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
     @Transactional(rollbackFor = Exception.class)
     public JsonVO<String> examineStatus(PurchaseAuditDTO auditList) {
         if(auditList==null || auditList.getType()==null || (auditList.getType()!=0 && auditList.getType()!=1)) throw new IllegalArgumentException("请选择采购单和有效的目标审核状态");
-        purchasePosting.post(auditList.getIds(),auditList.getType()==1);
+        purchasePosting.post(auditList.getIds(),auditList.getType()==1,auditList.getVersion(),auditList.getVersions());
         return JsonVO.success("采购审核状态已更新");
     }
 
@@ -492,6 +494,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
      * @author 加减法
      */
     @Override
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public PageDTO<PurchaseNoteListDTO> listPurchaseNote(PurchaseNoteQuery query){
         String allowedFrame=purchaseAccess.frame(purchaseAccess.authorize("/purchase-note/list"));
         //创建分页对象
@@ -551,6 +554,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
 
         //执行分页查询
         Page<BuyVO> resultPage = this.baseMapper.selectPageWithProduct(page, queryWrapper, query);
+        java.util.Map<String,String> versions=purchaseSnapshots.versions(resultPage.getRecords().stream().map(BuyVO::getId).collect(Collectors.toList()));
 
         //转化你为PageDTO返回
         return PageDTO.create(resultPage, source -> {
@@ -559,6 +563,7 @@ public class BuyServiceImpl extends ServiceImpl<BuyMapper, BuyDO> implements IBu
             dto.setBuyMoney(source.getMoney());
             dto.setCheckStatus(Boolean.TRUE.equals(source.getCheck()) ? 1 : 0);
             dto.setNoteUser(source.getUser());
+            dto.setVersion(versions.get(source.getId()));
             return dto;
         });
     }

@@ -1,5 +1,17 @@
 # 系统业务验收
 
+## 采购收货单核对与审核的读取版本
+
+`python qa/purchase_snapshot_acceptance.py run`执行11项真实HTTP/MySQL专项。详情GET `/purchase-note/document/{id}`与列表GET `/purchase-note/list`返回同一SHA256版本。POST `/purchase-note/verification`、`/purchase-note/audit`必须提交单单`{ids:[id],type:0或1,version:读取版本}`，或完整批量`{ids:[...],type:0或1,versions:{每个ID:读取版本}}`；禁止无版本、混用、缺失或额外成员。前后端须同时更新，旧脚本必须先明确读取版本再提交，不能在审核API内部自动取新版本替旧页面授权。
+
+每次修改、核对/反核对、审核/反审核均使旧页面失效；重新读取后提交相同目标仍不重复入账。同一旧版本并发只允许一次状态变更，其他请求被明确拒绝。列表头、明细与操作记录的版本通过三次批量查询计算，沿用同一REPEATABLE_READ快照；功能授权及组织范围仍由当前账号/角色单独判断。版本不是授权凭据。采购正反入账仍按原凭据校验和实际库存资金事务执行。
+
+详情有未保存字段时先保存；确认框打开后继续编辑也会阻止提交。旧页面被拒绝后不自动刷新版本或丢失输入，关闭重开并核对最新内容再操作。批量保留全部选中ID及版本，任一失败整批回滚；不丢弃缺ID成员后仅提交余下单据。错误保留选择，成功提交与刷新失败分开提示。
+
+浏览器运行`prepare`创建A/B/C三张专用采购单。在18030隔离页面按打印编号打开A，备注改为`QA local unsaved`后点核对应阻止，运行`verify-dirty`。关闭重开A，执行`external-edit`实际更新，再从旧窗口核对应拒绝，运行`verify-stale`；关闭重开确认`QA external detail newer`，核对后运行`verify-checked`。审核、反审核、反核对后分别运行`verify-audited`、`verify-reversed`、`verify-unchecked`。每步独立核对三单状态历史及实际库存/现金/应付。
+
+列表查询打印前缀，仅选B/C，执行`external-batch`更新C。旧列表批量核对应整批拒绝且保留选择，运行`verify-batch-stale`；刷新后核对最新C备注，重新选B/C核对，运行`verify-batch-checked`。A始终不参与该批。脚本的读取竞争检查使用同一QA本地调度门闩，新增固定purchase模式只暂停PurchaseSnapshotService.versions入口，最长15秒，finally恢复原类；仅SQL改变本次夹具，不替换查询结果。所有期间及授权测试串行，浏览器列表请求不得与读取门闩并行。私有token/报告/截图/夹具不推送。收货单附件仍未实现，本节不把占位上传算作完成。
+
 ## 采购订单真实附件
 
 `python qa/booking_attachment_acceptance.py run` 执行14项真实HTTP multipart/二进制下载、OAuth角色及独立MySQL验收。仅使用专用QA库和18023端口，必须与其他业务验收串行运行：关闭期间及Redis授权夹具会暂时改变该QA环境的共享条件，不能并行计数。

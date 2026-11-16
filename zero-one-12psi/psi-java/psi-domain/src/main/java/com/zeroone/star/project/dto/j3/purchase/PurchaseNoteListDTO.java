@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 @Data
 @ApiModel("采购单列表数据对象")
 public class PurchaseNoteListDTO {
+    private String version;
     private String supplierName;
     private String frameName;
     private String peopleName;

@@ -11,12 +11,14 @@ import java.util.*;
 public class PurchaseCheckService {
     private final JdbcTemplate db;
     private final PurchaseDocumentAccess access;
-    public PurchaseCheckService(JdbcTemplate db,PurchaseDocumentAccess access) { this.db=db;this.access=access; }
+    private final PurchaseSnapshotService snapshots;
+    public PurchaseCheckService(JdbcTemplate db,PurchaseDocumentAccess access,PurchaseSnapshotService snapshots) { this.db=db;this.access=access;this.snapshots=snapshots; }
     private static int number(Object value) { return value instanceof Boolean ? ((Boolean)value ? 1:0):value==null ? 0:((Number)value).intValue(); }
     @Transactional(rollbackFor=Exception.class)
-    public int change(List<String> ids,int target) {
+    public int change(List<String> ids,int target,String version,Map<String,String> versions) {
         UserDTO actor=access.authorize("/purchase-note/verification");
         if(target!=0 && target!=1) throw new IllegalArgumentException("核对状态只能为0或1");
+        Map<String,String> expected=snapshots.expected(ids,version,versions);
         if(ids==null || ids.isEmpty() || ids.size()>200 || new HashSet<>(ids).size()!=ids.size() || ids.stream().anyMatch(id->id==null || id.trim().isEmpty()))
             throw new IllegalArgumentException("请选择1到200张不同的采购单");
         db.update("INSERT INTO psi_document_write_lock(scope) VALUES('buy') ON DUPLICATE KEY UPDATE scope='buy'");
@@ -28,6 +30,7 @@ public class PurchaseCheckService {
             if(found.size()!=1) throw new IllegalArgumentException("采购单不存在");
             Map<String,Object> head=found.get(0);
             access.requireFrame(actor,String.valueOf(head.get("frame")));
+            snapshots.require(id,expected.get(id));
             if(number(head.get("examine"))!=0 || number(head.get("nucleus"))!=0)
                 throw new IllegalArgumentException("已审核或核销的采购单不能更改核对状态");
             if(db.queryForObject("SELECT COUNT(*) FROM period WHERE date>=DATE(?)",Integer.class,head.get("time"))>0)
