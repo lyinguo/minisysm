@@ -40,12 +40,14 @@ public class WarehouseReportDocumentService {
         return kind;
     }
 
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String, Object> list(String kind, int page, int size, String number, String frame) {
         String t = table(kind);
         int limit = Math.max(1, Math.min(size, 200));
         long offset = (long) (Math.max(1, page) - 1) * limit;
         String filter = "%" + (number == null ? "" : number.trim()) + "%";
         List<Map<String, Object>> rows = db.queryForList("SELECT d.*, f.name AS frameName FROM `" + t + "` d LEFT JOIN frame f ON f.id=d.frame WHERE d.number LIKE ? AND (? IS NULL OR d.frame=?) ORDER BY d.time DESC,d.id LIMIT ? OFFSET ?", filter, frame, frame, limit, offset);
+        for(Map<String,Object> row:rows)if(num(row.get("examine"))==1)attachCosts(t,row,items(t,str(row.get("id"))));
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", rows);
         result.put("total", db.queryForObject("SELECT COUNT(*) FROM `" + t + "` WHERE number LIKE ? AND (? IS NULL OR frame=?)", Long.class, filter, frame, frame));
@@ -71,16 +73,34 @@ public class WarehouseReportDocumentService {
         return version(header(t, id, true), db.queryForList("SELECT * FROM `" + t + "_info` WHERE pid=? ORDER BY id FOR UPDATE", id));
     }
 
+    @Transactional(readOnly=true,isolation=org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Map<String, Object> detail(String kind, String id) {
         String t = table(kind);
         Map<String, Object> head = header(t, id, false);
         List<Map<String, Object>> rows = items(t, id);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("version", version(head, rows));
+        attachCosts(t,head,rows);
         result.put("header", head);
         result.put("items", rows);
         result.put("goods", db.queryForList("SELECT g.id,g.name,g.number,g.spec,g.serial,g.batch,g.type FROM goods g WHERE g.id IN (SELECT goods FROM `" + t + "_info` WHERE pid=?)", id));
         return result;
+    }
+
+    /** Original estimates remain immutable; posted cost is read from replayed journals. */
+    private void attachCosts(String kind,Map<String,Object> head,List<Map<String,Object>> rows){
+        if(num(head.get("examine"))!=1)return;
+        String id=str(head.get("id"));Map<String,Map<String,Object>> costs=new HashMap<>();Set<String> ambiguous=new HashSet<>();
+        List<Map<String,Object>> journals=db.queryForList("SELECT info,SUM(bct) AS actual_cost,SUM(nums) AS actual_qty FROM summary WHERE `class`=? AND type=? GROUP BY info",id,"swap".equals(kind)?"swapOut":kind);
+        journals.addAll(db.queryForList("SELECT info,SUM(price*nums) AS actual_cost,SUM(nums) AS actual_qty FROM serve_info WHERE `class`=? AND type=? GROUP BY info",id,kind));
+        for(Map<String,Object> journal:journals)if(costs.put(str(journal.get("info")),journal)!=null)ambiguous.add(str(journal.get("info")));
+        BigDecimal total=BigDecimal.ZERO;boolean complete=!rows.isEmpty();
+        for(Map<String,Object> row:rows){
+            Map<String,Object> journal=costs.get(str(row.get("id")));
+            if(decimal(row.get("nums")).signum()<=0 || journal==null || ambiguous.contains(str(row.get("id"))) || decimal(journal.get("actual_qty")).compareTo(decimal(row.get("nums")))!=0){complete=false;continue;}
+            BigDecimal value=decimal(journal.get("actual_cost"));row.put("actualCost",value);row.put("actualPrice",value.divide(decimal(row.get("nums")),4,RoundingMode.HALF_UP));total=total.add(value);
+        }
+        head.put("costStatus",complete?"posted":"missing");if(complete)head.put("actualCost",total);
     }
 
     private void assertVersion(String expected, Map<String, Object> head, List<Map<String, Object>> rows) {
@@ -142,7 +162,7 @@ public class WarehouseReportDocumentService {
         assertVersion(expectedVersion,head,rows);
         proofs.requireOpenPeriod(head.get("time"));
         if(rows.isEmpty())throw new IllegalArgumentException("单据没有商品明细");
-        if(target==0)proofs.requireNoDependents(id,head,rows,products);
+        if(target==0)proofs.requireNoDependents(t,id,head,rows,products);
         Map<String, Map<String, Object>> goods = new HashMap<>();
         products.forEach(g -> goods.put(str(g.get("id")), g));
         for (Map<String, Object> item : rows) {

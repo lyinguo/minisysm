@@ -26,7 +26,7 @@ def snapshot():
     common=QA.parent/'zero-one-12psi/psi-java/psi-common'
     source=common/'src/main/java/com/zeroone/star/project/components/stock/StockCostRebuilder.java'
     classes=common/'target/classes/com/zeroone/star/project/components/stock'
-    names=list(classes.glob('StockCostRebuilder*.class'));assert {path.name for path in names}=={'StockCostRebuilder.class','StockCostRebuilder$1.class','StockCostRebuilder$Balance.class','StockCostRebuilder$Layer.class'}
+    names=list(classes.glob('StockCostRebuilder*.class'));assert {path.name for path in names}=={'StockCostRebuilder.class','StockCostRebuilder$1.class','StockCostRebuilder$Balance.class','StockCostRebuilder$Layer.class','StockCostRebuilder$TransferLeg.class'}
     assert all(path.stat().st_mtime>=source.stat().st_mtime for path in names)
     result['shared_cost_source']=digest(source)
     result['shared_cost_classes']={path.name:digest(path) for path in names}

@@ -10,7 +10,7 @@ from purchase_posting_acceptance import PurchasePostingSuite
 
 
 @contextmanager
-def owned_cost_mode(state, mode):
+def owned_cost_mode(state, mode, *, branch=True, rule='def'):
     assert not sql(state, "SELECT id FROM sys WHERE name='fun';"), 'Cost-mode acceptance requires no existing QA function setting'
     raw = sql(state, "SELECT JSON_OBJECT('name',TRIGGER_NAME,'event',EVENT_MANIPULATION,'body',ACTION_STATEMENT) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME IN ('psi_guard_fun_update','psi_guard_fun_delete');")
     guards = [json.loads(line) for line in raw.splitlines() if line]
@@ -19,7 +19,7 @@ def owned_cost_mode(state, mode):
     setting = uuid.uuid4().hex
     try:
         for guard in guards: sql(state, 'DROP TRIGGER `'+guard['name']+'`;')
-        sql(state, 'INSERT INTO sys(id,name,info) VALUES('+','.join(literal(v) for v in [setting,'fun',json.dumps(dict(valuation=mode,rule='def',branch=True))])+');')
+        sql(state, 'INSERT INTO sys(id,name,info) VALUES('+','.join(literal(v) for v in [setting,'fun',json.dumps(dict(valuation=mode,rule=rule,branch=branch))])+');')
         yield
     finally:
         try: sql(state, 'DELETE FROM sys WHERE id='+literal(setting)+';')

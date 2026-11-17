@@ -54,9 +54,9 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-async function open() {
+async function open(kind: 'entry' | 'extry' | 'swap' = 'entry') {
   const wrapper = mount(Report, {
-    props: { kind: 'entry', title: '入库单报表' },
+    props: { kind, title: '入库单报表' },
     attachTo: document.body,
     global: { plugins: [ElementPlus] }
   })
@@ -68,6 +68,73 @@ async function open() {
 }
 
 describe('warehouse document actions', () => {
+  it('shows posted journal cost rather than a deliberately incorrect estimate', async () => {
+    mocks.get.mockImplementation(async (url: string) => ({
+      code: 10000,
+      data: url.endsWith('/d1')
+        ? {
+            ...detail(),
+            header: {
+              ...detail().header,
+              examine: 1,
+              total: 400,
+              actualCost: 17.6,
+              costStatus: 'posted'
+            },
+            items: [
+              { ...detail().items[0], nums: 4, price: 100, actualPrice: 4.4, actualCost: 17.6 }
+            ]
+          }
+        : url.includes('getWarehouseNameList')
+          ? []
+          : {
+              rows: [
+                {
+                  id: 'd1',
+                  number: 'IN001',
+                  examine: 1,
+                  total: 400,
+                  actualCost: 17.6,
+                  costStatus: 'posted'
+                }
+              ],
+              total: 1
+            }
+    }))
+    const wrapper = await open('extry')
+    try {
+      expect(wrapper.text()).toContain('17.6000')
+      expect(wrapper.text()).toContain('4.4000')
+      expect(wrapper.text()).not.toContain('400.0000')
+      expect(wrapper.text()).toContain('实际成本')
+    } finally {
+      wrapper.unmount()
+    }
+  })
+  it('identifies incomplete legacy cost journals instead of showing an estimate as actual', async () => {
+    mocks.get.mockImplementation(async (url: string) => ({
+      code: 10000,
+      data: url.endsWith('/d1')
+        ? {
+            ...detail(),
+            header: { ...detail().header, examine: 1, total: 400, costStatus: 'missing' }
+          }
+        : url.includes('getWarehouseNameList')
+          ? []
+          : {
+              rows: [{ id: 'd1', number: 'IN001', examine: 1, total: 400, costStatus: 'missing' }],
+              total: 1
+            }
+    }))
+    const wrapper = await open('extry')
+    try {
+      expect(wrapper.text()).toContain('成本流水待核对')
+      expect(wrapper.text()).toContain('历史单据缺少完整实际成本流水')
+      expect(wrapper.text()).not.toContain('400.0000')
+    } finally {
+      wrapper.unmount()
+    }
+  })
   it('persists a real document without auditing on Save', async () => {
     const wrapper = await open()
     try {

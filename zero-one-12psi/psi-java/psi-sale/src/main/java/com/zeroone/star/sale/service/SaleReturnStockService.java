@@ -2,6 +2,7 @@ package com.zeroone.star.sale.service;
 
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
+import com.zeroone.star.project.components.stock.StockCostRebuilder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.math.*;
@@ -101,8 +102,7 @@ public class SaleReturnStockService {
             if(s(row.get("id")).equals(s(issue.get("id"))))return costs;
             List<String> numbers=serials(row.get("serial"));
             if(n(row.get("direction"))!=1 || numbers.isEmpty())continue;
-            BigDecimal value=d(row.get("bct")),allocated=BigDecimal.ZERO;
-            for(int i=0;i<numbers.size();i++){BigDecimal part=i==numbers.size()-1?value.subtract(allocated):value.divide(BigDecimal.valueOf(numbers.size()),4,RoundingMode.HALF_UP);costs.put(numbers.get(i),part);allocated=allocated.add(part);}
+            costs.putAll(StockCostRebuilder.receiptSerialValues(s(row.get("type")),numbers,d(row.get("bct")),costs));
         }
         throw new IllegalStateException("原序列号销售成本凭据不在库存记录中");
     }

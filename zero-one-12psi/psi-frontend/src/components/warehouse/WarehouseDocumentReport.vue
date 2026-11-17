@@ -18,7 +18,12 @@
       <el-table-column label="单据时间" min-width="170"
         ><template #default="{ row }">{{ formatTime(row.time) }}</template></el-table-column
       >
-      <el-table-column prop="total" label="单据成本" min-width="120" />
+      <el-table-column label="单据成本" min-width="140"
+        ><template #default="{ row }"
+          >{{ displayedCost(row)
+          }}<small>{{ Number(row.examine) === 1 ? '实际成本' : '预计成本' }}</small></template
+        ></el-table-column
+      >
       <el-table-column prop="cost" label="单据费用" min-width="120" />
       <el-table-column label="审核状态" width="100"
         ><template #default="{ row }">{{
@@ -49,6 +54,16 @@
     >
       <div v-loading="detailLoading">
         <template v-if="draft">
+          <el-alert
+            v-if="audited && draft.header.actualCost == null"
+            title="历史单据缺少完整实际成本流水，请核对原始记录。"
+            type="warning"
+            :closable="false"
+          />
+          <p v-if="audited && draft.header.actualCost != null">
+            实际成本合计：{{ Number(draft.header.actualCost).toFixed(4) }}
+            元（根据原始收发与当前计价规则计算）
+          </p>
           <el-alert
             v-if="!draft.items.length"
             title="该单据缺少商品明细，不能保存或审核。请先在单据管理中补全数据。"
@@ -105,7 +120,11 @@
             ></el-table-column>
             <el-table-column label="单位成本" min-width="160"
               ><template #default="{ row }"
+                ><span v-if="audited">{{
+                  row.actualPrice == null ? '待核对' : Number(row.actualPrice).toFixed(4)
+                }}</span
                 ><el-input-number
+                  v-else
                   v-model="row.price"
                   :precision="4"
                   :min="0"
@@ -113,7 +132,11 @@
             ></el-table-column>
             <el-table-column label="总成本" width="120"
               ><template #default="{ row }">{{
-                (Number(row.nums) * Number(row.price)).toFixed(4)
+                audited
+                  ? row.actualCost == null
+                    ? '待核对'
+                    : Number(row.actualCost).toFixed(4)
+                  : (Number(row.nums) * Number(row.price)).toFixed(4)
               }}</template></el-table-column
             >
             <el-table-column prop="batch" label="批次号" width="130" />
@@ -134,7 +157,7 @@
                 ><el-input v-model="row.data" :disabled="editingLocked" /></template
             ></el-table-column>
           </el-table>
-          <p>单据费用和商品资料保持原值；审核前可修改现有明细的仓库、数量、成本及备注。</p>
+          <p>未审核时为预计成本；审核后以实际收发流水为准。费用和商品资料保持原值。</p>
         </template>
       </div>
       <template #footer>
@@ -265,6 +288,10 @@ async function openDetail(id: string) {
 function productName(id: string) {
   return draft.value?.goods?.find((g) => String(g.id) === String(id))?.name || id
 }
+function displayedCost(row: Row) {
+  if (Number(row.examine) === 1 && row.actualCost == null) return '成本流水待核对'
+  return Number(row.actualCost ?? row.total ?? 0).toFixed(4)
+}
 async function persist() {
   if (!draft.value) throw new Error('请重新打开单据详情')
   const id = encodeURIComponent(String(draft.value.header.id))
@@ -319,7 +346,9 @@ const printColumns = [
   { prop: 'data', label: '备注' }
 ]
 function printRow(row: Row) {
-  printDocument(props.title, printColumns, [{ ...row, time: formatTime(row.time) }])
+  printDocument(props.title, printColumns, [
+    { ...row, total: displayedCost(row), time: formatTime(row.time) }
+  ])
 }
 async function exportPage() {
   try {
@@ -329,7 +358,11 @@ async function exportPage() {
       Object.fromEntries(
         printColumns.map((column) => [
           column.label,
-          column.prop === 'time' ? formatTime(row.time) : row[column.prop]
+          column.prop === 'time'
+            ? formatTime(row.time)
+            : column.prop === 'total'
+              ? displayedCost(row)
+              : row[column.prop]
         ])
       )
     )
@@ -363,5 +396,9 @@ onMounted(() => {
 }
 .el-pagination {
   margin-top: 16px;
+}
+small {
+  display: block;
+  color: #909399;
 }
 </style>
