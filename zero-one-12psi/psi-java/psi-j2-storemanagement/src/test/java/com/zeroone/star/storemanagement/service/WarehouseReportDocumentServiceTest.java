@@ -26,6 +26,7 @@ class WarehouseReportDocumentServiceTest {
         db = new JdbcTemplate(ds);
         tx = new TransactionTemplate(new DataSourceTransactionManager(ds));
         service = new WarehouseReportDocumentService(db);
+        new StockDocumentWriteLock(db).initialize();
         db.update("INSERT INTO warehouse(id,name,number) VALUES('w1','仓库一','W1'),('w2','仓库二','W2')");
         db.update("INSERT INTO goods(id,name,py,number,category,unit,buy,sell,stock,type,more) VALUES('g1','测试商品','cs','G1','0','个',2,3,0,0,'{}')");
         db.update("INSERT INTO room(id,warehouse,goods,attr,nums) VALUES('r1','w1','g1','',10),('r2','w2','g1','',3)");

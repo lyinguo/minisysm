@@ -44,7 +44,7 @@ public class InboundDocumentService {
     private Map<String,Map<String,Object>> reviewed(StockDocumentCommand command,UserDTO actor,List<String> ids){
         writes.lock("entry");Map<String,Map<String,Object>> result=new LinkedHashMap<>();
         for(String id:ids){
-            Map<String,Object> row=head(id,true);scope(actor,row);
+            CountAdjustmentGuard.require(db,"entry",id);Map<String,Object> row=head(id,true);scope(actor,row);
             if(!Arrays.asList(0,1).contains(number(row.get("audit_state"))) || !Arrays.asList(0,1).contains(number(row.get("check_state"))))throw new IllegalStateException("历史单据状态异常，请先核对原始数据");
             if(!reports.lockedVersion("entry",id).equals(command.getVersions().get(id)))throw new IllegalStateException("单据已被其他操作修改，请重新打开详情后重试");
             result.put(id,row);

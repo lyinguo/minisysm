@@ -47,7 +47,7 @@ public class OutboundDocumentService {
     private Map<String,Map<String,Object>> reviewed(StockDocumentCommand command,UserDTO actor,List<String> ids){
         writes.lock("extry");Map<String,Map<String,Object>> result=new LinkedHashMap<>();
         for(String id:ids){
-            Map<String,Object> row=head(id,true);scope(actor,row);
+            CountAdjustmentGuard.require(db,"extry",id);Map<String,Object> row=head(id,true);scope(actor,row);
             if(!Arrays.asList(0,1).contains(number(row.get("audit_state"))) || !Arrays.asList(0,1).contains(number(row.get("check_state"))))throw new IllegalStateException("历史单据状态异常，请先核对原始数据");
             if(!reports.lockedVersion("extry",id).equals(command.getVersions().get(id)))throw new IllegalStateException("单据已被其他操作修改，请重新打开详情后重试");
             result.put(id,row);
@@ -112,7 +112,7 @@ public class OutboundDocumentService {
     @Transactional(rollbackFor=Exception.class)
     public void save(OtherOutListDTO dto){
         UserDTO actor=access.authorize("extry","save");if(dto==null || dto.getId()==null)throw new IllegalArgumentException("请重新打开出库单");
-        writes.lock("extry");Map<String,Object> original=head(dto.getId(),true);scope(actor,original);
+        writes.lock("extry");CountAdjustmentGuard.require(db,"extry",dto.getId());Map<String,Object> original=head(dto.getId(),true);scope(actor,original);
         if(number(original.get("audit_state"))!=0 || number(original.get("check_state"))!=0 || !Arrays.asList(0,3).contains(number(original.get("fee_state"))))throw new IllegalStateException("请先处理审核、核对及费用结算状态，再修改草稿");
         if(proofs.hasMarker("extry",dto.getId()) || proofs.hasMovements(dto.getId()))throw new IllegalStateException("单据存在原始入账凭据，请核对历史记录");
         if(dto.getVersion()==null || !dto.getVersion().equals(reports.lockedVersion("extry",dto.getId())))throw new IllegalStateException("单据已被其他操作修改，请重新打开详情");

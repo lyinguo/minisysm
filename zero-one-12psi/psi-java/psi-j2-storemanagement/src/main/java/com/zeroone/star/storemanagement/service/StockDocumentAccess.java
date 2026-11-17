@@ -37,6 +37,8 @@ public class StockDocumentAccess {
         if (user.getRoles().contains("ROLE_ADMIN")) return user;
         if (!DatabaseResourcePermission.allowed(db,current.get("role_id").toString(),"/j2-store"+path))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "没有对应单据操作权限");
+        if ("count".equals(kind) && !DatabaseResourcePermission.allowed(db,current.get("role_id").toString(),"/j2-store/verify/inventoryReduce"))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"盘点需要同时具备盘盈和盘亏权限");
         return user;
     }
     public String frame(UserDTO user) {
@@ -56,6 +58,7 @@ public class StockDocumentAccess {
         return selected;
     }
     private String permissionPath(String kind, String action) {
+        if ("count".equals(kind)) return "/verify/inventoryPlus";
         if ("entry".equals(kind)) {
             Map<String, String> paths = new HashMap<>();
             paths.put("read", "/otherin"); paths.put("create", "/otherin/add"); paths.put("save", "/otherin/update");
@@ -80,6 +83,8 @@ public class StockDocumentAccess {
             if ("create".equals(action)) return "/transfer/add-transferList";
             if ("save".equals(action)) return "/transfer/modify-transfer";
             if ("audit".equals(action)) return "/transfer/batch-audit-transfer";
+            if ("delete".equals(action)) return "/transfer/remove-transfer";
+            if ("import".equals(action)) return "/transfer/import";
         }
         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单据类型或操作无效");
     }

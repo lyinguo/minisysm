@@ -58,7 +58,9 @@ final class WarehousePostingProof {
             throw new IllegalStateException("单据日期已结账，不能审核或反审核");
     }
     void requireNoDependents(String kind,String id,Map<String,Object> head,List<Map<String,Object>> rows,List<Map<String,Object>> products) {
-        if(count("SELECT COUNT(*) FROM fifo WHERE `in` IN (SELECT id FROM summary WHERE `class`=?) AND `out` NOT IN (SELECT id FROM summary WHERE `class`=?)",id,id)>0)
+        List<String> together=CountAdjustmentGuard.reversingTogether(db,id);String placeholders=String.join(",",Collections.nCopies(together.size(),"?"));
+        List<Object> dependencyArgs=new ArrayList<>();dependencyArgs.add(id);dependencyArgs.addAll(together);
+        if(count("SELECT COUNT(*) FROM fifo WHERE `in` IN (SELECT id FROM summary WHERE `class`=?) AND `out` NOT IN (SELECT id FROM summary WHERE `class` IN ("+placeholders+"))",dependencyArgs.toArray())>0)
             throw new IllegalStateException("原入库成本层已被后续出库使用，请先处理后续出库单据");
         List<String> settings=db.queryForList("SELECT info FROM sys WHERE name='fun'",String.class);
         if(settings.size()>1)throw new IllegalStateException("成本配置重复，请先核对系统参数");
@@ -71,6 +73,7 @@ final class WarehousePostingProof {
             if(service)continue;
             StringBuilder query=new StringBuilder("SELECT COUNT(*) FROM summary WHERE goods=? AND `class`<>? AND direction=0 AND time>=?");
             List<Object> args=new ArrayList<>(Arrays.asList(row.get("goods"),id,head.get("time")));
+            query.append(" AND `class` NOT IN ("+placeholders+")");args.addAll(together);
             if(config.getBool("branch",false)){
                 if("swap".equals(kind)){query.append(" AND warehouse IN (?,?)");args.add(row.get("warehouse"));args.add(row.get("storehouse"));}
                 else{query.append(" AND warehouse=?");args.add(row.get("warehouse"));}

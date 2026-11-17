@@ -139,6 +139,7 @@ public class OtherInServiceImpl extends ServiceImpl<OtherInMapper, EntryDO>  imp
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateOtherInList(OtherInListDetailDTO dto) {
+        com.zeroone.star.storemanagement.service.CountAdjustmentGuard.require(stockDb,"entry",dto.getId());
         UserDTO actor = stockAccess.authorize("entry", "save");
         if (dto == null || dto.getId() == null) throw new IllegalArgumentException("单据ID不能为空");
         stockWriteLock.lock("entry");

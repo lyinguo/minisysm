@@ -27,7 +27,7 @@ public class WarehouseReportDocumentService {
         this.db = db;this.proofs=new WarehousePostingProof(db);this.writes=new StockDocumentWriteLock(db);
         this.costs=new com.zeroone.star.project.components.stock.StockCostRebuilder(db);
     }
-    @javax.annotation.PostConstruct public void initializePostingProofs() { proofs.initialize(); }
+    @javax.annotation.PostConstruct public void initializePostingProofs() { proofs.initialize(); writes.initialize(); }
 
     @Data
     public static class Edit {
@@ -111,8 +111,14 @@ public class WarehouseReportDocumentService {
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> save(String kind, String id, Edit edit, String actor) {
         String t = table(kind);
-        if("extry".equals(t))writes.lock(t);
+        writes.lock(t);
         Map<String, Object> head = header(t, id, true);
+        CountAdjustmentGuard.require(db,t,id);
+        if("swap".equals(t) && (proofs.hasMarker(t,id) || proofs.hasMovements(id)
+            || db.queryForObject("SELECT COUNT(*) FROM swap WHERE id=? AND (cost<>0 OR cse IN (1,2))",Integer.class,id)>0
+            || db.queryForObject("SELECT COUNT(*) FROM cost WHERE type='swap' AND `class`=?",Integer.class,id)>0
+            || db.queryForObject("SELECT COUNT(*) FROM invoice WHERE type='swap' AND `class`=?",Integer.class,id)>0
+            || db.queryForObject("SELECT COUNT(*) FROM bill_info WHERE mold='swap' AND source=?",Integer.class,id)>0))throw new IllegalStateException("调拨单存在入账或结算关联，不能直接修改草稿");
         if("extry".equals(t) && (db.queryForObject("SELECT COUNT(*) FROM extry WHERE id=? AND cse IN (1,2)",Integer.class,id)>0 || proofs.hasMarker(t,id) || proofs.hasMovements(id)
                 || db.queryForObject("SELECT COUNT(*) FROM cost WHERE type='extry' AND `class`=? AND (COALESCE(settle,0)<>0 OR COALESCE(state,0)<>0)",Integer.class,id)>0
                 || db.queryForObject("SELECT COUNT(*) FROM cost_info WHERE pid IN (SELECT id FROM cost WHERE type='extry' AND `class`=?)",Integer.class,id)>0
@@ -159,6 +165,7 @@ public class WarehouseReportDocumentService {
         String t = table(kind);
         if (target != 0 && target != 1) throw new IllegalArgumentException("审核状态无效");
         Map<String, Object> head = header(t, id, true);
+        CountAdjustmentGuard.require(db,t,id);
         List<Map<String,Object>> rows=db.queryForList("SELECT * FROM `"+t+"_info` WHERE pid=? ORDER BY id FOR UPDATE",id);
         List<Map<String,Object>> products=db.queryForList("SELECT id,type,batch,serial FROM goods WHERE id IN (SELECT goods FROM `"+t+"_info` WHERE pid=?) ORDER BY id FOR UPDATE",id);
         int state=num(head.get("examine"));
