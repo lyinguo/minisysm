@@ -22,6 +22,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import com.zeroone.star.project.dto.j2.store.StockDocumentCommand;
+import com.zeroone.star.storemanagement.service.OutboundDocumentService;
 
 
 /**
@@ -39,27 +42,27 @@ public class OtherOutController implements OtherOutApis {
 
     @Resource
     private IOtherOutService otherOutListService;
+    @Resource private OutboundDocumentService outbound;
+    @Resource private com.zeroone.star.storemanagement.service.OutboundSpreadsheetService files;
 
     @PutMapping("/examine")
     @ApiOperation(value = "审核/反审核出库单")
     @Override
-    public JsonVO<String> examine(@RequestBody List<Integer> ids) {
-        otherOutListService.examine(ids);
-        return JsonVO.success("success");
+    public JsonVO<Integer> examine(@RequestBody StockDocumentCommand command) {
+        return JsonVO.success(outbound.audit(command));
     }
     @PutMapping("/check")
     @ApiOperation(value = "核对/反核对出库单")
     @Override
-    public JsonVO<String> check(@RequestBody List<Integer> ids) {
-        otherOutListService.check(ids);
-        return JsonVO.success("success");
+    public JsonVO<Integer> check(@RequestBody StockDocumentCommand command) {
+        return JsonVO.success(outbound.check(command));
     }
 
     @PutMapping("/update")
     @ApiOperation(value = "修改其他出库单")
     @Override
     public JsonVO<String> updateOtherOutList(@RequestBody OtherOutListDTO otherOutListDTO) {
-        otherOutListService.updateOtherOutList(otherOutListDTO);
+        outbound.save(otherOutListDTO);
 
         return JsonVO.success(otherOutListDTO.getId());
     }
@@ -67,125 +70,56 @@ public class OtherOutController implements OtherOutApis {
     @DeleteMapping("/delete")
     @ApiOperation(value = "删除其他出库单")
     @Override
-    public JsonVO<List<String>> deleteOtherOutList(@RequestBody List<Integer> ids) {
-        return JsonVO.success(otherOutListService.deleteOtherOutList(ids));
+    public JsonVO<Integer> deleteOtherOutList(@RequestBody StockDocumentCommand command) {
+        return JsonVO.success(outbound.remove(command));
     }
 
     @GetMapping("/list")
     @ApiOperation(value = "获取出库单列表")
     @Override
-    public JsonVO<PageDTO<OtherOutListDTO>> listOtherOut(OtherOutQuery query) {
-        return otherOutListService.listOtherOut(query);
+    public JsonVO<Map<String,Object>> listOtherOut(OtherOutQuery query) {
+        return JsonVO.success(outbound.list(query));
     }
+    @GetMapping("/options")
+    public JsonVO<Map<String,Object>> options(@RequestParam(required=false) String id){return JsonVO.success(outbound.options(id));}
 
     @GetMapping("/getInfo")
     @ApiOperation(value = "获取出库单详情")
     @ApiImplicitParam(name = "id", value = "其他出库单编号", required = true, example = "1d7b0520e93e72715d5d6af1fb7d9a37")
     @Override
-    public JsonVO<OtherOutListInfoDTO> getOtherOutListInfo(String id) {
-        return otherOutListService.getOtherOutListInfo(id);
+    public JsonVO<Map<String,Object>> getOtherOutListInfo(String id) {
+        return JsonVO.success(outbound.detail(id));
     }
 
     @PostMapping("/add")
     @ApiOperation(value = "添加出库单")
     @Override
     public JsonVO<String> addOtherOutList(@RequestBody OtherOutListDTO otherOutListDTO) {
-        return otherOutListService.addOtherOutList(otherOutListDTO);
+        return JsonVO.success(outbound.create(otherOutListDTO));
     }
 
 
     @GetMapping("/exportEasyExcel")
     @ApiOperation(value = "导出其他出库单数据Excel")
     @Override
-    public JsonVO<ResponseEntity<byte[]>> exportOrderListExcel(@RequestParam("ids") List<String> ids) {
-        try {
-            if(ids.isEmpty()) {
-                JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-                result.setMessage("列表为空");
-                result.setData(ResponseEntity.badRequest().body(new byte[0]));
-                return result;
-            }
-            List<String> idStrList = new ArrayList<>(ids);
-            byte[] excelData = otherOutListService.exportOrderList(idStrList);
-            if (excelData == null || excelData.length == 0) {
-                JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-                result.setMessage("无数据");
-                result.setData(ResponseEntity.badRequest().body(new byte[0]));
-                return result;
-            }
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            String fileName = URLEncoder.encode(DateTime.now().toString("yyyyMMddHHmmss") + "其他出库单.xlsx", StandardCharsets.UTF_8.toString());
-            headers.setContentDispositionFormData("attachment", fileName);
-            return JsonVO.success(ResponseEntity.ok().headers(headers).body(excelData));
-        } catch  (RuntimeException e) {
-            // 处理数据为空等运行时异常
-            JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-            result.setMessage(e.getMessage());
-            result.setData(ResponseEntity.badRequest().body(new byte[0]));
-            return result;
-        }  catch (Exception e) {
-            JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-            result.setMessage("导出失败：" + e.getMessage());
-            result.setData(ResponseEntity.badRequest().body(new byte[0]));
-            return result;
-        }
+    public ResponseEntity<byte[]> exportOrderListExcel(@RequestParam("ids") List<String> ids) {
+        return ResponseEntity.ok().header("Content-Disposition","attachment; filename=\"outbound-summary.xlsx\"").header("Cache-Control","no-store").contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(files.export(ids,false));
     }
 
 
     @GetMapping("/exportDetailExcel")
     @ApiOperation(value = "导出其他出库单详情数据Excel")
     @Override
-    public JsonVO<ResponseEntity<byte[]>> exportOrderDetailExcel(@RequestParam("ids") List<String> ids) {
-        try {
-            if(ids.isEmpty()) {
-                JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-                result.setMessage("列表为空");
-                result.setData(ResponseEntity.badRequest().body(new byte[0]));
-                return result;
-            }
-            List<String> idStrList = new ArrayList<>(ids);
-            byte[] excelData = otherOutListService.exportOrderDetails(idStrList);
-            if (excelData == null || excelData.length == 0) {
-                JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-                result.setMessage("无数据");
-                result.setData(ResponseEntity.badRequest().body(new byte[0]));
-                return result;
-            }
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            String fileName = URLEncoder.encode(DateTime.now().toString("yyyyMMddHHmmss") + "其他出库单详情.xlsx", StandardCharsets.UTF_8.toString());
-            headers.setContentDispositionFormData("attachment", fileName);
-
-            return JsonVO.success(ResponseEntity.ok().headers(headers).body(excelData));
-        } catch (RuntimeException e) {
-            // 处理数据为空等运行时异常
-            JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-            result.setMessage(e.getMessage());
-            result.setData(ResponseEntity.badRequest().body(new byte[0]));
-            return result;
-        }  catch (Exception e) {
-            JsonVO<ResponseEntity<byte[]>> result = new JsonVO<>();
-            result.setMessage("导出失败：" + e.getMessage());
-            result.setData(ResponseEntity.badRequest().body(new byte[0]));
-            return result;
-        }
-
+    public ResponseEntity<byte[]> exportOrderDetailExcel(@RequestParam("ids") List<String> ids) {
+        return ResponseEntity.ok().header("Content-Disposition","attachment; filename=\"outbound-detail.xlsx\"").header("Cache-Control","no-store").contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(files.export(ids,true));
     }
 
 
     @PostMapping("/import")
     @ApiOperation(value = "批量导入其他出库单")
     @Override
-    public ResponseEntity<JsonVO<String>> importOrderList(@RequestBody MultipartFile file) {
-        try {
-            otherOutListService.importOrders(file.getInputStream());
-            return ResponseEntity.ok(JsonVO.success("导入成功"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(JsonVO.fail("导入失败：" + e.getMessage()));
-        }
+    public ResponseEntity<JsonVO<String>> importOrderList(@RequestPart("file") MultipartFile file) {
+        return ResponseEntity.ok(JsonVO.success(outbound.requireImportWorkflow()));
     }
 
 }

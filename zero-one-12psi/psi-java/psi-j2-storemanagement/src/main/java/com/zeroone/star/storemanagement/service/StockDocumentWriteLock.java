@@ -19,7 +19,7 @@ public class StockDocumentWriteLock {
     public void lock(String kind) {
         if (!Arrays.asList("entry", "extry", "swap").contains(kind) || !TransactionSynchronizationManager.isActualTransactionActive())
             throw new IllegalStateException("单据写入必须位于事务中");
-        db.update("INSERT IGNORE INTO psi_document_write_lock(scope) VALUES (?)", kind);
+        db.update("INSERT INTO psi_document_write_lock(scope) VALUES (?) ON DUPLICATE KEY UPDATE scope=VALUES(scope)", kind);
         db.queryForObject("SELECT scope FROM psi_document_write_lock WHERE scope=? FOR UPDATE", String.class, kind);
     }
 }

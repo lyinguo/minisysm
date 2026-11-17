@@ -69,6 +69,11 @@ public class StockDocumentAccess {
             if ("create".equals(action)) return "/otherout/add";
             if ("save".equals(action)) return "/otherout/update";
             if ("audit".equals(action)) return "/otherout/examine";
+            if ("check".equals(action)) return "/otherout/check";
+            if ("delete".equals(action)) return "/otherout/delete";
+            if ("import".equals(action)) return "/otherout/import";
+            if ("export-simple".equals(action)) return "/otherout/exportEasyExcel";
+            if ("export-detail".equals(action)) return "/otherout/exportDetailExcel";
         } else if ("swap".equals(kind)) {
             if ("read".equals(action)) return "/transfer/query-transferList";
             if ("detail".equals(action)) return "/transfer/detail-transferInfo";

@@ -41,7 +41,7 @@ const config = mergeConfig(base, defineConfig({
           } catch {response.statusCode=401;response.end(JSON.stringify({code:401,message:'隔离验收会话无效，请重新准备QA会话'}))}
           return
         }
-        if (request.url === '/fund/receipt' || request.url?.startsWith('/otherin') || request.url?.startsWith('/transfer/report-documents/') || ['/c1-systemparameters/', '/j7-sysargs/', '/store/', '/goods/', '/basic_information/', '/sale/', '/j3-purchase/', '/homepage/', '/payment-order/', '/fund/receipt/'].some(prefix => request.url?.startsWith(prefix))) { next(); return }
+        if (request.url === '/fund/receipt' || request.url?.startsWith('/otherin') || request.url?.startsWith('/otherout') || request.url?.startsWith('/transfer/report-documents/') || ['/c1-systemparameters/', '/j7-sysargs/', '/store/', '/goods/', '/basic_information/', '/sale/', '/j3-purchase/', '/homepage/', '/payment-order/', '/fund/receipt/'].some(prefix => request.url?.startsWith(prefix))) { next(); return }
         response.statusCode = 503
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.end(JSON.stringify({ code: 9998, message: '隔离验收环境尚未启动此业务服务' }))
@@ -56,6 +56,7 @@ const config = mergeConfig(base, defineConfig({
   }]
 }))
 config.server!.proxy = {
+  '/api/otherout': { target: 'http://127.0.0.1:18001', rewrite: path => path.replace('/api', '/j2-store') },
   '/api/otherin': { target: 'http://127.0.0.1:18020', rewrite: path => path.replace('/api', '') },
   '/api/transfer/report-documents': { target: 'http://127.0.0.1:18020', rewrite: path => path.replace('/api', '') },
   '/api/fund/receipt': { target: 'http://127.0.0.1:18026', rewrite: path => path.replace('/api', '') },

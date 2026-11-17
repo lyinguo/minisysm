@@ -5,6 +5,8 @@ import com.zeroone.star.project.dto.j2.store.OtherOutListInfoDTO;
 import com.zeroone.star.project.query.j2.store.OtherOutQuery;
 import com.zeroone.star.project.vo.JsonVO;
 import java.util.List;
+import java.util.Map;
+import com.zeroone.star.project.dto.j2.store.StockDocumentCommand;
 import com.zeroone.star.project.dto.j2.store.OtherOutListDTO;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,14 +25,14 @@ public interface OtherOutApis {
      * @param ids 审核id列表
      * @return 修改结果
      */
-    JsonVO<String> examine(List<Integer> ids);
+    JsonVO<Integer> examine(StockDocumentCommand command);
 
     /**
      * 核对或反核对
      * @param ids 核对id列表
      * @return 修改结果
      */
-    JsonVO<String> check(List<Integer> ids);
+    JsonVO<Integer> check(StockDocumentCommand command);
     /**
      * 修改其他出库单
      * @param otherOutListDTO 修改参数
@@ -44,20 +46,20 @@ public interface OtherOutApis {
      * @param ids 删除的出库单ID列表
      * @return 删除结果
      */
-    JsonVO<List<String>> deleteOtherOutList(List<Integer> ids);
+    JsonVO<Integer> deleteOtherOutList(StockDocumentCommand command);
 
     /**
      * 获取其他出库单列表
      * @param query 查询出库单列表
      * @return 获取结果
      */
-    JsonVO<PageDTO<OtherOutListDTO>> listOtherOut(OtherOutQuery query);
+    JsonVO<Map<String,Object>> listOtherOut(OtherOutQuery query);
     /**
      * 获取指定其他出库单详细
      * @param id 获取的出库单ID
      * @return 获取结果
      */
-    JsonVO<OtherOutListInfoDTO> getOtherOutListInfo(String id);
+    JsonVO<Map<String,Object>> getOtherOutListInfo(String id);
 //
     /**
      * 新增其他出库单
@@ -72,14 +74,14 @@ public interface OtherOutApis {
      * @param ids 需要导出的出库单ID列表
      * @return
      */
-    JsonVO<ResponseEntity<byte[]>> exportOrderListExcel(List<String> ids);
+    ResponseEntity<byte[]> exportOrderListExcel(List<String> ids);
 
     /**
      * 导出其他出库单详细报表
      * @param ids 需要导出的出库单ID列表
      * @return
      */
-    JsonVO<ResponseEntity<byte[]>> exportOrderDetailExcel(List<String> ids);
+    ResponseEntity<byte[]> exportOrderDetailExcel(List<String> ids);
 
     /**
      * 批量导入其他出库单数据

@@ -20,6 +20,8 @@ import java.util.List;
 @Data
 @ApiModel("OtherOutListDTO")
 public class OtherOutListDTO {
+    @com.alibaba.excel.annotation.ExcelIgnore
+    private String version;
     @ExcelProperty("ID")
     @ApiModelProperty(value = "id", example = "1")
     private String id;

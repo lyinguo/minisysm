@@ -21,9 +21,10 @@ import java.util.*;
 public class WarehouseReportDocumentService {
     private final JdbcTemplate db;
     private final WarehousePostingProof proofs;
+    private final StockDocumentWriteLock writes;
     private final com.zeroone.star.project.components.stock.StockCostRebuilder costs;
     public WarehouseReportDocumentService(JdbcTemplate db) {
-        this.db = db;this.proofs=new WarehousePostingProof(db);
+        this.db = db;this.proofs=new WarehousePostingProof(db);this.writes=new StockDocumentWriteLock(db);
         this.costs=new com.zeroone.star.project.components.stock.StockCostRebuilder(db);
     }
     @javax.annotation.PostConstruct public void initializePostingProofs() { proofs.initialize(); }
@@ -110,8 +111,14 @@ public class WarehouseReportDocumentService {
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> save(String kind, String id, Edit edit, String actor) {
         String t = table(kind);
+        if("extry".equals(t))writes.lock(t);
         Map<String, Object> head = header(t, id, true);
-        if("entry".equals(t) && num(head.get("check"))!=0)throw new IllegalStateException("已核对单据不能修改，请先反核对");
+        if("extry".equals(t) && (db.queryForObject("SELECT COUNT(*) FROM extry WHERE id=? AND cse IN (1,2)",Integer.class,id)>0 || proofs.hasMarker(t,id) || proofs.hasMovements(id)
+                || db.queryForObject("SELECT COUNT(*) FROM cost WHERE type='extry' AND `class`=? AND (COALESCE(settle,0)<>0 OR COALESCE(state,0)<>0)",Integer.class,id)>0
+                || db.queryForObject("SELECT COUNT(*) FROM cost_info WHERE pid IN (SELECT id FROM cost WHERE type='extry' AND `class`=?)",Integer.class,id)>0
+                || db.queryForObject("SELECT COUNT(*) FROM invoice WHERE type='extry' AND `class`=?",Integer.class,id)>0
+                || db.queryForObject("SELECT COUNT(*) FROM bill_info WHERE mold='extry' AND source=?",Integer.class,id)>0))throw new IllegalStateException("单据存在入账或结算关联，不能直接修改草稿");
+        if(Arrays.asList("entry","extry").contains(t) && num(head.get("check"))!=0)throw new IllegalStateException("已核对单据不能修改，请先反核对");
         proofs.requireOpenPeriod(head.get("time"));
         if (num(head.get("examine")) != 0) throw new IllegalStateException("已审核单据不能修改，请先反审核");
         List<Map<String, Object>> oldItems = items(t, id);

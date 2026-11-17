@@ -203,7 +203,7 @@ const visible = ref(false)
 const busy = ref(false)
 const detailLoading = ref(false)
 const audited = computed(() => Number(draft.value?.header.examine) === 1)
-const checked = computed(() => props.kind === 'entry' && Number(draft.value?.header.check) === 1)
+const checked = computed(() => props.kind !== 'swap' && Number(draft.value?.header.check) === 1)
 const editingLocked = computed(() => audited.value || checked.value || busy.value)
 let original = ''
 function content() {
